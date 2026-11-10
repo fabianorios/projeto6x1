@@ -90,7 +90,7 @@ export function SuggestionFeedbackControls({
                       ),
                     )
                   }}
-                  className="w-20 border border-[var(--color-line)] bg-white px-2 py-1"
+                  className="min-h-11 w-20 border border-[var(--color-line)] bg-white px-2 py-2"
                 />
               </label>
               <label className="flex flex-col gap-0.5">
@@ -115,20 +115,20 @@ export function SuggestionFeedbackControls({
                       ),
                     )
                   }}
-                  className="w-20 border border-[var(--color-line)] bg-white px-2 py-1"
+                  className="min-h-11 w-20 border border-[var(--color-line)] bg-white px-2 py-2"
                 />
               </label>
             </li>
           ))}
         </ul>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             onClick={() => {
               onEditSave(draft)
               setEditing(false)
             }}
-            className="bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
+            className="min-h-11 w-full bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
           >
             Salvar edição
           </button>
@@ -138,7 +138,7 @@ export function SuggestionFeedbackControls({
               setDraft(draftFromSuggestion(suggestion))
               setEditing(false)
             }}
-            className="border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs"
+            className="min-h-11 w-full border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm sm:w-auto"
           >
             Cancelar
           </button>
@@ -148,11 +148,11 @@ export function SuggestionFeedbackControls({
   }
 
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <button
         type="button"
         onClick={onAccept}
-        className="bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white"
+        className="min-h-11 w-full bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white sm:w-auto sm:min-w-[8rem]"
       >
         Aceitar
       </button>
@@ -162,14 +162,14 @@ export function SuggestionFeedbackControls({
           setDraft(draftFromSuggestion(suggestion))
           setEditing(true)
         }}
-        className="border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs"
+        className="min-h-11 w-full border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm sm:w-auto sm:min-w-[8rem]"
       >
         Editar
       </button>
       <button
         type="button"
         onClick={onReject}
-        className="border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-muted)]"
+        className="min-h-11 w-full border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)] sm:w-auto sm:min-w-[8rem]"
       >
         Rejeitar
       </button>

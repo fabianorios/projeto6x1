@@ -13,6 +13,7 @@ import {
   type SimulationResult,
 } from '../engine'
 import { getTemplate, PILOT_TEMPLATES } from '../templates'
+import { AmbientesPanel } from './AmbientesPanel'
 import { ResultsView } from './ResultsView'
 import { SectorStep } from './SectorStep'
 import { InputsStep } from './InputsStep'
@@ -60,6 +61,7 @@ export function WizardShell() {
   const [basket, setBasket] = useState<ScenarioBasket | null>(() =>
     loadScenarioBasket(),
   )
+  const [ambientesOpen, setAmbientesOpen] = useState(false)
 
   function selectSector(sectorId: string) {
     const template = getTemplate(sectorId as 'varejo' | 'hospital')
@@ -96,12 +98,23 @@ export function WizardShell() {
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8 sm:px-6">
       <header className="no-print mb-10">
-        <p className="text-sm tracking-wide text-[var(--color-accent)] uppercase">
-          Projeto 6×1
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-4xl">
-          Simulador de impacto PEC
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm tracking-wide text-[var(--color-accent)] uppercase">
+              Projeto 6×1
+            </p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-4xl">
+              Simulador de impacto PEC
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAmbientesOpen(true)}
+            className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+          >
+            Ambientes
+          </button>
+        </div>
         <p className="mt-2 max-w-xl text-[var(--color-muted)]">
           Preencha em 3 passos e gere um relatório imprimível (PDF via
           navegador). Números são heurísticas versionadas — não parecer
@@ -174,6 +187,11 @@ export function WizardShell() {
           />
         )}
       </main>
+
+      <AmbientesPanel
+        open={ambientesOpen}
+        onClose={() => setAmbientesOpen(false)}
+      />
     </div>
   )
 }

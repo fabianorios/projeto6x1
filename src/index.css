@@ -58,3 +58,8 @@ body {
 .print-only {
   display: none;
 }
+
+/* Sticky results CTAs sit over the paper gradient without looking flat. */
+.results-sticky-actions {
+  background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+}
