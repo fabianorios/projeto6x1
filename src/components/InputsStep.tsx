@@ -111,148 +111,178 @@ export function InputsStep({
       </div>
 
       <form
-        className="grid gap-4 sm:grid-cols-2"
+        className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault()
           onSubmit()
         }}
       >
-        <label className="block text-sm">
-          <span className="mb-1 block text-[var(--color-muted)]">
-            {template?.fieldLabels.headcount ?? 'Headcount'}
-          </span>
-          <input
-            type="number"
-            min={1}
-            required
-            value={form.headcount}
-            onChange={(e) => patch('headcount', Number(e.target.value))}
-            className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block text-[var(--color-muted)]">
-            {template?.fieldLabels.currentScale ?? 'Escala atual'}
-          </span>
-          <input
-            type="text"
-            required
-            placeholder="6x1"
-            value={form.currentScale}
-            onChange={(e) => patch('currentScale', e.target.value)}
-            className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
-          />
-          {template?.scaleHint ? (
-            <span className="mt-1 block text-xs text-[var(--color-muted)]">
-              {template.scaleHint}
-            </span>
-          ) : null}
-          {scaleExclusion.excluded ? (
-            <span
-              className={
-                scaleExclusion.severity === 'soft'
-                  ? 'mt-2 block border border-[var(--color-line)] bg-white/80 px-2 py-1.5 text-xs text-[var(--color-muted)]'
-                  : 'mt-2 block border border-amber-700/40 bg-amber-50 px-2 py-1.5 text-xs text-amber-950'
-              }
-              role="status"
-            >
-              <span className="font-semibold tracking-wide uppercase">
-                {scaleExclusion.badge}
+        <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
+          <legend className="px-1 text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+            Operação
+          </legend>
+          <p className="mb-3 text-xs text-[var(--color-muted)]">
+            Headcount, escala, salário e horário de funcionamento.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                {template?.fieldLabels.headcount ?? 'Headcount'}
               </span>
-              {' — '}
-              {scaleExclusion.label}. {scaleExclusion.reason}
-              {scaleExclusion.severity === 'soft'
-                ? ' Continuará no lado Atual da comparação.'
-                : ' O motor não sugerirá esta escala como saída da PEC.'}
-            </span>
-          ) : null}
-        </label>
+              <input
+                type="number"
+                min={1}
+                required
+                value={form.headcount}
+                onChange={(e) => patch('headcount', Number(e.target.value))}
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              />
+            </label>
 
-        <label className="block text-sm">
-          <span className="mb-1 block text-[var(--color-muted)]">
-            {template?.fieldLabels.averageMonthlySalary ??
-              'Salário médio mensal (R$)'}
-          </span>
-          <input
-            type="number"
-            min={0}
-            required
-            value={form.averageMonthlySalary}
-            onChange={(e) =>
-              patch('averageMonthlySalary', Number(e.target.value))
-            }
-            className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block text-[var(--color-muted)]">
-            {template?.fieldLabels.units ?? 'Unidades'}
-          </span>
-          <input
-            type="number"
-            min={1}
-            required
-            value={form.units}
-            onChange={(e) => patch('units', Number(e.target.value))}
-            className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="mb-1 block text-[var(--color-muted)]">
-            {template?.fieldLabels.shiftsPerDay ?? 'Turnos por dia'}
-          </span>
-          <input
-            type="number"
-            min={1}
-            required
-            value={form.shiftsPerDay}
-            onChange={(e) => patch('shiftsPerDay', Number(e.target.value))}
-            className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
-          />
-        </label>
-
-        <OperatingHoursFields
-          value={form.operatingHours}
-          onChange={(operatingHours) => patch('operatingHours', operatingHours)}
-        />
-
-        <PayrollImport
-          rows={form.payrollRows}
-          issues={form.payrollIssues}
-          onParsed={(rows: PayrollRow[], issues: PayrollParseIssue[]) => {
-            const hc = rows.reduce((s, r) => s + r.quantidade, 0)
-            const mass = rows.reduce((s, r) => s + r.salario * r.quantidade, 0)
-            onChange({
-              ...form,
-              payrollRows: rows,
-              payrollIssues: issues,
-              ...(rows.length > 0
-                ? {
-                    headcount: hc,
-                    averageMonthlySalary:
-                      hc > 0
-                        ? Math.round(mass / hc)
-                        : form.averageMonthlySalary,
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                {template?.fieldLabels.currentScale ?? 'Escala atual'}
+              </span>
+              <input
+                type="text"
+                required
+                placeholder="6x1"
+                value={form.currentScale}
+                onChange={(e) => patch('currentScale', e.target.value)}
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              />
+              {template?.scaleHint ? (
+                <span className="mt-1 block text-xs text-[var(--color-muted)]">
+                  {template.scaleHint}
+                </span>
+              ) : null}
+              {scaleExclusion.excluded ? (
+                <span
+                  className={
+                    scaleExclusion.severity === 'soft'
+                      ? 'mt-2 block border border-[var(--color-line)] bg-white/80 px-2 py-1.5 text-xs text-[var(--color-muted)]'
+                      : 'mt-2 block border border-amber-700/40 bg-amber-50 px-2 py-1.5 text-xs text-amber-950'
                   }
-                : {}),
-            })
-          }}
-          onClear={() =>
-            onChange({
-              ...form,
-              payrollRows: [],
-              payrollIssues: [],
-            })
-          }
-        />
+                  role="status"
+                >
+                  <span className="font-semibold tracking-wide uppercase">
+                    {scaleExclusion.badge}
+                  </span>
+                  {' — '}
+                  {scaleExclusion.label}. {scaleExclusion.reason}
+                  {scaleExclusion.severity === 'soft'
+                    ? ' Continuará no lado Atual da comparação.'
+                    : ' O motor não sugerirá esta escala como saída da PEC.'}
+                </span>
+              ) : null}
+            </label>
 
-        <fieldset className="sm:col-span-2">
-          <legend className="mb-2 text-sm text-[var(--color-muted)]">
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                {template?.fieldLabels.averageMonthlySalary ??
+                  'Salário médio mensal (R$)'}
+              </span>
+              <input
+                type="number"
+                min={0}
+                required
+                value={form.averageMonthlySalary}
+                onChange={(e) =>
+                  patch('averageMonthlySalary', Number(e.target.value))
+                }
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              />
+            </label>
+
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                {template?.fieldLabels.units ?? 'Unidades'}
+              </span>
+              <input
+                type="number"
+                min={1}
+                required
+                value={form.units}
+                onChange={(e) => patch('units', Number(e.target.value))}
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              />
+            </label>
+
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                {template?.fieldLabels.shiftsPerDay ?? 'Turnos por dia'}
+              </span>
+              <input
+                type="number"
+                min={1}
+                required
+                value={form.shiftsPerDay}
+                onChange={(e) => patch('shiftsPerDay', Number(e.target.value))}
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              />
+            </label>
+
+            <div className="sm:col-span-2">
+              <OperatingHoursFields
+                value={form.operatingHours}
+                onChange={(operatingHours) =>
+                  patch('operatingHours', operatingHours)
+                }
+              />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
+          <legend className="px-1 text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+            Folha (CSV)
+          </legend>
+          <p className="mb-3 text-xs text-[var(--color-muted)]">
+            Importação opcional — atualiza headcount e salário médio quando
+            houver linhas válidas.
+          </p>
+          <PayrollImport
+            rows={form.payrollRows}
+            issues={form.payrollIssues}
+            onParsed={(rows: PayrollRow[], issues: PayrollParseIssue[]) => {
+              const hc = rows.reduce((s, r) => s + r.quantidade, 0)
+              const mass = rows.reduce(
+                (s, r) => s + r.salario * r.quantidade,
+                0,
+              )
+              onChange({
+                ...form,
+                payrollRows: rows,
+                payrollIssues: issues,
+                ...(rows.length > 0
+                  ? {
+                      headcount: hc,
+                      averageMonthlySalary:
+                        hc > 0
+                          ? Math.round(mass / hc)
+                          : form.averageMonthlySalary,
+                    }
+                  : {}),
+              })
+            }}
+            onClear={() =>
+              onChange({
+                ...form,
+                payrollRows: [],
+                payrollIssues: [],
+              })
+            }
+          />
+        </fieldset>
+
+        <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
+          <legend className="px-1 text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
             Cenário normativo
           </legend>
+          <p className="mb-3 text-xs text-[var(--color-muted)]">
+            Status quo ou hipótese PEC — entra na cesta de comparação ao
+            simular.
+          </p>
           <div
             className="space-y-2"
             role="radiogroup"
@@ -265,7 +295,7 @@ export function InputsStep({
                 <label
                   key={id}
                   className={[
-                    'flex cursor-pointer gap-3 border px-3 py-3 transition',
+                    'flex min-h-11 cursor-pointer gap-3 border px-3 py-3 transition',
                     selected
                       ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
                       : 'border-[var(--color-line)] bg-white/70 hover:border-[var(--color-accent)]',
@@ -324,7 +354,14 @@ export function InputsStep({
         </fieldset>
 
         {compareSides ? (
-          <div className="sm:col-span-2">
+          <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
+            <legend className="px-1 text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+              Prévia
+            </legend>
+            <p className="mb-3 text-xs text-[var(--color-muted)]">
+              Comparação ao vivo Atual × Proposto — confirme com Simular para
+              o relatório completo.
+            </p>
             <ScenarioComparePanel
               current={compareSides.current}
               proposed={compareSides.proposed}
@@ -334,20 +371,20 @@ export function InputsStep({
                   : undefined
               }
             />
-          </div>
+          </fieldset>
         ) : null}
 
-        <div className="flex justify-between gap-3 sm:col-span-2">
+        <div className="flex justify-between gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="border border-[var(--color-line)] bg-white px-5 py-2.5 text-sm"
+            className="min-h-11 border border-[var(--color-line)] bg-white px-5 py-2.5 text-sm"
           >
             Voltar
           </button>
           <button
             type="submit"
-            className="bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white"
+            className="min-h-11 bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white"
           >
             Simular
           </button>

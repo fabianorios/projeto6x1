@@ -48,6 +48,13 @@ function brl(n: number) {
   })
 }
 
+function signedBrl(n: number) {
+  const abs = brl(Math.abs(n))
+  if (n > 0) return `+${abs}`
+  if (n < 0) return `−${abs}`
+  return abs
+}
+
 function formatLineAmount(item: ResultLineItem): string {
   if (item.amount === null) return '—'
   switch (item.unit) {
@@ -65,6 +72,16 @@ function formatLineAmount(item: ResultLineItem): string {
     default:
       return String(item.amount)
   }
+}
+
+function deltaDirection(n: number): {
+  arrow: string
+  label: string
+  tone: 'up' | 'down' | 'flat'
+} {
+  if (n > 0) return { arrow: '↑', label: 'custo sobe', tone: 'up' }
+  if (n < 0) return { arrow: '↓', label: 'custo cai', tone: 'down' }
+  return { arrow: '→', label: 'sem variação', tone: 'flat' }
 }
 
 export function ResultsView({
@@ -98,6 +115,7 @@ export function ResultsView({
   const [recorded, setRecorded] = useState<Record<string, FeedbackAction>>(
     {},
   )
+  const [detailOpen, setDetailOpen] = useState(false)
 
   function handleSelectBest(scenarioId: ScenarioId | null) {
     const next = setBestScenario(scenarioId, basket)
@@ -154,14 +172,56 @@ export function ResultsView({
     scheduleHint,
   })
 
+  const proposedCount = basket?.proposed.length ?? 0
+  const showMultiBasket = proposedCount >= 2
+  const showSidePanel = proposedCount < 2
+  const folhaDir = deltaDirection(cost.monthlyDelta)
+  const folhaToneClass =
+    folhaDir.tone === 'up'
+      ? 'text-red-800'
+      : folhaDir.tone === 'down'
+        ? 'text-[var(--color-accent)]'
+        : 'text-[var(--color-ink)]'
+
   return (
     <>
-      <section className="no-print space-y-6">
+      <section className="no-print space-y-6 pb-24">
+        <div
+          className="results-sticky-actions sticky top-0 z-20 -mx-4 border-b border-[var(--color-line)] px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
+          role="region"
+          aria-label="Ações do resultado"
+        >
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onBack}
+              className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="min-h-11 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white"
+            >
+              Imprimir / PDF
+            </button>
+            <button
+              type="button"
+              onClick={onRestart}
+              className="min-h-11 px-4 py-2.5 text-sm text-[var(--color-muted)] underline"
+            >
+              Nova simulação
+            </button>
+          </div>
+        </div>
+
         <div>
           <h2 className="text-xl font-semibold">Resultados da simulação</h2>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             {template?.resultBlurb ??
-              'Estimativas do motor com hipóteses explícitas.'}{' '}
+              'Estimativas do motor com hipóteses explícitas.'}
+{' '}
             Números são heurísticas — não parecer jurídico.
           </p>
           <p className="mt-2 text-sm">
@@ -178,7 +238,45 @@ export function ResultsView({
           </p>
         </div>
 
-        {basket ? (
+        {/* (1) Δ hero above the fold */}
+        <div
+          className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-5 py-5"
+          aria-labelledby="folha-delta-hero"
+        >
+          <p
+            id="folha-delta-hero"
+            className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase"
+          >
+            Δ folha mensal (salários)
+          </p>
+          <p
+            className={`mt-2 text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl ${folhaToneClass}`}
+          >
+            <span aria-hidden="true" className="mr-2 text-3xl sm:text-4xl">
+              {folhaDir.arrow}
+            </span>
+            {signedBrl(cost.monthlyDelta)}
+            <span className="ml-2 text-base font-medium text-[var(--color-muted)]">
+              /mês
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-[var(--color-ink)]">
+            <span className="font-medium">{folhaDir.label}</span>
+            <span className="text-[var(--color-muted)]">
+              {' '}
+              · anual {signedBrl(cost.annualDelta)} · HC{' '}
+              {coverage.currentHeadcount} → {coverage.requiredHeadcount} (+
+              {coverage.additionalHeadcount})
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            Baseline {brl(cost.baselineMonthlyPayroll)} → projetado{' '}
+            {brl(cost.projectedMonthlyPayroll)}
+          </p>
+        </div>
+
+        {/* (2) Atual × Proposto: basket when ≥2 proposals; panel when 0–1 */}
+        {showMultiBasket && basket ? (
           <ScenarioBasketCompare
             basket={basket}
             onSelectBest={handleSelectBest}
@@ -187,43 +285,36 @@ export function ResultsView({
           />
         ) : null}
 
-        <ScenarioComparePanel
-          current={compareSides.current}
-          proposed={compareSides.proposed}
-          footerNote={`${ruleVersion.summary} · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)}. Detalhe do cenário ativo (${ruleVersion.label}).`}
-        />
+        {showSidePanel ? (
+          <ScenarioComparePanel
+            current={compareSides.current}
+            proposed={compareSides.proposed}
+            footerNote={`${ruleVersion.summary} · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)}. Detalhe do cenário ativo (${ruleVersion.label}).`}
+          />
+        ) : (
+          <details className="border border-[var(--color-line)] bg-white/70 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--color-ink)]">
+              Detalhe Atual × Proposto (cenário ativo)
+            </summary>
+            <div className="mt-3">
+              <ScenarioComparePanel
+                current={compareSides.current}
+                proposed={compareSides.proposed}
+                footerNote={`${ruleVersion.summary} · cenário ativo: ${ruleVersion.label}.`}
+              />
+            </div>
+          </details>
+        )}
 
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div className="border border-[var(--color-line)] bg-white/70 p-4">
-            <dt className="text-sm text-[var(--color-muted)]">
-              Delta mensal de folha (salários)
-            </dt>
-            <dd className="mt-1 text-2xl font-semibold">
-              {brl(cost.monthlyDelta)}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              Baseline {brl(cost.baselineMonthlyPayroll)} → projetado{' '}
-              {brl(cost.projectedMonthlyPayroll)}
-            </dd>
-          </div>
-          <div className="border border-[var(--color-line)] bg-white/70 p-4">
-            <dt className="text-sm text-[var(--color-muted)]">
-              Delta anual de folha
-            </dt>
-            <dd className="mt-1 text-2xl font-semibold">
-              {brl(cost.annualDelta)}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              Encargos na projeção: {brl(cost.estimatedMonthlyCharges)}/mês
-            </dd>
-          </div>
+        {/* Secondary KPIs (non-hero) */}
+        <dl className="grid gap-3 sm:grid-cols-2">
           {vr ? (
             <div className="border border-[var(--color-line)] bg-white/70 p-4">
               <dt className="text-sm text-[var(--color-muted)]">
                 Delta mensal VR
               </dt>
-              <dd className="mt-1 text-2xl font-semibold">
-                {brl(vr.monthlyDelta)}
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {signedBrl(vr.monthlyDelta)}
               </dd>
               <dd className="mt-1 text-xs text-[var(--color-muted)]">
                 {brl(vr.currentMonthly)} → {brl(vr.proposedMonthly)} (~
@@ -236,8 +327,8 @@ export function ResultsView({
               <dt className="text-sm text-[var(--color-muted)]">
                 Delta mensal VT
               </dt>
-              <dd className="mt-1 text-2xl font-semibold">
-                {brl(vt.monthlyDelta)}
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {signedBrl(vt.monthlyDelta)}
               </dd>
               <dd className="mt-1 text-xs text-[var(--color-muted)]">
                 {brl(vt.currentMonthly)} → {brl(vt.proposedMonthly)} (~
@@ -249,7 +340,7 @@ export function ResultsView({
             <dt className="text-sm text-[var(--color-muted)]">
               Headcount adicional estimado
             </dt>
-            <dd className="mt-1 text-2xl font-semibold">
+            <dd className="mt-1 text-xl font-semibold tabular-nums">
               +{coverage.additionalHeadcount}
             </dd>
             <dd className="mt-1 text-xs text-[var(--color-muted)]">
@@ -261,7 +352,7 @@ export function ResultsView({
             <dt className="text-sm text-[var(--color-muted)]">
               Gap de cobertura (se não contratar)
             </dt>
-            <dd className="mt-1 text-2xl font-semibold">
+            <dd className="mt-1 text-xl font-semibold tabular-nums">
               {coverage.uncoveredShiftHoursPerWeek.toFixed(0)} h/sem
             </dd>
             <dd className="mt-1 text-xs text-[var(--color-muted)]">
@@ -382,141 +473,139 @@ export function ResultsView({
           </div>
         ) : null}
 
-        <CalibrationHistory
-          entries={history}
-          onClear={() => {
-            clearCalibrationHistory()
-            setHistory([])
-            setRecorded({})
-          }}
-        />
+        {/* (3) Technical detail collapsible */}
+        <div className="border border-[var(--color-line)] bg-white/70">
+          <button
+            type="button"
+            aria-expanded={detailOpen}
+            onClick={() => setDetailOpen((v) => !v)}
+            className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold"
+          >
+            <span>Detalhe técnico</span>
+            <span className="text-xs font-normal text-[var(--color-muted)]">
+              {detailOpen ? 'Ocultar' : 'Mostrar'} · calibração, centros, linhas
+              do motor
+            </span>
+          </button>
+          {detailOpen ? (
+            <div className="space-y-6 border-t border-[var(--color-line)] px-4 py-4">
+              <CalibrationHistory
+                entries={history}
+                onClear={() => {
+                  clearCalibrationHistory()
+                  setHistory([])
+                  setRecorded({})
+                }}
+              />
 
-        {history.length > 0 ? (
-          <p className="text-xs text-[var(--color-muted)]">
-            Snapshot completo (cenário + feedback) fica no histórico local.
-            Use <strong>Baixar JSON</strong> para exportar o dataset da Fase A.
-            {history[0] ? (
-              <>
-                {' '}
-                Último:{' '}
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() =>
-                    downloadCalibrationJson(
-                      [history[0]],
-                      `projeto6x1-feedback-${history[0].id.slice(0, 8)}.json`,
-                    )
-                  }
-                >
-                  baixar só o último registro
-                </button>
-                .
-              </>
-            ) : null}
-          </p>
-        ) : null}
-
-        {byCostCenter.length > 0 ? (
-          <div>
-            <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-              Por centro de custo
-            </h3>
-            <p className="mt-1 text-xs text-[var(--color-muted)]">
-              Salários e VR/VT agregados da folha importada, com HC adicional
-              proporcional ao fator de escala.
-            </p>
-            <div className="mt-3 overflow-x-auto border border-[var(--color-line)] bg-white/70">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-[var(--color-line)] text-[var(--color-muted)]">
-                    <th className="px-3 py-2 font-normal">Centro</th>
-                    <th className="px-3 py-2 font-normal">HC</th>
-                    <th className="px-3 py-2 font-normal">Δ Folha</th>
-                    <th className="px-3 py-2 font-normal">Δ VR</th>
-                    <th className="px-3 py-2 font-normal">Δ VT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byCostCenter.map((c) => (
-                    <tr
-                      key={c.centroCusto}
-                      className="border-b border-[var(--color-line)]"
-                    >
-                      <td className="px-3 py-2 font-medium">{c.centroCusto}</td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {c.currentHeadcount} → {c.requiredHeadcount}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {brl(c.payrollMonthlyDelta)}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {brl(c.vr.monthlyDelta)}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {brl(c.vt.monthlyDelta)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
-        <div>
-          <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-            Linhas explicáveis do motor
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            Cada linha aponta a hipótese ou fórmula usada no cálculo.
-          </p>
-          <ul className="mt-3 divide-y divide-[var(--color-line)] border border-[var(--color-line)] bg-white/70">
-            {lineItems.map((item) => (
-              <li
-                key={item.id}
-                className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                    {item.detail}
-                  </p>
-                </div>
-                <p className="shrink-0 text-sm font-semibold tabular-nums">
-                  {formatLineAmount(item)}
+              {history.length > 0 ? (
+                <p className="text-xs text-[var(--color-muted)]">
+                  Snapshot completo (cenário + feedback) fica no histórico local.
+                  Use <strong>Baixar JSON</strong> para exportar o dataset da Fase
+                  A.
+                  {history[0] ? (
+                    <>
+                      {' '}
+                      Último:{' '}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() =>
+                          downloadCalibrationJson(
+                            [history[0]],
+                            `projeto6x1-feedback-${history[0].id.slice(0, 8)}.json`,
+                          )
+                        }
+                      >
+                        baixar só o último registro
+                      </button>
+                      .
+                    </>
+                  ) : null}
                 </p>
-              </li>
-            ))}
-          </ul>
-        </div>
+              ) : null}
 
-        <p className="border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
-          {disclaimer}
-        </p>
+              {byCostCenter.length > 0 ? (
+                <div>
+                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                    Por centro de custo
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    Salários e VR/VT agregados da folha importada, com HC
+                    adicional proporcional ao fator de escala.
+                  </p>
+                  <div className="mt-3 overflow-x-auto border border-[var(--color-line)] bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-[var(--color-line)] text-[var(--color-muted)]">
+                          <th className="px-3 py-2 font-normal">Centro</th>
+                          <th className="px-3 py-2 font-normal">HC</th>
+                          <th className="px-3 py-2 font-normal">Δ Folha</th>
+                          <th className="px-3 py-2 font-normal">Δ VR</th>
+                          <th className="px-3 py-2 font-normal">Δ VT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {byCostCenter.map((c) => (
+                          <tr
+                            key={c.centroCusto}
+                            className="border-b border-[var(--color-line)]"
+                          >
+                            <td className="px-3 py-2 font-medium">
+                              {c.centroCusto}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {c.currentHeadcount} → {c.requiredHeadcount}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {brl(c.payrollMonthlyDelta)}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {brl(c.vr.monthlyDelta)}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">
+                              {brl(c.vt.monthlyDelta)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="border border-[var(--color-line)] bg-white px-5 py-2.5 text-sm"
-          >
-            Voltar
-          </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white"
-          >
-            Imprimir / PDF
-          </button>
-          <button
-            type="button"
-            onClick={onRestart}
-            className="px-5 py-2.5 text-sm text-[var(--color-muted)] underline"
-          >
-            Nova simulação
-          </button>
+              <div>
+                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                  Linhas explicáveis do motor
+                </h3>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  Cada linha aponta a hipótese ou fórmula usada no cálculo.
+                </p>
+                <ul className="mt-3 divide-y divide-[var(--color-line)] border border-[var(--color-line)] bg-white">
+                  {lineItems.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                          {item.detail}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums">
+                        {formatLineAmount(item)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
+                {disclaimer}
+              </p>
+            </div>
+          ) : null}
         </div>
       </section>
 

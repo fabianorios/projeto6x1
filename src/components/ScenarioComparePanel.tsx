@@ -80,13 +80,13 @@ function SideCard({
         : 'border border-[var(--color-line)] bg-white/80'
 
   return (
-    <div className={`flex flex-col p-4 ${shell}`}>
+    <div className={`relative flex flex-col p-4 ${shell}`}>
       <p
         className={[
-          'text-[10px] font-semibold tracking-[0.16em] uppercase',
+          'sticky top-14 z-10 -mx-4 -mt-4 mb-2 border-b border-[var(--color-line)]/60 px-4 py-2 text-[10px] font-semibold tracking-[0.16em] uppercase backdrop-blur-sm sm:static sm:z-auto sm:mx-0 sm:mt-0 sm:mb-0 sm:border-0 sm:px-0 sm:py-0 sm:backdrop-blur-none',
           isProposed
-            ? 'text-[var(--color-accent)] print:text-neutral-900'
-            : 'text-[var(--color-muted)] print:text-neutral-600',
+            ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] print:static print:bg-transparent print:text-neutral-900'
+            : 'bg-white/90 text-[var(--color-muted)] print:static print:bg-transparent print:text-neutral-600',
         ].join(' ')}
       >
         {side.eyebrow}

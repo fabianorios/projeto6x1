@@ -69,8 +69,8 @@ export function PayrollImport({
   const centers = new Set(rows.map((r) => r.centroCusto)).size
 
   return (
-    <fieldset className="sm:col-span-2 space-y-3 border border-[var(--color-line)] bg-white/70 p-4">
-      <legend className="px-1 text-sm font-medium text-[var(--color-ink)]">
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-medium text-[var(--color-ink)]">
         Importar folha (CSV / colar)
       </legend>
       <p className="text-xs text-[var(--color-muted)]">
