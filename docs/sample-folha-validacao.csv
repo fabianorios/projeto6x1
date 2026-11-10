@@ -1,0 +1,13 @@
+cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;vr_valor_dia;vr_dias_mes_atual;vt_valor_dia;vt_dias_mes_atual;quantidade;escala_atual;nome
+Operador de caixa;2200.00;220;44;Loja-Centro;32.00;26;12.50;26;12;6x1;
+Estoquista;1980.00;220;44;Loja-Centro;32.00;26;12.50;26;4;6x1;
+Supervisor de loja;3500.00;220;44;Loja-Centro;35.00;26;12.50;26;2;6x1;
+Operador de caixa;2100.00;220;44;Loja-Bairro;32.00;26;14.00;26;8;6x1;
+Repositor;1850.00;220;44;Loja-Bairro;32.00;26;14.00;26;3;6x1;
+Enfermeiro plantonista;5200.00;180;36;UTI;42.00;15;18.00;15;18;6x1;
+Técnico de enfermagem;2800.00;180;36;UTI;38.00;15;18.00;15;24;6x1;
+Auxiliar de limpeza;1650.00;220;44;Facilities;28.00;26;12.00;26;6;6x1;
+Recepcionista;2400.00;220;44;Recepcao;32.00;26;15.00;26;4;6x1;
+Pedreiro;2800.00;220;44;Obra-Norte;30.00;24;20.00;24;10;6x1;
+Servente;1800.00;220;44;Obra-Norte;30.00;24;20.00;24;15;6x1;
+Operador de equipamentos;3200.00;220;44;Locacao-Frota;32.00;24;18.00;24;5;6x1;
