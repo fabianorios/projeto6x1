@@ -12,11 +12,14 @@ dist
 dist-ssr
 *.local
 
-# Local env (keep mcp/.env.example only)
+# Local env (keep */.env.example only)
 .env
 .env.*
 !.env.example
 !**/.env.example
+
+# Server encrypted store (credentials at rest)
+server/data/
 
 # Editor directories and files
 .vscode/*
