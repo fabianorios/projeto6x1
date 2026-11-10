@@ -22,3 +22,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install MCP
+        run: npm ci
+        working-directory: mcp
+
+      - name: Test MCP (SQL guard)
+        run: npm test
+        working-directory: mcp
+
+      - name: Typecheck MCP
+        run: npm run typecheck
+        working-directory: mcp
+
+      - name: Build MCP
+        run: npm run build
+        working-directory: mcp

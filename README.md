@@ -38,7 +38,7 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 | [`docs/learning-motor.md`](docs/learning-motor.md) | Feedback aceitar/editar (Fase A) |
 | [`docs/apdata-6x1-feasibility.md`](docs/apdata-6x1-feasibility.md) | Viabilidade Apdata × simulador |
 | [`docs/sample-folha-validacao.csv`](docs/sample-folha-validacao.csv) | Folha fictícia de validação |
-| [`mcp/README.md`](mcp/README.md) | Scaffold MCP SELECT-only (stub) |
+| [`mcp/README.md`](mcp/README.md) | MCP SELECT-only (tools, env, Cursor config) |
 
 ## Como importar a folha (PT-BR)
 
@@ -63,7 +63,7 @@ src/
 public/
   sample-folha.csv
 docs/           # plano, arquitetura, hipóteses, política, viabilidade Apdata
-mcp/            # scaffold MCP SELECT-only (stub; sem secrets)
+mcp/            # MCP SELECT-only (MSSQL; Oracle stub; sem secrets)
 ESCALA6X1.zip   # pacote Apdata (blob; não extrair para o tree)
 .github/workflows/ci.yml
 ```
@@ -72,7 +72,9 @@ Produto **separado** do Gestão Consultoria; integração futura só por embed/l
 
 ## Pacote Apdata
 
-`ESCALA6X1.zip` fica na raiz como artefato binário de referência (dicionário + material de suporte). **Não descompactar** no repositório. Análise de viabilidade: `docs/apdata-6x1-feasibility.md`. O diretório `mcp/` é apenas scaffold (política SELECT-only + `.env.example`); tools reais de folha vêm depois.
+`ESCALA6X1.zip` fica na raiz como artefato binário de referência (dicionário + material de suporte). **Não descompactar** no repositório. Análise de viabilidade: `docs/apdata-6x1-feasibility.md`.
+
+MCP read-only em `mcp/`: tools `list_tables`, `describe_table`, `select_rows` com allowlist e deny de DML/DDL. Ver [`mcp/README.md`](mcp/README.md).
 
 ## Status
 
@@ -83,5 +85,5 @@ Produto **separado** do Gestão Consultoria; integração futura só por embed/l
 | Motor `simulate()` | v1 + VR/VT + por centro de custo |
 | Sugestão de escalas/horários | Allowlist + blocklist (`schedule-policy-v1`) |
 | Relatório imprimível | Salários + VR/VT + centros + escalas sugeridas |
-| MCP Apdata | Scaffold em `mcp/` (sem servidor completo) |
-| CI | GitHub Actions: `npm ci` + `npm run build` |
+| MCP Apdata | Read-only em `mcp/` (MSSQL; Oracle stub) |
+| CI | App build + MCP test/typecheck/build (sem DB) |

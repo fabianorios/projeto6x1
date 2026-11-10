@@ -1,17 +1,35 @@
 {
   "name": "@projeto-6x1/mcp",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
-  "description": "Scaffold: MCP read-only (SELECT-only) for Apdata payroll → Projeto 6×1 simulator",
+  "description": "MCP read-only (SELECT-only) for Apdata payroll → Projeto 6×1 simulator",
+  "bin": {
+    "apdata-folha-readonly": "./dist/server.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts"
   },
   "engines": {
     "node": ">=20"
   },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "mssql": "^11.0.1",
+    "zod": "^4.6.7"
+  },
   "devDependencies": {
+    "@types/mssql": "^9.1.7",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
     "typescript": "~5.9.0"
   }
 }
