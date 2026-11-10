@@ -1,12 +1,15 @@
 /**
- * SELECT-only SQL policy stub.
+ * SELECT-only SQL policy.
  * Defense in depth: also use a read-only DB account.
  */
 
 const FORBIDDEN =
-  /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|REPLACE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE|CALL|INTO\s+#|xp_|sp_)\b/i;
+  /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|REPLACE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE|CALL|INTO\s+#|xp_|sp_|OPENROWSET|OPENDATASOURCE|BULK\s+INSERT|DBCC|BACKUP|RESTORE|SHUTDOWN|KILL|WAITFOR|WRITETEXT|UPDATETEXT)\b/i;
 
 const SELECT_START = /^\s*(WITH\b[\s\S]+?\bSELECT\b|SELECT\b)/i;
+
+/** Identifiers: letters, digits, underscore; optional schema.table */
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
 
 export type PolicyResult =
   | { ok: true }
@@ -30,18 +33,76 @@ export function assertSelectOnly(sql: string): PolicyResult {
   return { ok: true };
 }
 
-/** Table allowlist stub — expand when wiring real Apdata reads. */
+/**
+ * Seeded from docs/apdata-6x1-feasibility.md (Controle de Frequência / contratados).
+ * Related schedule/domain tables included for diagnostic JOINs.
+ */
 export const DEFAULT_TABLE_ALLOWLIST = [
-  "Contratados",
-  "Cargos",
-  "CentrosCustos",
-  "Folhas",
   "Horarios",
   "HorariosJornadas",
   "Jornadas",
   "TiposDiasPonto",
+  "Contratados",
+  "CentrosCustos",
+  "Cargos",
   "QuantidadesHorasMes",
+  "Folhas",
   "HorariosTiposDiasAT",
   "TiposEscalas",
   "TiposEscalasTrabalhos",
 ] as const;
+
+export type AllowlistedTable = (typeof DEFAULT_TABLE_ALLOWLIST)[number];
+
+const ALLOWLIST_SET = new Set<string>(
+  DEFAULT_TABLE_ALLOWLIST.map((t) => t.toLowerCase()),
+);
+
+export function isAllowlistedTable(table: string): boolean {
+  const bare = bareTableName(table);
+  return ALLOWLIST_SET.has(bare.toLowerCase());
+}
+
+/** Strip optional schema prefix: dbo.Horarios → Horarios */
+export function bareTableName(table: string): string {
+  const parts = table.trim().split(".");
+  return parts[parts.length - 1] ?? table;
+}
+
+export function assertAllowlistedTable(table: string): PolicyResult {
+  if (!IDENTIFIER.test(table.trim())) {
+    return { ok: false, reason: `invalid table identifier: ${table}` };
+  }
+  if (!isAllowlistedTable(table)) {
+    return {
+      ok: false,
+      reason: `table not in allowlist: ${bareTableName(table)}`,
+    };
+  }
+  return { ok: true };
+}
+
+export function assertSafeIdentifier(
+  name: string,
+  kind = "identifier",
+): PolicyResult {
+  if (!IDENTIFIER.test(name.trim())) {
+    return { ok: false, reason: `invalid ${kind}: ${name}` };
+  }
+  return { ok: true };
+}
+
+/** Clamp requested row limit to [1, maxRows]. */
+export function clampLimit(
+  requested: number | undefined,
+  maxRows: number,
+): number {
+  const fallback = Math.min(100, maxRows);
+  if (requested === undefined || Number.isNaN(requested)) {
+    return fallback;
+  }
+  const n = Math.floor(requested);
+  if (n < 1) return 1;
+  if (n > maxRows) return maxRows;
+  return n;
+}

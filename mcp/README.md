@@ -1,36 +1,97 @@
-# MCP (scaffold) — Apdata / folha somente leitura
+# MCP — Apdata / folha somente leitura
 
-Stub do pacote MCP do **Projeto 6×1**. Ainda **não** é um servidor MCP completo: define política SELECT-only, env de exemplo e ponto de entrada mínimo para evolução futura.
+Servidor MCP **SELECT-only** do **Projeto 6×1** para leitura de tabelas Apdata (folha / frequência). Entrada canônica do simulador continua sendo CSV; este pacote é a ponte opcional de leitura.
 
-Produto separado deste repo (`fabianorios/projeto6x1`). Integração com Gestão Consultoria, se houver, será **apenas por link/embed** — não copiar código para dentro do Gestão.
+Produto separado deste repo (`fabianorios/projeto6x1`). Integração com Gestão Consultoria, se houver, será **apenas por link/embed**.
 
-## Papel
+## Tools
 
-| Peça | Função |
+| Tool | Função |
 |------|--------|
-| App Vite (`/` do repo) | Simulador; entrada principal continua sendo CSV |
-| Este `mcp/` | Ponte opcional de **leitura** (MSSQL / Oracle) → linhas no layout do simulador |
-| `ESCALA6X1.zip` | Pacote vendor Apdata (blob na raiz; **não** descompactar no tree) |
+| `list_tables` | Lista tabelas da **allowlist** (filtro opcional por nome) |
+| `describe_table` | Colunas via `INFORMATION_SCHEMA` (MSSQL); só allowlist |
+| `select_rows` | `SELECT` parametrizado + `TOP`/`LIMIT` obrigatório; allowlist |
 
-Ver [`docs/architecture.md`](../docs/architecture.md) e o esboço em [`docs/apdata-6x1-feasibility.md`](../docs/apdata-6x1-feasibility.md).
+**Bloqueado:** `INSERT` / `UPDATE` / `DELETE` / DDL / `EXEC` / multi-statement (ver `src/policy/select-only.ts`).
 
-## Política
+**Allowlist (seed):** `Horarios`, `HorariosJornadas`, `Jornadas`, `TiposDiasPonto`, `Contratados`, `CentrosCustos`, `Cargos`, `QuantidadesHorasMes`, `Folhas`, `HorariosTiposDiasAT`, `TiposEscalas`, `TiposEscalasTrabalhos`.
 
-- **Somente `SELECT`.** Deny de DML/DDL no stub (`src/policy/select-only.ts`).
-- Conta de banco deve ser read-only no servidor; a política no processo é defesa em profundidade.
-- Sem secrets no Git. Use `.env` local a partir de `.env.example` (placeholders).
-- LGPD: não logar nem exportar PII por padrão; preferir agregação / layout do simulador.
+**LGPD:** não selecionar nem logar nomes de cliente / CPF por padrão; preferir colunas técnicas e agregação.
 
-## Desenvolvimento (stub)
+## Drivers
+
+| `DB_DRIVER` | Status |
+|-------------|--------|
+| `mssql` | Suportado (`mssql` / Tedious) |
+| `oracle` | Stub (erro claro ao conectar) |
+
+## Como rodar
 
 ```bash
 cd mcp
-cp .env.example .env   # preencher fora do Git
+cp .env.example .env   # preencher fora do Git — nunca commitar secrets
 npm install
+npm test               # unit tests do SQL guard (sem DB)
 npm run build
+npm start              # stdio MCP (Cursor / clients)
+# ou: npm run dev      # tsx sem build
 ```
 
-Scripts reais de tools (`export_payroll_rows`, etc.) ficam para uma entrega posterior — este diretório só fixa a estrutura.
+CI não precisa de banco real: `npm test` + `npm run build` / `typecheck` bastam.
+
+## Cursor MCP config
+
+Adicione em `~/.cursor/mcp.json` (ou nas settings MCP do Cursor), ajustando o caminho absoluto do repo:
+
+```json
+{
+  "mcpServers": {
+    "apdata-folha-readonly": {
+      "command": "node",
+      "args": ["/ABS/PATH/TO/projeto6x1/mcp/dist/server.js"],
+      "env": {
+        "DB_DRIVER": "mssql",
+        "MSSQL_SERVER": "localhost",
+        "MSSQL_PORT": "1433",
+        "MSSQL_DATABASE": "YOUR_DATABASE",
+        "MSSQL_USER": "YOUR_READONLY_USER",
+        "MSSQL_PASSWORD": "YOUR_PASSWORD",
+        "MSSQL_ENCRYPT": "true",
+        "MSSQL_TRUST_SERVER_CERTIFICATE": "false",
+        "SQL_TIMEOUT_MS": "15000",
+        "SQL_MAX_ROWS": "5000"
+      }
+    }
+  }
+}
+```
+
+Alternativa com npm:
+
+```json
+{
+  "mcpServers": {
+    "apdata-folha-readonly": {
+      "command": "npm",
+      "args": ["--prefix", "/ABS/PATH/TO/projeto6x1/mcp", "run", "start", "--silent"],
+      "env": {
+        "DB_DRIVER": "mssql",
+        "MSSQL_DATABASE": "YOUR_DATABASE",
+        "MSSQL_USER": "YOUR_READONLY_USER",
+        "MSSQL_PASSWORD": "YOUR_PASSWORD"
+      }
+    }
+  }
+}
+```
+
+Rode `npm run build` em `mcp/` antes de apontar para `dist/server.js`.
+
+## Política
+
+- Conta de banco **read-only** no servidor + deny DML/DDL neste processo.
+- Sem secrets no Git (só `.env.example` com placeholders).
+- Ver [`docs/architecture.md`](../docs/architecture.md) e [`docs/apdata-6x1-feasibility.md`](../docs/apdata-6x1-feasibility.md).
 
 ## O que não fazer
 

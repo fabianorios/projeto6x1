@@ -16,7 +16,7 @@ Visão do repositório `fabianorios/projeto6x1` como **produto separado**. Não 
 │                                   │                     │
 │  ┌──────────────┐  SELECT-only    │  ┌──────────────┐   │
 │  │ mcp/         │◄── MSSQL/Oracle─┘  │ ESCALA6X1.zip│   │
-│  │ (scaffold)   │   read-only        │ vendor Apdata│   │
+│  │ read-only    │   allowlist        │ vendor Apdata│   │
 │  └──────────────┘                    │ (blob only)  │   │
 │                                      └──────────────┘   │
 └─────────────────────────────────────────────────────────┘
@@ -31,7 +31,7 @@ Visão do repositório `fabianorios/projeto6x1` como **produto separado**. Não 
 | Peça | Caminho | Papel |
 |------|---------|--------|
 | App | `/` (`src/`, Vite) | Wizard + motor + relatório; entrada canônica = CSV (`docs/import-layout.md`) |
-| MCP | `mcp/` | Scaffold de servidor/tools **somente leitura** (MSSQL/Oracle); política SELECT-only; secrets fora do Git |
+| MCP | `mcp/` | Servidor MCP **somente leitura** (MSSQL; Oracle stub): `list_tables`, `describe_table`, `select_rows`; allowlist + SELECT-only; secrets fora do Git |
 | Vendor | `ESCALA6X1.zip` | Pacote Apdata de referência (dicionário / material). **Manter binário**; não extrair para o tree |
 | Docs | `docs/` | Plano, motor, política de escalas, viabilidade Apdata, esta arquitetura |
 
@@ -50,11 +50,11 @@ Visão do repositório `fabianorios/projeto6x1` como **produto separado**. Não 
 
 ## CI
 
-GitHub Actions na raiz: `npm ci` + `npm run build` em push/PR (app Vite). O pacote `mcp/` tem stub próprio (`npm run build` dentro de `mcp/` quando for desenvolvido).
+GitHub Actions na raiz: `npm ci` + `npm run build` (app Vite) e, em `mcp/`, `npm ci` + `npm test` + `typecheck` + `build` (sem DB real).
 
 ## Referências
 
 - [`README.md`](../README.md) — como rodar o app
-- [`mcp/README.md`](../mcp/README.md) — scaffold MCP
+- [`mcp/README.md`](../mcp/README.md) — MCP read-only (tools, env, Cursor config)
 - [`apdata-6x1-feasibility.md`](./apdata-6x1-feasibility.md) — viabilidade e esboço de tools
 - [`import-layout.md`](./import-layout.md) — contrato CSV ↔ motor
