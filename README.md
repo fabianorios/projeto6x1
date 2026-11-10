@@ -30,7 +30,8 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 
 | Doc | Conteúdo |
 |-----|----------|
-| [`docs/architecture.md`](docs/architecture.md) | App + `mcp/` + ZIP vendor; Gestão só via embed/link |
+| [`docs/architecture.md`](docs/architecture.md) | App + `server/` + `mcp/` + ZIP vendor; Gestão só via embed/link |
+| [`docs/ambientes-cliente.md`](docs/ambientes-cliente.md) | Multi-ambiente Apdata (UI + API + deploy `/api`) |
 | [`docs/mvp-plan.md`](docs/mvp-plan.md) | Escopo do MVP |
 | [`docs/engine-assumptions.md`](docs/engine-assumptions.md) | Hipóteses e fórmulas do motor |
 | [`docs/import-layout.md`](docs/import-layout.md) | Layout canônico do CSV de folha |
@@ -59,10 +60,12 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 src/
   engine/       # simulate(), payroll CSV, schedule-policy/suggest, regras
   templates/    # varejo + hospital
-  components/   # wizard + PayrollImport + ResultsView + relatório print
+  components/   # wizard + Ambientes + PayrollImport + ResultsView
+  api/          # client HTTP → /api (ambientes)
 public/
   sample-folha.csv
-docs/           # plano, arquitetura, hipóteses, política, viabilidade Apdata
+server/         # API Hono: ambientes cifrados + proxy SELECT-only
+docs/           # plano, arquitetura, ambientes, hipóteses, política
 mcp/            # MCP SELECT-only (MSSQL; Oracle stub; sem secrets)
 ESCALA6X1.zip   # pacote Apdata (blob; não extrair para o tree)
 .github/workflows/ci.yml
@@ -85,5 +88,6 @@ MCP read-only em `mcp/`: tools `list_tables`, `describe_table`, `select_rows` co
 | Motor `simulate()` | v1 + VR/VT + por centro de custo |
 | Sugestão de escalas/horários | Allowlist + blocklist (`schedule-policy-v1`) |
 | Relatório imprimível | Salários + VR/VT + centros + escalas sugeridas |
+| Ambientes multi-cliente | UI + `server/` (senha cifrada; SELECT-only) |
 | MCP Apdata | Read-only em `mcp/` (MSSQL; Oracle stub) |
-| CI | App build + MCP test/typecheck/build (sem DB) |
+| CI | App build + MCP/server test/typecheck/build (sem DB) |
