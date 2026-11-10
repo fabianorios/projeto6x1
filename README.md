@@ -30,13 +30,15 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 
 | Doc | Conteúdo |
 |-----|----------|
+| [`docs/architecture.md`](docs/architecture.md) | App + `mcp/` + ZIP vendor; Gestão só via embed/link |
 | [`docs/mvp-plan.md`](docs/mvp-plan.md) | Escopo do MVP |
 | [`docs/engine-assumptions.md`](docs/engine-assumptions.md) | Hipóteses e fórmulas do motor |
 | [`docs/import-layout.md`](docs/import-layout.md) | Layout canônico do CSV de folha |
 | [`docs/schedule-policy.md`](docs/schedule-policy.md) | Allowlist / blocklist de escalas |
 | [`docs/learning-motor.md`](docs/learning-motor.md) | Feedback aceitar/editar (Fase A) |
-| [`docs/apdata-6x1-feasibility.md`](docs/apdata-6x1-feasibility.md) | Viabilidade Apdata × simulador (sem MCP nesta etapa) |
+| [`docs/apdata-6x1-feasibility.md`](docs/apdata-6x1-feasibility.md) | Viabilidade Apdata × simulador |
 | [`docs/sample-folha-validacao.csv`](docs/sample-folha-validacao.csv) | Folha fictícia de validação |
+| [`mcp/README.md`](mcp/README.md) | Scaffold MCP SELECT-only (stub) |
 
 ## Como importar a folha (PT-BR)
 
@@ -60,13 +62,17 @@ src/
   components/   # wizard + PayrollImport + ResultsView + relatório print
 public/
   sample-folha.csv
-docs/           # plano, hipóteses, política, viabilidade Apdata
+docs/           # plano, arquitetura, hipóteses, política, viabilidade Apdata
+mcp/            # scaffold MCP SELECT-only (stub; sem secrets)
 ESCALA6X1.zip   # pacote Apdata (blob; não extrair para o tree)
+.github/workflows/ci.yml
 ```
+
+Produto **separado** do Gestão Consultoria; integração futura só por embed/link (`docs/architecture.md`).
 
 ## Pacote Apdata
 
-`ESCALA6X1.zip` fica na raiz como artefato binário de referência (dicionário + material de suporte). **Não descompactar** no repositório. Análise de viabilidade: `docs/apdata-6x1-feasibility.md`. Build de MCP de folha **ainda não** faz parte deste MVP.
+`ESCALA6X1.zip` fica na raiz como artefato binário de referência (dicionário + material de suporte). **Não descompactar** no repositório. Análise de viabilidade: `docs/apdata-6x1-feasibility.md`. O diretório `mcp/` é apenas scaffold (política SELECT-only + `.env.example`); tools reais de folha vêm depois.
 
 ## Status
 
@@ -77,4 +83,5 @@ ESCALA6X1.zip   # pacote Apdata (blob; não extrair para o tree)
 | Motor `simulate()` | v1 + VR/VT + por centro de custo |
 | Sugestão de escalas/horários | Allowlist + blocklist (`schedule-policy-v1`) |
 | Relatório imprimível | Salários + VR/VT + centros + escalas sugeridas |
-| MCP Apdata | Fora desta entrega |
+| MCP Apdata | Scaffold em `mcp/` (sem servidor completo) |
+| CI | GitHub Actions: `npm ci` + `npm run build` |
