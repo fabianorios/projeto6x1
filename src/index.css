@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+
+:root {
+  --color-ink: #1a2332;
+  --color-paper: #f7f4ef;
+  --color-accent: #0d6e6e;
+  --color-accent-soft: #d4ebea;
+  --color-muted: #5c6b7a;
+  --color-line: #d9d2c5;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-ink);
+  background:
+    radial-gradient(ellipse 120% 80% at 10% -10%, #e8f0ef 0%, transparent 55%),
+    radial-gradient(ellipse 90% 60% at 100% 0%, #efe8dc 0%, transparent 50%),
+    var(--color-paper);
+  font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  body {
+    background: white !important;
+    color: black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .report-sheet {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .report-header,
+  .report-footer {
+    break-inside: avoid;
+  }
+}
+
+.print-only {
+  display: none;
+}
