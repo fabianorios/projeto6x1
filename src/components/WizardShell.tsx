@@ -106,113 +106,130 @@ export function WizardShell() {
   const stepIndex = STEPS.indexOf(step)
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8 sm:px-6">
-      <header className="no-print mb-10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm tracking-wide text-[var(--color-accent)] uppercase">
-              Projeto 6×1
-            </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-4xl">
-              Simulador de impacto PEC
-            </h1>
+    <div className="flex min-h-screen flex-col">
+      {/* Chrome alinhado ao shell Gestão (top bar #003366 + marca teal) */}
+      <header className="app-chrome no-print sticky top-0 z-30 border-b border-white/10">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <div
+              className="app-chrome-mark flex h-8 w-8 shrink-0 items-center justify-center rounded text-xs font-bold tracking-tight"
+              aria-hidden
+            >
+              6×1
+            </div>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-sm font-bold tracking-tight text-white uppercase">
+                Turnocheck
+              </p>
+              <p className="text-[10px] leading-none text-white/80">
+                Projeto 6×1 · AHR BRASIL
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setApdataFlowOpen(true)}
-              className="bg-[var(--color-accent)] px-3 py-1.5 text-sm text-white hover:opacity-95"
+              className="rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-teal)]/90 sm:px-3 sm:text-sm"
             >
               Apdata → Simular
             </button>
             <button
               type="button"
               onClick={() => setMapeamentoOpen(true)}
-              className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
             >
               Mapeamento
             </button>
             <button
               type="button"
               onClick={() => setAmbientesOpen(true)}
-              className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
             >
               Ambientes
             </button>
           </div>
         </div>
-        <p className="mt-2 max-w-xl text-[var(--color-muted)]">
-          Preencha em 3 passos e gere um relatório imprimível (PDF via
-          navegador). Números são heurísticas versionadas — não parecer
-          jurídico.
-        </p>
-
-        <nav
-          className="mt-6 flex gap-2"
-          aria-label="Etapas do wizard"
-        >
-          {STEPS.map((s, i) => {
-            const active = s === step
-            const done = i < stepIndex
-            return (
-              <button
-                key={s}
-                type="button"
-                disabled={i > stepIndex && !result}
-                onClick={() => {
-                  if (i <= stepIndex || result) setStep(s)
-                }}
-                className={[
-                  'rounded-md px-3 py-1.5 text-sm transition',
-                  active
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : done
-                      ? 'bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
-                      : 'bg-white/60 text-[var(--color-muted)]',
-                ].join(' ')}
-              >
-                {i + 1}. {STEP_LABELS[s]}
-              </button>
-            )
-          })}
-        </nav>
       </header>
 
-      <main className="flex-1">
-        {step === 'sector' && (
-          <SectorStep
-            templates={PILOT_TEMPLATES}
-            selectedId={form.sectorId}
-            onSelect={selectSector}
-            onNext={() => form.sectorId && setStep('inputs')}
-          />
-        )}
-        {step === 'inputs' && (
-          <InputsStep
-            form={form}
-            onChange={setForm}
-            onBack={() => setStep('sector')}
-            onSubmit={runSimulation}
-          />
-        )}
-        {step === 'results' && result && (
-          <ResultsView
-            result={result}
-            basket={basket}
-            onBasketChange={setBasket}
-            onBack={() => setStep('inputs')}
-            onRestart={() => {
-              setResult(null)
-              setForm(initialForm)
-              setStep('sector')
-            }}
-            onClearBasket={() => {
-              clearScenarioBasket()
-              setBasket(null)
-            }}
-          />
-        )}
-      </main>
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+        <div className="no-print mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-3xl">
+            Simulador de impacto PEC
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-[var(--color-muted)] sm:text-base">
+            Preencha em 3 passos e gere um relatório imprimível (PDF via
+            navegador). Números são heurísticas versionadas — não parecer
+            jurídico.
+          </p>
+
+          <nav
+            className="mt-6 flex flex-wrap gap-2"
+            aria-label="Etapas do wizard"
+          >
+            {STEPS.map((s, i) => {
+              const active = s === step
+              const done = i < stepIndex
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={i > stepIndex && !result}
+                  onClick={() => {
+                    if (i <= stepIndex || result) setStep(s)
+                  }}
+                  className={[
+                    'rounded-[var(--radius)] px-3 py-1.5 text-sm transition',
+                    active
+                      ? 'bg-[var(--color-teal)] text-white'
+                      : done
+                        ? 'bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
+                        : 'bg-white/70 text-[var(--color-muted)]',
+                  ].join(' ')}
+                >
+                  {i + 1}. {STEP_LABELS[s]}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+
+        <main className="flex-1">
+          {step === 'sector' && (
+            <SectorStep
+              templates={PILOT_TEMPLATES}
+              selectedId={form.sectorId}
+              onSelect={selectSector}
+              onNext={() => form.sectorId && setStep('inputs')}
+            />
+          )}
+          {step === 'inputs' && (
+            <InputsStep
+              form={form}
+              onChange={setForm}
+              onBack={() => setStep('sector')}
+              onSubmit={runSimulation}
+            />
+          )}
+          {step === 'results' && result && (
+            <ResultsView
+              result={result}
+              basket={basket}
+              onBasketChange={setBasket}
+              onBack={() => setStep('inputs')}
+              onRestart={() => {
+                setResult(null)
+                setForm(initialForm)
+                setStep('sector')
+              }}
+              onClearBasket={() => {
+                clearScenarioBasket()
+                setBasket(null)
+              }}
+            />
+          )}
+        </main>
+      </div>
 
       <AmbientesPanel
         open={ambientesOpen}

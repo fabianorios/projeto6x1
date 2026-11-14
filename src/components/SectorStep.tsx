@@ -34,11 +34,13 @@ export function SectorStep({
                 className={[
                   'w-full border px-4 py-4 text-left transition',
                   selected
-                    ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
-                    : 'border-[var(--color-line)] bg-white/70 hover:border-[var(--color-accent)]',
+                    ? 'border-[var(--color-teal)] bg-[var(--color-accent-soft)] ring-1 ring-[var(--color-teal)]/40'
+                    : 'border-[var(--color-line)] bg-white/80 hover:border-[var(--color-teal)]',
                 ].join(' ')}
               >
-                <span className="block text-lg font-medium">{t.label}</span>
+                <span className="block text-lg font-medium text-[var(--color-ink)]">
+                  {t.label}
+                </span>
                 <span className="mt-1 block text-sm text-[var(--color-muted)]">
                   {t.shortDescription}
                 </span>
@@ -53,7 +55,7 @@ export function SectorStep({
           type="button"
           disabled={!selectedId}
           onClick={onNext}
-          className="bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+          className="bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-40"
         >
           Continuar
         </button>
