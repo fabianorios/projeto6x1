@@ -1,8 +1,8 @@
 /** Payroll CSV import + aggregation helpers (layout: docs/import-layout.md). */
 
 import type { ScaleCycle } from './types'
-import type { RegimeFuncionamento } from '../types'
-import { isRegimeFuncionamento } from '../types'
+import type { ModoDias, RegimeFuncionamento } from '../types'
+import { isModoDias, isRegimeFuncionamento } from '../types'
 
 /** Canonical CSV headers — do not rename. */
 export const PAYROLL_CSV_HEADERS = [
@@ -33,6 +33,10 @@ export const PAYROLL_CSV_HEADERS = [
   'vr_dia_medio',
   'vt_dia_medio',
   'dias_trabalho_mes_atual',
+  'modo_dias_vr',
+  'modo_dias_vt',
+  'dias_base_mes_vr',
+  'dias_base_mes_vt',
   'regime_funcionamento',
   'he_media_mensal_horas',
 ] as const
@@ -80,6 +84,11 @@ export interface PayrollRow {
   regimeFuncionamento: RegimeFuncionamento | null
   /** Raw massa salarial base from extractor (before ÷ qty). */
   massaSalarialBase: number | null
+  /** VR/VT day projection mode from REGRA_* SqlProfile slots. */
+  modoDiasVr: ModoDias | null
+  modoDiasVt: ModoDias | null
+  diasBaseMesVr: number | null
+  diasBaseMesVt: number | null
 }
 
 export interface PayrollParseIssue {
@@ -106,6 +115,10 @@ export function emptyPayrollExtras(): Pick<
   | 'heMediaMensalHoras'
   | 'regimeFuncionamento'
   | 'massaSalarialBase'
+  | 'modoDiasVr'
+  | 'modoDiasVt'
+  | 'diasBaseMesVr'
+  | 'diasBaseMesVt'
 > {
   return {
     codEmpresa: null,
@@ -119,6 +132,10 @@ export function emptyPayrollExtras(): Pick<
     heMediaMensalHoras: 0,
     regimeFuncionamento: null,
     massaSalarialBase: null,
+    modoDiasVr: null,
+    modoDiasVt: null,
+    diasBaseMesVr: null,
+    diasBaseMesVt: null,
   }
 }
 
@@ -420,6 +437,36 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
     const escalaRaw = cell(cols, 'escala_atual')
     const descCargo = cell(cols, 'desc_cargo') || null
 
+    const modoVrRaw = cell(cols, 'modo_dias_vr').trim().toUpperCase()
+    const modoVtRaw = cell(cols, 'modo_dias_vt').trim().toUpperCase()
+    let modoDiasVr: ModoDias | null = null
+    let modoDiasVt: ModoDias | null = null
+    if (modoVrRaw) {
+      if (!isModoDias(modoVrRaw)) {
+        issues.push({ line: lineNo, message: 'modo_dias_vr inválido' })
+        continue
+      }
+      modoDiasVr = modoVrRaw
+    }
+    if (modoVtRaw) {
+      if (!isModoDias(modoVtRaw)) {
+        issues.push({ line: lineNo, message: 'modo_dias_vt inválido' })
+        continue
+      }
+      modoDiasVt = modoVtRaw
+    }
+
+    const diasBaseVr = parseOptionalNonNeg(cell(cols, 'dias_base_mes_vr'))
+    const diasBaseVt = parseOptionalNonNeg(cell(cols, 'dias_base_mes_vt'))
+    if (diasBaseVr === 'invalid') {
+      issues.push({ line: lineNo, message: 'dias_base_mes_vr inválido' })
+      continue
+    }
+    if (diasBaseVt === 'invalid') {
+      issues.push({ line: lineNo, message: 'dias_base_mes_vt inválido' })
+      continue
+    }
+
     rows.push({
       cargo,
       salario,
@@ -445,6 +492,10 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       heMediaMensalHoras,
       regimeFuncionamento,
       massaSalarialBase,
+      modoDiasVr,
+      modoDiasVt,
+      diasBaseMesVr: diasBaseVr,
+      diasBaseMesVt: diasBaseVt,
     })
   }
 
@@ -492,21 +543,38 @@ export interface CostCenterTotals {
 
 /**
  * Resolve current / proposed benefit days for one row.
- * Empty dias_mes_atual → estimate from current scale work ratio.
- * Proposed days always from target (scenario) scale estimate.
+ *
+ * modo_dias:
+ * - ESCALA (default): empty dias → estimate from scale; proposed = target scale days
+ * - FIXO_MES / CALENDARIO_LOCAL: keep dias_base_mes fixed in projection
+ *   (multiply valor_dia × fixed days × new headcount only)
  */
 export function resolveBenefitDays(
   rowDaysAtual: number | null,
   currentScale: ScaleCycle,
   targetScale: ScaleCycle,
+  modoDias: ModoDias | null = null,
+  diasBaseMes: number | null = null,
 ): { currentDays: number; proposedDays: number } {
   const estimatedCurrent = estimateWorkDaysPerMonth(currentScale)
-  const proposedDays = estimateWorkDaysPerMonth(targetScale)
+  const estimatedTarget = estimateWorkDaysPerMonth(targetScale)
+  const fixedBase =
+    diasBaseMes !== null && diasBaseMes !== undefined
+      ? diasBaseMes
+      : rowDaysAtual !== null && rowDaysAtual !== undefined
+        ? rowDaysAtual
+        : estimatedCurrent
+
+  const mode = modoDias ?? 'ESCALA'
+  if (mode === 'FIXO_MES' || mode === 'CALENDARIO_LOCAL') {
+    return { currentDays: fixedBase, proposedDays: fixedBase }
+  }
+
   const currentDays =
     rowDaysAtual !== null && rowDaysAtual !== undefined
       ? rowDaysAtual
       : estimatedCurrent
-  return { currentDays, proposedDays }
+  return { currentDays, proposedDays: estimatedTarget }
 }
 
 /** Aggregate imported rows by centro_custo (pre–HC-scale). */
@@ -577,6 +645,8 @@ export function aggregateByCostCenter(
         row.vrDiasMesAtual,
         scale,
         targetScale,
+        row.modoDiasVr,
+        row.diasBaseMesVr,
       )
       agg.vr.currentMonthly += row.vrValorDia * currentDays * qty
       agg.vr.proposedMonthly += row.vrValorDia * proposedDays * qty
@@ -591,6 +661,8 @@ export function aggregateByCostCenter(
         row.vtDiasMesAtual,
         scale,
         targetScale,
+        row.modoDiasVt,
+        row.diasBaseMesVt,
       )
       agg.vt.currentMonthly += row.vtValorDia * currentDays * qty
       agg.vt.proposedMonthly += row.vtValorDia * proposedDays * qty

@@ -1,10 +1,10 @@
 /**
- * Apdata → Turnocheck: one linear flow.
- * 1) Review SELECTs  2) Progress while exporting  3) Simulation via ResultsView
- * LGPD: samples show cargo / CC code / escala / qty — never employee names.
+ * Fluxo executivo 4 passos (sem jargão de DB na visão RH):
+ * 1) Origem dos Dados  2) Escopo  3) Premissas  4) Resultados
+ * Reusa Ambiente Salvo / Conexão Direta (PR #21). LGPD: sem nomes de pessoas.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   postEphemeralCatalog,
   postEphemeralExtract,
@@ -15,7 +15,8 @@ import {
   getActiveEnvironment,
   type EnvironmentPublic,
 } from '../api/environments'
-import { cnpjDigits, EXCLUDED_SITUACOES, type Establishment } from '../apdata/cnpj'
+import { listSqlProfiles } from '../api/sql-profiles'
+import { cnpjDigits, type Establishment } from '../apdata/cnpj'
 import {
   establishmentsFromEphemeralCatalog,
   ramosFromEphemeralCatalog,
@@ -32,23 +33,29 @@ import {
   sectorFromSelectedRamos,
   type RamoAtividade,
 } from '../apdata/ramos'
-import { REVIEW_SELECTS, LIVE_SELECT_STEPS } from '../apdata/selects'
 import {
   clearScenarioBasket,
   DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
+  DEFAULT_REGIME_FUNCIONAMENTO,
+  DEFAULT_TAX_REGIME,
+  REGIME_FUNCIONAMENTO_LABELS,
   RULE_VERSIONS,
   simulate,
   upsertSimulationInBasket,
   loadScenarioBasket,
   type EstrategiaAbsorcao,
   type OperatingHours,
+  type RegimeFuncionamento,
   type ScenarioBasket,
   type ScenarioId,
   type SectorId,
   type SimulationResult,
+  type TaxRegime,
 } from '../engine'
 import { PILOT_TEMPLATES } from '../templates'
+import type { SqlProfile } from '../types/sql-profile'
+import { AptoolsExtractModal } from './AptoolsExtractModal'
 import {
   DEFAULT_EPHEMERAL_CREDS_FORM,
   EphemeralCredsFields,
@@ -57,8 +64,9 @@ import {
 } from './EphemeralCredsFields'
 import { ResultsView } from './ResultsView'
 
-type Phase = 'review' | 'running' | 'ready' | 'results'
+type Phase = 'origem' | 'escopo' | 'premissas' | 'running' | 'resultados'
 type AmbMode = 'saved' | 'direct'
+type OriginCard = 'apdata' | 'aptools' | 'manual'
 
 function formToSessionCreds(
   form: EphemeralCredsFormValue,
@@ -78,17 +86,17 @@ function formToSessionCreds(
 interface ApdataFlowPanelProps {
   open: boolean
   onClose: () => void
+  /** Planilha Manual → fecha o fluxo e abre o wizard de importação. */
+  onManualSheet?: () => void
 }
 
-const SCENARIO_ORDER: ScenarioId[] = [
-  'status_quo',
-  'fase1_2026_42h',
-  'fase2_2027_40h',
-  'stress_test_4x3',
-]
-
-export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
-  const [phase, setPhase] = useState<Phase>('review')
+export function ApdataFlowPanel({
+  open,
+  onClose,
+  onManualSheet,
+}: ApdataFlowPanelProps) {
+  const [phase, setPhase] = useState<Phase>('origem')
+  const [originCard, setOriginCard] = useState<OriginCard>('apdata')
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +106,10 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [basket, setBasket] = useState<ScenarioBasket | null>(() =>
     loadScenarioBasket(),
   )
+  const [escopoSearch, setEscopoSearch] = useState('')
+  const [showAptools, setShowAptools] = useState(false)
+  const [sqlProfiles, setSqlProfiles] = useState<SqlProfile[]>([])
+  const [sqlProfileId, setSqlProfileId] = useState<string | null>(null)
 
   const [sector, setSector] = useState<SectorId>('varejo')
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
@@ -108,6 +120,12 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [defaultSalario, setDefaultSalario] = useState('2200')
   const [vrValorDia, setVrValorDia] = useState('30.56')
   const [vtValorDia, setVtValorDia] = useState('')
+  const [defaultTaxRegime, setDefaultTaxRegime] =
+    useState<TaxRegime>(DEFAULT_TAX_REGIME)
+  const [defaultRegime, setDefaultRegime] = useState<RegimeFuncionamento>(
+    DEFAULT_REGIME_FUNCIONAMENTO,
+  )
+  const [overridesOpen, setOverridesOpen] = useState(false)
   const [operatingHours] = useState<OperatingHours>(DEFAULT_OPERATING_HOURS)
   const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedCnpjKeys, setSelectedCnpjKeys] = useState<string[]>([])
@@ -124,6 +142,15 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
     useState<EphemeralSessionCreds | null>(null)
   const [directConnecting, setDirectConnecting] = useState(false)
   const [directConnected, setDirectConnected] = useState(false)
+
+  const filteredEstablishments = useMemo(() => {
+    const q = escopoSearch.trim().toLowerCase()
+    if (!q) return establishments
+    return establishments.filter((e) => {
+      const hay = `${e.label} ${e.key} ${e.colaboradores}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [establishments, escopoSearch])
 
   const clearCatalog = useCallback(() => {
     setEstablishments([])
@@ -197,17 +224,28 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
 
   useEffect(() => {
     if (open) {
-      setPhase('review')
+      setPhase('origem')
+      setOriginCard('apdata')
       setExported(null)
       setResult(null)
       setSteps([])
       setError(null)
+      setEscopoSearch('')
       void refreshEnv()
+      void listSqlProfiles()
+        .then((list) => {
+          setSqlProfiles(list.profiles)
+          setSqlProfileId(list.activeId ?? list.factoryId)
+        })
+        .catch(() => {
+          setSqlProfiles([])
+        })
     } else {
       // Drop volatile password when the panel closes.
       setEphemeralCreds(null)
       setDirectForm(DEFAULT_EPHEMERAL_CREDS_FORM)
       setDirectConnected(false)
+      setShowAptools(false)
     }
   }, [open, refreshEnv])
 
@@ -217,7 +255,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
     setError(null)
     setCnpjError(null)
     setExported(null)
-    setPhase('review')
+    setPhase('origem')
     clearCatalog()
     setEphemeralCreds(null)
     setDirectConnected(false)
@@ -251,6 +289,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       // Keep password only in React state for the export step.
       setEphemeralCreds(creds)
       setDirectConnected(true)
+      setPhase('escopo')
     } catch (err) {
       setEphemeralCreds(null)
       setDirectConnected(false)
@@ -259,6 +298,17 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       setDirectConnecting(false)
       setCnpjLoading(false)
     }
+  }
+
+  function goEscopoFromSaved() {
+    if (!activeEnv || establishments.length === 0) {
+      setError(
+        'Carregue um Ambiente Salvo com estabelecimentos antes de continuar.',
+      )
+      return
+    }
+    setError(null)
+    setPhase('escopo')
   }
 
   if (!open) return null
@@ -348,7 +398,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
         )
         setExported(out)
         setSteps(out.steps)
-        setPhase('ready')
+        setPhase('premissas')
         return
       }
       const out = await exportPayrollFromApdata(
@@ -360,10 +410,10 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       )
       setExported(out)
       setSteps(out.steps)
-      setPhase('ready')
+      setPhase('premissas')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setPhase('review')
+      setPhase('escopo')
     }
   }
 
@@ -394,11 +444,13 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       scenarioId,
       payrollRows: exported.rows,
       estrategiaAbsorcao,
+      defaultTaxRegime,
+      defaultRegimeFuncionamento: defaultRegime,
     })
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
-    setPhase('results')
+    setPhase('resultados')
   }
 
   function resimulateWithAbsorcao(nextAbs: EstrategiaAbsorcao) {
@@ -428,11 +480,32 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       scenarioId,
       payrollRows: exported.rows,
       estrategiaAbsorcao: nextAbs,
+      defaultTaxRegime,
+      defaultRegimeFuncionamento: defaultRegime,
     })
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
   }
+
+  const stepOrder: Phase[] = ['origem', 'escopo', 'premissas', 'resultados']
+  const stepLabels: Record<string, string> = {
+    origem: 'Origem dos Dados',
+    escopo: 'Escopo',
+    premissas: 'Premissas',
+    resultados: 'Resultados',
+  }
+  const visualStep =
+    phase === 'running'
+      ? 'premissas'
+      : phase === 'resultados'
+        ? 'resultados'
+        : phase
+
+  const canUseApdata =
+    ambMode === 'saved'
+      ? Boolean(activeEnv)
+      : Boolean(ephemeralCreds && directConnected)
 
   return (
     <div
@@ -451,10 +524,10 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
               id="apdata-flow-title"
               className="text-xl font-semibold text-[var(--color-ink)]"
             >
-              Apdata → Turnocheck
+              Simulação executiva
             </h2>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Revisar SELECTs · exportar folha agregada · simular impacto PEC.
+              Quatro passos: origem · escopo · premissas · resultados.
             </p>
           </div>
           <button
@@ -466,25 +539,10 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           </button>
         </div>
 
-        <ol className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Fases">
-          {(
-            [
-              ['review', '1. Revisar'],
-              ['running', '2. Processar'],
-              ['ready', '3. Export'],
-              ['results', '4. Resultado'],
-            ] as const
-          ).map(([id, label]) => {
-            const active =
-              phase === id ||
-              (id === 'running' && phase === 'running') ||
-              (id === 'ready' && (phase === 'ready' || phase === 'results')) ||
-              (id === 'results' && phase === 'results')
-            const past =
-              (id === 'review' && phase !== 'review') ||
-              (id === 'running' &&
-                (phase === 'ready' || phase === 'results')) ||
-              (id === 'ready' && phase === 'results')
+        <ol className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Passos">
+          {stepOrder.map((id, i) => {
+            const active = visualStep === id
+            const past = stepOrder.indexOf(visualStep as Phase) > i
             return (
               <li
                 key={id}
@@ -497,35 +555,34 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                       : 'border-[var(--color-line)]/60 text-[var(--color-muted)]/70',
                 ].join(' ')}
               >
-                {label}
+                {i + 1}. {stepLabels[id]}
               </li>
             )
           })}
         </ol>
-
-        <p className="mt-3 border border-[var(--color-line)] bg-white/50 px-3 py-2 text-xs text-[var(--color-muted)]">
-          <strong className="font-medium text-[var(--color-ink)]">LGPD:</strong>{' '}
-          export omite <code>nome</code>; usa código de CC; amostras só com
-          cargo, CC, escala e quantidade — sem nomes de pessoas ou clientes.
-        </p>
 
         {error && (
           <p className="mt-3 text-sm text-red-700" role="alert">
             {error}
           </p>
         )}
+        {cnpjError && phase !== 'resultados' && (
+          <p className="mt-3 text-sm text-red-700" role="alert">
+            {cnpjError}
+          </p>
+        )}
 
-        {phase === 'results' && result ? (
+        {phase === 'resultados' && result ? (
           <div className="mt-4">
             <ResultsView
               result={result}
               basket={basket}
               onBasketChange={setBasket}
-              onBack={() => setPhase('ready')}
+              onBack={() => setPhase('premissas')}
               onRestart={() => {
                 setResult(null)
                 setExported(null)
-                setPhase('review')
+                setPhase('origem')
               }}
               onClearBasket={() => {
                 clearScenarioBasket()
@@ -537,337 +594,421 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           </div>
         ) : (
           <>
-            <section className="mt-5 space-y-3">
-              <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                Ambiente
-              </h3>
-              <div
-                className="flex flex-wrap gap-2"
-                role="radiogroup"
-                aria-label="Modo de ambiente"
-              >
-                {(
-                  [
-                    ['saved', 'Ambiente Salvo'],
-                    ['direct', 'Conexão Direta (IP / Porta)'],
-                  ] as const
-                ).map(([id, label]) => {
-                  const selected = ambMode === id
-                  return (
+            {phase === 'origem' && (
+              <section className="mt-5 space-y-4">
+                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                  Passo 1 — Origem dos Dados
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {(
+                    [
+                      ['apdata', 'Conexão Direta Apdata', 'Ambiente salvo ou IP/porta + perfil SQL do Studio.'],
+                      ['aptools', 'Extrair via Aptools', 'Copiar queries oficiais e/ou enviar CSV agregado.'],
+                      ['manual', 'Planilha Manual', 'Importar folha no wizard (CSV/;).'],
+                    ] as const
+                  ).map(([id, title, blurb]) => (
                     <button
                       key={id}
                       type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => switchAmbMode(id)}
+                      onClick={() => {
+                        setOriginCard(id)
+                        if (id === 'aptools') setShowAptools(true)
+                        if (id === 'manual') {
+                          onManualSheet?.()
+                          onClose()
+                        }
+                      }}
                       className={[
-                        'border px-3 py-1.5 text-sm',
-                        selected
-                          ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
-                          : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-[var(--color-accent)]/50',
+                        'border px-3 py-4 text-left transition',
+                        originCard === id
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]/50'
+                          : 'border-[var(--color-line)] bg-white/70 hover:border-[var(--color-accent)]/40',
                       ].join(' ')}
                     >
-                      {label}
+                      <p className="text-sm font-semibold text-[var(--color-ink)]">
+                        {title}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-muted)]">
+                        {blurb}
+                      </p>
                     </button>
-                  )
-                })}
-              </div>
+                  ))}
+                </div>
 
-              {ambMode === 'saved' ? (
-                <p className="text-sm text-[var(--color-muted)]">
-                  {activeEnv ? (
-                    <>
-                      Ativo:{' '}
-                      <span className="text-[var(--color-ink)]">
-                        {activeEnv.name}
-                      </span>{' '}
-                      · {activeEnv.engine.toUpperCase()} · {activeEnv.host}:
-                      {activeEnv.port}/{activeEnv.database}
-                      {apiOk && (
-                        <span className="ml-2 text-[var(--color-accent)]">
-                          API online
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    'Nenhum ambiente ativo.'
-                  )}
-                </p>
-              ) : (
-                <div className="space-y-3 border border-[var(--color-line)] bg-white/60 px-3 py-3">
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Credenciais só na sessão do navegador e nas requisições
-                    efêmeras — não são gravadas em disco nem em localStorage.
-                    Conectar carrega estabelecimentos e ramos; o export usa o
-                    extrator via{' '}
-                    <code>POST /api/query/ephemeral</code>.
-                  </p>
-                  <EphemeralCredsFields
-                    value={directForm}
-                    onChange={setDirectForm}
-                    disabled={directConnecting || phase === 'running'}
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={
-                        directConnecting ||
-                        !ephemeralFormComplete(directForm) ||
-                        apiOk === false
-                      }
-                      onClick={() => void handleDirectConnect()}
-                      className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                {originCard === 'apdata' && (
+                  <div className="space-y-3 border border-[var(--color-line)] bg-white/70 px-3 py-3">
+                    <div
+                      className="flex flex-wrap gap-2"
+                      role="radiogroup"
+                      aria-label="Modo de ambiente"
                     >
-                      {directConnecting ? 'Conectando…' : 'Conectar'}
-                    </button>
-                    {directConnected && ephemeralCreds && (
-                      <span className="text-xs text-[var(--color-accent)]">
-                        Conectado (sessão) ·{' '}
-                        {ephemeralCreds.engine.toUpperCase()} ·{' '}
-                        {ephemeralCreds.host}:{ephemeralCreds.port}/
-                        {ephemeralCreds.database}
+                      {(
+                        [
+                          ['saved', 'Ambiente Salvo'],
+                          ['direct', 'Conexão Rápida (IP / Porta)'],
+                        ] as const
+                      ).map(([id, label]) => {
+                        const selected = ambMode === id
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => switchAmbMode(id)}
+                            className={[
+                              'border px-3 py-1.5 text-sm',
+                              selected
+                                ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                                : 'border-[var(--color-line)] text-[var(--color-muted)]',
+                            ].join(' ')}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-[var(--color-muted)]">
+                        Perfil SQL (Studio)
                       </span>
+                      <select
+                        className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+                        value={sqlProfileId ?? ''}
+                        onChange={(e) => setSqlProfileId(e.target.value || null)}
+                      >
+                        {sqlProfiles.length === 0 && (
+                          <option value="">Padrão Apdata SaaS</option>
+                        )}
+                        {sqlProfiles.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.readonly ? ' (fábrica)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {ambMode === 'saved' ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-[var(--color-muted)]">
+                          {activeEnv ? (
+                            <>
+                              Ativo:{' '}
+                              <span className="text-[var(--color-ink)]">
+                                {activeEnv.name}
+                              </span>
+                              {apiOk && (
+                                <span className="ml-2 text-[var(--color-teal)]">
+                                  API online
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            'Nenhum ambiente ativo — abra Ambientes ou use Conexão Rápida.'
+                          )}
+                        </p>
+                        {cnpjLoading && (
+                          <p className="text-sm text-[var(--color-muted)]">
+                            Carregando estabelecimentos…
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void refreshEnv()}
+                            className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                          >
+                            Atualizar ambiente
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!activeEnv || establishments.length === 0}
+                            onClick={goEscopoFromSaved}
+                            className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                          >
+                            Continuar para Escopo
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-[var(--color-muted)]">
+                          Credenciais só na sessão — não são gravadas em disco.
+                        </p>
+                        <EphemeralCredsFields
+                          value={directForm}
+                          onChange={setDirectForm}
+                          disabled={directConnecting}
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            directConnecting ||
+                            !ephemeralFormComplete(directForm) ||
+                            apiOk === false
+                          }
+                          onClick={() => void handleDirectConnect()}
+                          className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                        >
+                          {directConnecting ? 'Conectando…' : 'Conectar e ir ao Escopo'}
+                        </button>
+                      </div>
                     )}
                   </div>
+                )}
+              </section>
+            )}
+
+            {phase === 'escopo' && (
+              <section className="mt-5 space-y-3">
+                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                  Passo 2 — Escopo
+                </h3>
+                <p className="text-sm text-[var(--color-muted)]">
+                  Selecione razão social, filial e CNPJ. Totais = colaboradores
+                  ativos.
+                </p>
+                <input
+                  type="search"
+                  placeholder="Buscar razão, filial ou CNPJ…"
+                  value={escopoSearch}
+                  onChange={(e) => setEscopoSearch(e.target.value)}
+                  className="w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+                />
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="border border-[var(--color-line)] px-2 py-1"
+                    onClick={() =>
+                      setSelectedCnpjKeys(establishments.map((e) => e.key))
+                    }
+                  >
+                    Todos ({establishments.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="border border-[var(--color-line)] px-2 py-1"
+                    onClick={() => setSelectedCnpjKeys([])}
+                  >
+                    Nenhum
+                  </button>
+                  <span className="self-center text-[var(--color-muted)]">
+                    {selectedCnpjKeys.length} selecionado(s)
+                  </span>
                 </div>
-              )}
-            </section>
-
-            {(phase === 'review' || phase === 'ready') && (
-              <>
-                <section className="mt-5 space-y-2">
-                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                    Estabelecimentos (razão · filial · CNPJ)
-                  </h3>
-                  <p className="text-sm text-[var(--color-muted)]">
-                    Join Folhas → Locais → Empresas. Labels:{' '}
-                    <code>EMP_DssEmpresa</code> · <code>LOC_D1sLocal</code> ·
-                    CNPJ (<code>EMP_NusCNPJPrefixo</code> +{' '}
-                    <code>LOC_NusCNPJSufixo</code>). Totais de colaboradores
-                    agrupados por <code>CON_CdiVinculo</code> →{' '}
-                    <code>VIN_D1sVinculo</code>, situação fora de{' '}
-                    <code>{EXCLUDED_SITUACOES.join(', ')}</code>.
-                  </p>
-                  {cnpjLoading && (
-                    <p className="text-sm text-[var(--color-muted)]">
-                      Carregando estabelecimentos e ramos…
+                <div className="max-h-80 overflow-auto border border-[var(--color-line)] bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-[var(--color-accent-soft)]/80 text-xs">
+                      <tr>
+                        <th className="px-2 py-2" />
+                        <th className="px-2 py-2 font-medium">Razão</th>
+                        <th className="px-2 py-2 font-medium">Filial</th>
+                        <th className="px-2 py-2 font-medium">CNPJ</th>
+                        <th className="px-2 py-2 font-medium">Ativos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEstablishments.map((est) => {
+                        const checked = selectedCnpjKeys.includes(est.key)
+                        const parts = est.label.split(' · ')
+                        const razao = parts[0] ?? est.label
+                        const filial = parts[1] ?? '—'
+                        const cnpj = parts[2] ?? est.key
+                        return (
+                          <tr
+                            key={est.key}
+                            className="border-t border-[var(--color-line)]/60 hover:bg-[var(--color-accent-soft)]/20"
+                          >
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCnpj(est.key)}
+                                aria-label={`Selecionar ${est.label}`}
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">{razao}</td>
+                            <td className="px-2 py-1.5">{filial}</td>
+                            <td className="px-2 py-1.5 font-mono text-xs">
+                              {cnpj}
+                            </td>
+                            <td className="px-2 py-1.5 tabular-nums">
+                              {est.colaboradores}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {ramos.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-[var(--color-muted)] uppercase">
+                      Ramos de serviço
                     </p>
-                  )}
-                  {cnpjError && (
-                    <p className="text-sm text-red-700" role="alert">
-                      Apdata: {cnpjError}
-                    </p>
-                  )}
-                  {!cnpjLoading &&
-                    !cnpjError &&
-                    establishments.length === 0 &&
-                    (ambMode === 'saved' ? activeEnv : directConnected) && (
-                      <p className="text-sm text-[var(--color-muted)]">
-                        Nenhum estabelecimento com Folha/Local/Empresa no
-                        ambiente.
-                      </p>
-                    )}
-                  {establishments.length > 0 && (
-                    <>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <button
-                          type="button"
-                          className="border border-[var(--color-line)] px-2 py-1"
-                          onClick={() =>
-                            setSelectedCnpjKeys(
-                              establishments.map((e) => e.key),
-                            )
-                          }
+                    <ul className="max-h-32 overflow-y-auto border border-[var(--color-line)] bg-white/60">
+                      {ramos.map((ramo) => (
+                        <li
+                          key={ramo.id}
+                          className="border-b border-[var(--color-line)]/60 last:border-b-0"
                         >
-                          Todos ({establishments.length})
-                        </button>
-                        <button
-                          type="button"
-                          className="border border-[var(--color-line)] px-2 py-1"
-                          onClick={() => setSelectedCnpjKeys([])}
-                        >
-                          Nenhum
-                        </button>
-                        <span className="self-center text-[var(--color-muted)]">
-                          {selectedCnpjKeys.length} selecionado(s)
-                        </span>
-                      </div>
-                      <ul className="max-h-72 overflow-y-auto border border-[var(--color-line)] bg-white/60">
-                        {establishments.map((est) => {
-                          const checked = selectedCnpjKeys.includes(est.key)
-                          return (
-                            <li
-                              key={est.key}
-                              className="border-b border-[var(--color-line)]/60 last:border-b-0"
-                            >
-                              <label className="flex cursor-pointer items-start gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-accent-soft)]/30">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1"
-                                  checked={checked}
-                                  onChange={() => toggleCnpj(est.key)}
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block text-[var(--color-ink)]">
-                                    {est.label}
-                                  </span>
-                                  <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
-                                    {est.colaboradores} colaborador(es)
-                                  </span>
-                                  {est.porVinculo.length > 0 && (
-                                    <ul className="mt-1 space-y-0.5 border-l border-[var(--color-line)] pl-2 text-xs text-[var(--color-muted)]">
-                                      {est.porVinculo.map((v) => (
-                                        <li
-                                          key={v.vinculoId}
-                                          className="flex justify-between gap-3"
-                                        >
-                                          <span className="min-w-0 truncate text-[var(--color-ink)]/80">
-                                            {v.descricao}
-                                          </span>
-                                          <span className="shrink-0 tabular-nums">
-                                            {v.total}
-                                          </span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </span>
-                              </label>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </>
-                  )}
-                </section>
-
-                <section className="mt-5 space-y-2">
-                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                    Ramos de serviço
-                  </h3>
-                  <p className="text-sm text-[var(--color-muted)]">
-                    Catálogo Apdata{' '}
-                    <code>RamosAtividadesEmpresas</code> via{' '}
-                    <code>EMP_CdiRamoAtividadeEmpresa</code>. Cada ramo mapeia
-                    para atrito setorial (varejo / hospital / construção /
-                    locação).
-                  </p>
-                  {!cnpjLoading &&
-                    !cnpjError &&
-                    ramos.length === 0 &&
-                    (ambMode === 'saved' ? activeEnv : directConnected) && (
-                      <p className="text-sm text-[var(--color-muted)]">
-                        Nenhum ramo ativo na base — use o seletor de setor
-                        abaixo.
-                      </p>
-                    )}
-                  {ramos.length > 0 && (
-                    <>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <button
-                          type="button"
-                          className="border border-[var(--color-line)] px-2 py-1"
-                          onClick={() => {
-                            const ids = ramos.map((r) => r.id)
-                            setSelectedRamoIds(ids)
-                            setSector(sectorFromSelectedRamos(ramos, ids))
-                          }}
-                        >
-                          Todos ({ramos.length})
-                        </button>
-                        <button
-                          type="button"
-                          className="border border-[var(--color-line)] px-2 py-1"
-                          onClick={() => setSelectedRamoIds([])}
-                        >
-                          Nenhum
-                        </button>
-                        <span className="self-center text-[var(--color-muted)]">
-                          {selectedRamoIds.length} selecionado(s)
-                        </span>
-                      </div>
-                      <ul className="max-h-40 overflow-y-auto border border-[var(--color-line)] bg-white/60">
-                        {ramos.map((ramo) => {
-                          const checked = selectedRamoIds.includes(ramo.id)
-                          return (
-                            <li
-                              key={ramo.id}
-                              className="border-b border-[var(--color-line)]/60 last:border-b-0"
-                            >
-                              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-accent-soft)]/30">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => toggleRamo(ramo.id)}
-                                />
-                                <span className="min-w-0 flex-1 text-[var(--color-ink)]">
-                                  {ramo.label}
-                                </span>
-                                <span className="shrink-0 font-mono text-xs text-[var(--color-muted)]">
-                                  → {ramo.sectorId}
-                                </span>
-                              </label>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </>
-                  )}
-                </section>
-
-                <section className="mt-5 space-y-2">
-                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                    SELECTs (revisão de lógica)
-                  </h3>
-                  <p className="text-sm text-[var(--color-muted)]">
-                    Textos do mapeamento. Em runtime o proxy executa SELECTs
-                    single-table allowlisted e o join/agregação ocorre no
-                    cliente.
-                  </p>
-                  {REVIEW_SELECTS.map((q) => (
-                    <details
-                      key={q.id}
-                      className="border border-[var(--color-line)] bg-white/60"
-                      open={q.id === 'C' || q.id === 'F'}
-                    >
-                      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)]/40">
-                        {q.title}
-                      </summary>
-                      <p className="border-t border-[var(--color-line)] px-3 py-2 text-xs text-[var(--color-muted)]">
-                        {q.purpose}
-                      </p>
-                      <pre className="overflow-x-auto border-t border-[var(--color-line)] bg-[var(--color-ink)]/95 p-3 text-xs leading-relaxed text-[var(--color-accent-soft)]">
-                        {q.sql}
-                      </pre>
-                    </details>
-                  ))}
-                  <details className="border border-[var(--color-line)] bg-white/60">
-                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-                      Passos live (/api/query/select)
-                    </summary>
-                    <ul className="space-y-1 border-t border-[var(--color-line)] px-3 py-2 text-xs text-[var(--color-muted)]">
-                      {LIVE_SELECT_STEPS.map((s) => (
-                        <li key={s.id}>
-                          <code className="text-[var(--color-ink)]">
-                            {s.table}
-                          </code>
-                          {' — '}
-                          {s.note}
+                          <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedRamoIds.includes(ramo.id)}
+                              onChange={() => toggleRamo(ramo.id)}
+                            />
+                            <span>{ramo.label}</span>
+                          </label>
                         </li>
                       ))}
                     </ul>
-                  </details>
-                </section>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPhase('origem')}
+                    className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canUseApdata || selectedCnpjKeys.length === 0}
+                    onClick={() => void handleRun()}
+                    className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    Continuar para Premissas
+                  </button>
+                </div>
+              </section>
+            )}
 
-                <section className="mt-5">
-                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                    Parâmetros da simulação
-                  </h3>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            {phase === 'running' && (
+              <section className="mt-5" aria-live="polite">
+                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                  Carregando dados…
+                </h3>
+                <ProgressList steps={steps} />
+              </section>
+            )}
+
+            {phase === 'premissas' && (
+              <section className="mt-5 space-y-4">
+                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                  Passo 3 — Premissas
+                </h3>
+                {exported && (
+                  <p className="text-sm text-[var(--color-muted)]">
+                    {exported.stats.contratadosAtivos} vínculos ·{' '}
+                    {exported.stats.estabelecimentosFiltrados} CNPJ ·{' '}
+                    {exported.stats.linhasAgregadas} linhas agregadas
+                  </p>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Encargos por CNPJ
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      Pré-preenchido do slot Índices (quando disponível) ou
+                      preset editável.
+                    </p>
+                    <label className="mt-2 block text-sm">
+                      <span className="text-[var(--color-muted)]">Regime tributário</span>
+                      <select
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        value={defaultTaxRegime}
+                        onChange={(e) =>
+                          setDefaultTaxRegime(e.target.value as TaxRegime)
+                        }
+                      >
+                        <option value="SIMPLES">Simples</option>
+                        <option value="LUCRO_PRESUMIDO">Lucro Presumido</option>
+                        <option value="LUCRO_REAL">Lucro Real</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Regime de funcionamento por CC
+                    </p>
+                    <label className="mt-2 block text-sm">
+                      <span className="text-[var(--color-muted)]">Padrão</span>
+                      <select
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        value={defaultRegime}
+                        onChange={(e) =>
+                          setDefaultRegime(
+                            e.target.value as RegimeFuncionamento,
+                          )
+                        }
+                      >
+                        {(
+                          Object.keys(
+                            REGIME_FUNCIONAMENTO_LABELS,
+                          ) as RegimeFuncionamento[]
+                        ).map((id) => (
+                          <option key={id} value={id}>
+                            {REGIME_FUNCIONAMENTO_LABELS[id]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3 sm:col-span-2">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Cenário alvo
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(
+                        [
+                          ['fase1_2026_42h', '2026 · 42h'],
+                          ['fase2_2027_40h', '2027 · 40h'],
+                          ['status_quo', 'Status quo'],
+                          ['stress_test_4x3', 'Stress 4×3'],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setScenarioId(id)}
+                          className={[
+                            'border px-3 py-1.5 text-sm',
+                            scenarioId === id
+                              ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                              : 'border-[var(--color-line)] text-[var(--color-muted)]',
+                          ].join(' ')}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--color-muted)]">
+                      {RULE_VERSIONS[scenarioId].label}
+                    </p>
+                  </div>
+                </div>
+
+                <details
+                  className="border border-[var(--color-line)] bg-white/60"
+                  open={overridesOpen}
+                  onToggle={(e) =>
+                    setOverridesOpen((e.target as HTMLDetailsElement).open)
+                  }
+                >
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                    Overrides (salário / VR / VT / setor)
+                  </summary>
+                  <div className="grid gap-3 border-t border-[var(--color-line)] px-3 py-3 sm:grid-cols-2">
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">
-                        Setor (atrito; pré-preenchido pelo ramo)
-                      </span>
+                      <span className="text-[var(--color-muted)]">Setor</span>
                       <select
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={sector}
@@ -883,24 +1024,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                       </select>
                     </label>
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">Cenário</span>
-                      <select
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={scenarioId}
-                        onChange={(e) =>
-                          setScenarioId(e.target.value as ScenarioId)
-                        }
-                      >
-                        {SCENARIO_ORDER.map((id) => (
-                          <option key={id} value={id}>
-                            {RULE_VERSIONS[id].label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block text-sm">
                       <span className="text-[var(--color-muted)]">
-                        Salário padrão (se TEMP zerado)
+                        Salário padrão
                       </span>
                       <input
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
@@ -910,180 +1035,52 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">
-                        VR R$/dia (override)
-                      </span>
+                      <span className="text-[var(--color-muted)]">VR R$/dia</span>
                       <input
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={vrValorDia}
                         onChange={(e) => setVrValorDia(e.target.value)}
                         inputMode="decimal"
-                        placeholder="ex. 30.56"
                       />
                     </label>
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="text-[var(--color-muted)]">
-                        VT R$/dia (override; vazio = ConATransportes ×
-                        MeiosTransportesItens, CAS_DtdFim NULL)
-                      </span>
+                    <label className="block text-sm">
+                      <span className="text-[var(--color-muted)]">VT R$/dia</span>
                       <input
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={vtValorDia}
                         onChange={(e) => setVtValorDia(e.target.value)}
                         inputMode="decimal"
-                        placeholder="vazio = cadastro AT"
+                        placeholder="vazio = cadastro"
                       />
                     </label>
                   </div>
-                </section>
-              </>
-            )}
+                </details>
 
-            {phase === 'running' && (
-              <section className="mt-5" aria-live="polite">
-                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Processando
-                </h3>
-                <ProgressList steps={steps} />
-              </section>
-            )}
-
-            {phase === 'ready' && exported && (
-              <section className="mt-5 space-y-3">
-                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Export pronto
-                </h3>
-                <ProgressList steps={steps.length ? steps : exported.steps} />
-                <p className="text-sm text-[var(--color-muted)]">
-                  {exported.stats.contratadosAtivos} vínculos ·{' '}
-                  {exported.stats.estabelecimentosFiltrados} CNPJ ·{' '}
-                  {exported.stats.linhasAgregadas} linhas agregadas
-                  {exported.stats.comVtCadastro > 0 && (
-                    <> · {exported.stats.comVtCadastro} c/ VT cadastro</>
-                  )}
-                  {exported.stats.salariosZerados > 0 && (
-                    <> · {exported.stats.salariosZerados} salário(s) zerado(s)</>
-                  )}
-                </p>
-                {Object.keys(exported.stats.escalaCounts).length > 0 && (
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Escalas (horários):{' '}
-                    {Object.entries(exported.stats.escalaCounts)
-                      .map(([k, v]) => `${k}=${v}`)
-                      .join(' · ')}
-                  </p>
-                )}
-                {exported.stats.sample.length > 0 && (
-                  <div className="overflow-x-auto border border-[var(--color-line)]">
-                    <table className="w-full min-w-[28rem] text-left text-xs">
-                      <thead className="bg-[var(--color-accent-soft)]/60">
-                        <tr>
-                          <th className="px-2 py-1.5 font-medium">cargo</th>
-                          <th className="px-2 py-1.5 font-medium">
-                            centro_custo
-                          </th>
-                          <th className="px-2 py-1.5 font-medium">escala</th>
-                          <th className="px-2 py-1.5 font-medium">qtd</th>
-                          <th className="px-2 py-1.5 font-medium">h/mês</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {exported.stats.sample.map((row, i) => (
-                          <tr
-                            key={`${row.centroCusto}-${row.cargo}-${i}`}
-                            className="border-t border-[var(--color-line)] bg-white/40"
-                          >
-                            <td className="px-2 py-1.5">{row.cargo}</td>
-                            <td className="px-2 py-1.5 font-mono">
-                              {row.centroCusto}
-                            </td>
-                            <td className="px-2 py-1.5 font-mono">
-                              {row.escala}
-                            </td>
-                            <td className="px-2 py-1.5">{row.quantidade}</td>
-                            <td className="px-2 py-1.5">{row.cargaMensal}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {exported.issues.length > 0 && (
-                  <ul className="text-xs text-amber-800">
-                    {exported.issues.map((iss, i) => (
-                      <li key={`${iss.line}-${i}`}>{iss.message}</li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              {phase === 'review' && (
-                <button
-                  type="button"
-                  disabled={
-                    apiOk === false ||
-                    (ambMode === 'saved'
-                      ? !activeEnv
-                      : !ephemeralCreds || !directConnected)
-                  }
-                  onClick={() => void handleRun()}
-                  className="bg-[var(--color-accent)] px-4 py-2 text-sm text-white disabled:opacity-50"
-                >
-                  Executar export Apdata
-                </button>
-              )}
-              {phase === 'ready' && (
-                <>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={exported?.rows.length === 0}
+                    onClick={() => setPhase('escopo')}
+                    className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!exported || exported.rows.length === 0}
                     onClick={handleSimulate}
-                    className="bg-[var(--color-accent)] px-4 py-2 text-sm text-white disabled:opacity-50"
+                    className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    Simular impacto
+                    Gerar Resultados
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExported(null)
-                      setPhase('review')
-                    }}
-                    className="border border-[var(--color-line)] px-4 py-2 text-sm"
-                  >
-                    Voltar à revisão
-                  </button>
-                </>
-              )}
-              {phase === 'running' && (
-                <span className="text-sm text-[var(--color-muted)]">
-                  {ambMode === 'direct'
-                    ? 'Aguardando extrator efêmero…'
-                    : 'Aguardando SELECT-only…'}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (ambMode === 'direct') {
-                    if (ephemeralFormComplete(directForm)) {
-                      void handleDirectConnect()
-                    }
-                    return
-                  }
-                  void refreshEnv()
-                }}
-                className="border border-[var(--color-line)] px-3 py-2 text-sm"
-              >
-                {ambMode === 'direct'
-                  ? 'Atualizar conexão'
-                  : 'Atualizar ambiente'}
-              </button>
-            </div>
+                </div>
+              </section>
+            )}
           </>
         )}
       </div>
+      {showAptools && (
+        <AptoolsExtractModal onClose={() => setShowAptools(false)} />
+      )}
     </div>
   )
 }

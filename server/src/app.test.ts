@@ -196,4 +196,56 @@ describe("API routes", () => {
     assert.equal(body.ok, false);
     assert.equal(body.mode, "catalog");
   });
+
+  it("lists sql profiles with factory default", async () => {
+    const res = await app.request("/api/sql-profiles");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.profiles));
+    assert.ok(body.profiles.some((p: { readonly: boolean }) => p.readonly));
+    assert.equal(body.factoryId, "factory-padrao-apdata-saas");
+  });
+
+  it("duplicates profile and blocks factory edit", async () => {
+    const listRes = await app.request("/api/sql-profiles");
+    const { factoryId } = await listRes.json();
+    const dupRes = await app.request(`/api/sql-profiles/${factoryId}/duplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Padrão Apdata SaaS (cópia teste)" }),
+    });
+    assert.equal(dupRes.status, 201);
+    const { profile } = await dupRes.json();
+    assert.equal(profile.readonly, false);
+
+    const blockRes = await app.request(`/api/sql-profiles/${factoryId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "nope" }),
+    });
+    assert.equal(blockRes.status, 403);
+  });
+
+  it("POST test-slot rejects DML without echoing secrets", async () => {
+    const res = await app.request("/api/query/test-slot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slot: "ESTABELECIMENTOS",
+        sql: "DELETE FROM Contratos",
+        connection: {
+          engine: "mssql",
+          host: "127.0.0.1",
+          port: 1,
+          database: "nope",
+          user: "ro",
+          password: "test-slot-secret-no-leak",
+        },
+      }),
+    });
+    assert.equal(res.status, 400);
+    const text = await res.text();
+    assert.ok(!text.includes("test-slot-secret-no-leak"));
+    assert.match(text, /SQL blocked/i);
+  });
 });
