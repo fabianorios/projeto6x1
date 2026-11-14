@@ -626,6 +626,12 @@ export interface CostCenterTotals {
   heMediaMensalHoras: number
   regimeFuncionamento: RegimeFuncionamento | null
   cnpjCompleto: string | null
+  /** Dominant Apdata schedule code (by headcount). */
+  codHorarioAtual: string | null
+  /** Dominant escala_atual label (by headcount). */
+  escalaAtual: string | null
+  /** Headcount-weighted average weekly hours. */
+  cargaSemanalAtual: number | null
 }
 
 /**
@@ -680,6 +686,9 @@ export function aggregateByCostCenter(
       medSum: number
       odontoSum: number
       heSum: number
+      cargaSemanalSum: number
+      escalaVotes: Map<string, number>
+      horarioVotes: Map<string, number>
     }
   >()
 
@@ -724,6 +733,9 @@ export function aggregateByCostCenter(
         heMediaMensalHoras: 0,
         regimeFuncionamento: row.regimeFuncionamento,
         cnpjCompleto: row.cnpjCompleto,
+        codHorarioAtual: null,
+        escalaAtual: null,
+        cargaSemanalAtual: null,
         vrDiaSum: 0,
         vtDiaSum: 0,
         vaDiaSum: 0,
@@ -731,6 +743,9 @@ export function aggregateByCostCenter(
         medSum: 0,
         odontoSum: 0,
         heSum: 0,
+        cargaSemanalSum: 0,
+        escalaVotes: new Map(),
+        horarioVotes: new Map(),
       }
       map.set(key, agg)
     }
@@ -741,6 +756,19 @@ export function aggregateByCostCenter(
     agg.baselinePayroll += row.salario * qty
     agg.salaryMass += row.salario * qty
     agg.heSum += (row.heMediaMensalHoras || 0) * qty
+    agg.cargaSemanalSum += row.cargaHorariaSemanal * qty
+    if (row.escalaAtual) {
+      agg.escalaVotes.set(
+        row.escalaAtual,
+        (agg.escalaVotes.get(row.escalaAtual) ?? 0) + qty,
+      )
+    }
+    if (row.codHorarioAtual) {
+      agg.horarioVotes.set(
+        row.codHorarioAtual,
+        (agg.horarioVotes.get(row.codHorarioAtual) ?? 0) + qty,
+      )
+    }
     if (!agg.regimeFuncionamento && row.regimeFuncionamento) {
       agg.regimeFuncionamento = row.regimeFuncionamento
     }
@@ -822,6 +850,9 @@ export function aggregateByCostCenter(
         medSum,
         odontoSum,
         heSum,
+        cargaSemanalSum,
+        escalaVotes,
+        horarioVotes,
         ...rest
       }) => ({
         ...rest,
@@ -838,7 +869,25 @@ export function aggregateByCostCenter(
             ? odontoSum / rest.peopleWithAssistOdonto
             : 0,
         heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
+        cargaSemanalAtual:
+          rest.headcount > 0
+            ? Math.round((cargaSemanalSum / rest.headcount) * 100) / 100
+            : null,
+        escalaAtual: dominantVote(escalaVotes),
+        codHorarioAtual: dominantVote(horarioVotes),
       }),
     )
     .sort((a, b) => a.centroCusto.localeCompare(b.centroCusto, 'pt-BR'))
+}
+
+function dominantVote(votes: Map<string, number>): string | null {
+  let best: string | null = null
+  let bestN = 0
+  for (const [key, n] of votes) {
+    if (n > bestN) {
+      best = key
+      bestN = n
+    }
+  }
+  return best
 }

@@ -6,6 +6,7 @@ import type { ExclusionHit } from './schedule-policy'
 import type { ScheduleSuggestion } from './schedule-suggest'
 import type { ChargeBreakdown } from './charges'
 import type { AbsorptionPlan, HeCascadeResult } from './absorption'
+import type { CoberturaPorDia } from './coverage-days'
 import type { TurmaDistribution } from './crew-distribution'
 import type {
   EstrategiaAbsorcao,
@@ -176,6 +177,17 @@ export interface CostCenterResult {
   assistOdontoMonthly: number
   regimeFuncionamento?: RegimeFuncionamento
   distribuicaoTurmas?: TurmaDistribution
+  /** Apdata schedule code (dominant in CC). */
+  codHorarioAtual?: string | null
+  /** Current scale label (dominant), e.g. 6x1. */
+  escalaAtual?: string | null
+  /** Weighted average weekly hours. */
+  cargaSemanalAtual?: number | null
+  /**
+   * People on duty Mon–Sun under the current scale (baseline).
+   * Derived from cycle/regime when the CSV has no explicit matrix.
+   */
+  coberturaAtualPorDia?: CoberturaPorDia
 }
 
 export interface CoverageGap {

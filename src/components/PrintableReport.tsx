@@ -8,6 +8,7 @@ import {
   type SimulationResult,
 } from '../engine'
 import { getTemplate } from '../templates'
+import { ScheduleBuilderView } from './ScheduleBuilderView'
 import { ScenarioBasketCompare } from './ScenarioBasketCompare'
 import {
   ScenarioComparePanel,
@@ -200,6 +201,8 @@ export function PrintableReport({
           {distribuicaoTurmas.totalHeadcount}. {distribuicaoTurmas.note}
         </p>
       </section>
+
+      <ScheduleBuilderView result={result} variant="print" />
 
       {excludedScheduleNotice ? (
         <section className="mt-6 rounded border border-amber-800/50 bg-amber-50 px-4 py-3 text-xs">

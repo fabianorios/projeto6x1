@@ -24,6 +24,7 @@ import { getTemplate } from '../templates'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
 import { CalibrationHistory } from './CalibrationHistory'
 import { PrintableReport } from './PrintableReport'
+import { ScheduleBuilderView } from './ScheduleBuilderView'
 import { ScenarioBasketCompare } from './ScenarioBasketCompare'
 import {
   ScenarioComparePanel,
@@ -405,10 +406,13 @@ export function ResultsView({
           </p>
         </div>
 
-        {/* distribuicao_turmas */}
+        {/* Escala Atual (De) × Escala Proposta (Para) */}
+        <ScheduleBuilderView result={result} />
+
+        {/* distribuicao_turmas (resumo agregado) */}
         <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
           <h3 className="text-sm font-semibold text-[var(--color-ink)]">
-            Distribuição de turmas
+            Distribuição de turmas (agregado)
           </h3>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
             {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
@@ -419,19 +423,6 @@ export function ResultsView({
           <p className="mt-1 text-xs text-[var(--color-muted)]">
             {distribuicaoTurmas.note}
           </p>
-          {distribuicaoTurmas.crews.length > 1 ? (
-            <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
-              {distribuicaoTurmas.crews.map((c) => (
-                <li
-                  key={c.turmaIndex}
-                  className="border border-[var(--color-line)] bg-white px-2 py-1"
-                >
-                  <strong>{c.label}</strong> · {c.headcount} pess. · trabalha{' '}
-                  {c.workDays.join(', ')} · folga {c.restDays.join(', ')}
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>
 
         {/* (2) Atual × Proposto: basket when ≥2 proposals; panel when 0–1 */}
