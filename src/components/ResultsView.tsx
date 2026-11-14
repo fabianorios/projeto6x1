@@ -5,6 +5,7 @@ import {
   clearCalibrationHistory,
   downloadCalibrationJson,
   formatShiftRange,
+  getSectorDisplayLabel,
   loadCalibrationHistory,
   removeProposedScenario,
   saveCalibrationEntry,
@@ -125,6 +126,10 @@ export function ResultsView({
     distribuicaoTurmas,
     charges,
   } = result
+  const sectorDisplay = getSectorDisplayLabel(
+    input.sector,
+    input.sectorLabel,
+  )
 
   const [history, setHistory] = useState<CalibrationFeedbackEntry[]>(() =>
     loadCalibrationHistory(),
@@ -256,9 +261,12 @@ export function ResultsView({
             </span>
           </p>
           <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {template?.label ?? input.sector} · escala {input.currentScale} ·{' '}
+            {sectorDisplay} · escala {input.currentScale} ·{' '}
             {input.headcount} pessoas
             {usedPayrollImport ? ' · folha importada' : ''}
+            {input.sectorBufferPct != null
+              ? ` · buffer ${input.sectorBufferPct}%`
+              : ''}
           </p>
         </div>
 

@@ -226,7 +226,7 @@ ORDER BY emp.EMP_DssEmpresa, loc.LPC_D1sLocal, n_colaboradores DESC`,
     id: 'G',
     title: 'G) Ramos de atividade (serviço)',
     purpose:
-      'Catálogo data-driven: RamosAtividadesEmpresas. Join Empresas.EMP_CdiRamoAtividadeEmpresa → RAE_CdiRamoAtividadeEmpresa. Label RAE_D1sRamoAtividadeEmpresa mapeia para SectorId (varejo/hospital/construção/locação).',
+      'Catálogo data-driven: RamosAtividadesEmpresas. Join Empresas.EMP_CdiRamoAtividadeEmpresa → RAE_CdiRamoAtividadeEmpresa. Label RAE_D1sRamoAtividadeEmpresa vira o nome do segmento (texto real); calibração usa o preset de mercado mais próximo.',
     sql: `SELECT rae.RAE_CdiRamoAtividadeEmpresa,
        rae.RAE_D1sRamoAtividadeEmpresa,
        rae.RAE_CosReferencia,
@@ -414,7 +414,7 @@ export const LIVE_SELECT_STEPS: {
       'RAE_CosReferencia',
       'RAE_OplDesativado',
     ],
-    note: 'Catálogo de ramos; mapear RAE_D1s → SectorId no cliente.',
+    note: 'Catálogo de ramos; RAE_D1s vira nome do segmento; preset mais próximo calibra buffer.',
   },
   {
     id: 'folhas',

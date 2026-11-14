@@ -33,17 +33,21 @@ import {
   type ExportResult,
 } from '../apdata/exportPayroll'
 import {
+  segmentLabelFromSelectedRamos,
   sectorFromSelectedRamos,
+  suggestedBufferPctFromSelectedRamos,
   type RamoAtividade,
 } from '../apdata/ramos'
 import {
   clearScenarioBasket,
+  CUSTOM_SECTOR_ID,
   DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
   DEFAULT_REGIME_FUNCIONAMENTO,
   DEFAULT_TAX_REGIME,
   REGIME_FUNCIONAMENTO_LABELS,
   RULE_VERSIONS,
+  resolveSectorPreset,
   simulate,
   upsertSimulationInBasket,
   loadScenarioBasket,
@@ -117,6 +121,8 @@ export function ApdataFlowPanel({
   const [sqlProfileId, setSqlProfileId] = useState<string | null>(null)
 
   const [sector, setSector] = useState<SectorId>('varejo')
+  const [sectorLabel, setSectorLabel] = useState('Varejo')
+  const [sectorBufferPct, setSectorBufferPct] = useState(5)
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
     'fase1_2026_42h',
   )
@@ -172,7 +178,14 @@ export function ApdataFlowPanel({
       const ramoIds = ramoList.map((r) => r.id)
       setSelectedRamoIds(ramoIds)
       if (ramoIds.length > 0) {
-        setSector(sectorFromSelectedRamos(ramoList, ramoIds))
+        const mapped = sectorFromSelectedRamos(ramoList, ramoIds)
+        const dbLabel = segmentLabelFromSelectedRamos(ramoList, ramoIds)
+        const preset = resolveSectorPreset(mapped)
+        setSector(mapped)
+        // Always keep the real Apdata ramo description as the segment name.
+        setSectorLabel(dbLabel || preset.label)
+        setSectorBufferPct(suggestedBufferPctFromSelectedRamos(ramoList, ramoIds))
+        setDefaultRegime(preset.defaultRegime)
       }
     },
     [],
@@ -330,7 +343,13 @@ export function ApdataFlowPanel({
         ? prev.filter((x) => x !== id)
         : [...prev, id]
       if (next.length > 0) {
-        setSector(sectorFromSelectedRamos(ramos, next))
+        const mapped = sectorFromSelectedRamos(ramos, next)
+        const dbLabel = segmentLabelFromSelectedRamos(ramos, next)
+        const preset = resolveSectorPreset(mapped)
+        setSector(mapped)
+        setSectorLabel(dbLabel || preset.label)
+        setSectorBufferPct(suggestedBufferPctFromSelectedRamos(ramos, next))
+        setDefaultRegime(preset.defaultRegime)
       }
       return next
     })
@@ -440,6 +459,8 @@ export function ApdataFlowPanel({
     }
     const next = simulate({
       sector,
+      sectorLabel: sectorLabel.trim() || undefined,
+      sectorBufferPct,
       headcount: exported.stats.contratadosAtivos || 1,
       currentScale: dominant,
       averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
@@ -476,6 +497,8 @@ export function ApdataFlowPanel({
     }
     const next = simulate({
       sector,
+      sectorLabel: sectorLabel.trim() || undefined,
+      sectorBufferPct,
       headcount: exported.stats.contratadosAtivos || 1,
       currentScale: dominant,
       averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
@@ -1012,14 +1035,38 @@ export function ApdataFlowPanel({
                     Overrides (salário / VR / VT / setor)
                   </summary>
                   <div className="grid gap-3 border-t border-[var(--color-line)] px-3 py-3 sm:grid-cols-2">
+                    <label className="block text-sm sm:col-span-2">
+                      <span className="text-[var(--color-muted)]">
+                        Nome do segmento (texto Apdata / livre)
+                      </span>
+                      <input
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        value={sectorLabel}
+                        onChange={(e) => setSectorLabel(e.target.value)}
+                        placeholder="Descrição do ramo (RAE_D1s)"
+                      />
+                    </label>
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">Setor</span>
+                      <span className="text-[var(--color-muted)]">
+                        Preset de calibração
+                      </span>
                       <select
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={sector}
-                        onChange={(e) =>
-                          setSector(e.target.value as SectorId)
+                        value={
+                          PILOT_TEMPLATES.some((t) => t.id === sector)
+                            ? sector
+                            : CUSTOM_SECTOR_ID
                         }
+                        onChange={(e) => {
+                          const next = e.target.value as SectorId
+                          const preset = resolveSectorPreset(next)
+                          setSector(next)
+                          setSectorBufferPct(preset.defaultBufferPct)
+                          setDefaultRegime(preset.defaultRegime)
+                          if (next !== CUSTOM_SECTOR_ID && !sectorLabel.trim()) {
+                            setSectorLabel(preset.label)
+                          }
+                        }}
                       >
                         {PILOT_TEMPLATES.map((t) => (
                           <option key={t.id} value={t.id}>
@@ -1027,6 +1074,22 @@ export function ApdataFlowPanel({
                           </option>
                         ))}
                       </select>
+                    </label>
+                    <label className="block text-sm">
+                      <span className="text-[var(--color-muted)]">
+                        % Buffer / Absenteísmo
+                      </span>
+                      <input
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        type="number"
+                        min={0}
+                        max={50}
+                        step={0.5}
+                        value={sectorBufferPct}
+                        onChange={(e) =>
+                          setSectorBufferPct(Number(e.target.value) || 0)
+                        }
+                      />
                     </label>
                     <label className="block text-sm">
                       <span className="text-[var(--color-muted)]">

@@ -12,13 +12,14 @@ function defaultLocacaoHours(): OperatingHours {
   }
 }
 
+/** Current catalog id (legacy `locacao` normalizes here). */
 export const locacaoTemplate: SectorTemplate = {
-  id: 'locacao',
-  label: 'Locação',
+  id: 'locacao_facilities',
+  label: 'Locação / Facilities',
   shortDescription:
-    'Locação de equipamentos / frota + equipes de apoio — cobertura e custo de escala.',
+    'Locação de equipamentos / frota + facilities — cobertura e custo de escala.',
   inputsIntro:
-    'Defaults de operação de locação (frota + apoio). Ajuste headcount, salário médio e número de bases/pátios com a folha do cliente.',
+    'Defaults de operação de locação/facilities (frota + apoio). Ajuste headcount, salário médio e número de bases/pátios com a folha do cliente.',
   scaleHint:
     'Ex.: 6x1 na equipe de apoio. 6×1 e 12×36 não são sugeridos como proposta — só como Atual se for o status quo.',
   defaults: {
@@ -37,5 +38,5 @@ export const locacaoTemplate: SectorTemplate = {
     shiftsPerDay: 'Turnos por dia (por base)',
   },
   resultBlurb:
-    'Template locação: frota e apoio (+3% atrito setorial). Calibre buffers com a operação real antes da reunião.',
+    'Template locação/facilities: frota e apoio. Calibre buffers com a operação real antes da reunião.',
 }

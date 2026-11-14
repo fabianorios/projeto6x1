@@ -55,7 +55,7 @@ export function simulate(input: SimulationInput): SimulationResult {
   const scenarioId = normalizeScenarioId(input.scenarioId)
   const ruleVersion = getRuleVersion(scenarioId)
   const params = ruleVersion.params
-  const sector = getSectorCalibration(input.sector)
+  const sector = getSectorCalibration(input.sector, input.sectorBufferPct)
 
   const payrollRows = input.payrollRows?.length ? input.payrollRows : null
   const usedPayrollImport = payrollRows !== null

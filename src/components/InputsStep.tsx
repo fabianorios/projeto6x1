@@ -59,11 +59,7 @@ export function InputsStep({
   onBack,
   onSubmit,
 }: InputsStepProps) {
-  const template = form.sectorId
-    ? getTemplate(
-        form.sectorId as 'varejo' | 'hospital' | 'construcao' | 'locacao',
-      )
-    : undefined
+  const template = form.sectorId ? getTemplate(form.sectorId) : undefined
 
   const selectedScenario = RULE_VERSIONS[form.scenarioId]
   const scaleExclusion = checkScheduleExclusion(form.currentScale)
@@ -74,11 +70,9 @@ export function InputsStep({
     if (!form.sectorId) return null
     try {
       return simulate({
-        sector: form.sectorId as
-          | 'varejo'
-          | 'hospital'
-          | 'construcao'
-          | 'locacao',
+        sector: form.sectorId,
+        sectorLabel: form.sectorLabel.trim() || undefined,
+        sectorBufferPct: form.sectorBufferPct,
         headcount: form.headcount,
         currentScale: form.currentScale,
         averageMonthlySalary: form.averageMonthlySalary,

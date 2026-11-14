@@ -96,7 +96,7 @@ export function buildAhrHandoff(result: SimulationResult): AhrHandoffPayload {
       weeklyHoursCap: ruleVersion.params.weeklyHoursCap,
       targetScale: ruleVersion.params.targetScale.label,
     },
-    sector: input.sector,
+    sector: input.sectorLabel?.trim() || input.sector,
     taxRegime,
     estrategiaAbsorcao: estrategia,
     regimeFuncionamento: regime,
