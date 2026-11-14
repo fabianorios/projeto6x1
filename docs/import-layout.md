@@ -1,6 +1,8 @@
 # Layout de importação — folha (CSV)
 
-Separador: `;` (ponto e vírgula). Encoding: UTF-8. Primeira linha = cabeçalho exato.
+Separador: `;` (ponto e vírgula) ou `,` (vírgula). Encoding: UTF-8 ou Windows-1252 (detecção automática no wizard). Números BR (`1.234,56`) aceitos. Primeira linha = cabeçalho.
+
+Também aceita colunas do extrator Aptools (`docs/apdata-extractor.sql`): `desc_cargo`, `cod_cc`, `qtd_colaboradores`, `massa_salarial_base`, `vr_dia_medio`, `vt_dia_medio`, `dias_trabalho_mes_atual`, etc. Use o modal **Extrair via Aptools** no wizard para copiar a query MSSQL|Oracle.
 
 ## Colunas obrigatórias
 
