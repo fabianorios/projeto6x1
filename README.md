@@ -61,8 +61,9 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 src/
   engine/       # simulate(), payroll CSV, schedule-policy/suggest, regras
   templates/    # varejo + hospital
-  components/   # wizard + Ambientes + Mapeamento + PayrollImport + ResultsView
-  api/          # client HTTP → /api (ambientes)
+  components/   # wizard + ApdataFlow + Ambientes + Mapeamento + ResultsView
+  apdata/       # SELECT review texts + exportPayroll (join client-side)
+  api/          # client HTTP → /api (ambientes + query)
 public/
   sample-folha.csv
 server/         # API Hono: ambientes cifrados + proxy SELECT-only
@@ -91,5 +92,6 @@ MCP read-only em `mcp/`: tools `list_tables`, `describe_table`, `select_rows` co
 | Relatório imprimível | Salários + VR/VT + centros + escalas sugeridas |
 | Ambientes multi-cliente | UI + `server/` (senha cifrada; SELECT-only) |
 | Mapeamento Apdata → CSV | UI (**Mapeamento**) + `docs/apdata-turnocheck-mapping.md` |
+| Fluxo Apdata → Simular | UI (**Apdata → Simular**): review SELECTs → export → ResultsView |
 | MCP Apdata | Read-only em `mcp/` (MSSQL; Oracle stub) |
 | CI | App build + MCP/server test/typecheck/build (sem DB) |
