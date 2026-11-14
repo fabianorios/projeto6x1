@@ -19,6 +19,7 @@ import {
   type EscalaCode,
 } from './classify'
 import {
+  EXCLUDED_SITUACOES,
   buildEstablishments,
   folhaToEstablishmentKey,
   isIncludedSituacao,
@@ -131,6 +132,7 @@ function patchStep(
 /**
  * List establishments reachable via Folhas→Locais→Empresas.
  * Labels: EMP_DssEmpresa · LOC_D1sLocal · CNPJ (admin runtime OK).
+ * UI count: colaboradores (vínculos) with CON_CdiSituacao NOT IN (0,2,3,99).
  */
 export async function loadEstablishmentsFromApdata(opts: {
   environmentId?: string
@@ -138,33 +140,40 @@ export async function loadEstablishmentsFromApdata(opts: {
 } = {}): Promise<Establishment[]> {
   const limit = opts.limit ?? 5000
   const envOpts = { environmentId: opts.environmentId, limit }
-  const [empresasRes, locaisRes, folhasRes] = await Promise.all([
-    selectRows({
-      ...envOpts,
-      table: 'Empresas',
-      columns: [
-        'EMP_CdiEmpresa',
-        'EMP_DssEmpresa',
-        'EMP_NusCNPJPrefixo',
-        'EMP_CdiRamoAtividadeEmpresa',
-      ],
-    }),
-    selectRows({
-      ...envOpts,
-      table: 'Locais',
-      columns: [
-        'LOC_CdiLocal',
-        'LOC_CdiEmpresa',
-        'LOC_D1sLocal',
-        'LOC_NusCNPJSufixo',
-      ],
-    }),
-    selectRows({
-      ...envOpts,
-      table: 'Folhas',
-      columns: ['FOL_CdiFolha', 'FOL_CdiLocal'],
-    }),
-  ])
+  const [empresasRes, locaisRes, folhasRes, contratadosRes] =
+    await Promise.all([
+      selectRows({
+        ...envOpts,
+        table: 'Empresas',
+        columns: [
+          'EMP_CdiEmpresa',
+          'EMP_DssEmpresa',
+          'EMP_NusCNPJPrefixo',
+          'EMP_CdiRamoAtividadeEmpresa',
+        ],
+      }),
+      selectRows({
+        ...envOpts,
+        table: 'Locais',
+        columns: [
+          'LOC_CdiLocal',
+          'LOC_CdiEmpresa',
+          'LOC_D1sLocal',
+          'LOC_NusCNPJSufixo',
+        ],
+      }),
+      selectRows({
+        ...envOpts,
+        table: 'Folhas',
+        columns: ['FOL_CdiFolha', 'FOL_CdiLocal'],
+      }),
+      selectRows({
+        ...envOpts,
+        table: 'Contratados',
+        columns: ['CON_CdiFolha', 'CON_CdiSituacao'],
+        whereNotIn: { CON_CdiSituacao: [...EXCLUDED_SITUACOES] },
+      }),
+    ])
   return buildEstablishments(
     empresasRes.rows.map((r) => ({
       empresaId: num(r.EMP_CdiEmpresa) ?? 0,
@@ -181,6 +190,10 @@ export async function loadEstablishmentsFromApdata(opts: {
     folhasRes.rows.map((r) => ({
       folhaId: num(r.FOL_CdiFolha) ?? 0,
       localId: num(r.FOL_CdiLocal) ?? 0,
+    })),
+    contratadosRes.rows.map((r) => ({
+      folhaId: num(r.CON_CdiFolha) ?? 0,
+      situacao: num(r.CON_CdiSituacao),
     })),
   )
 }
@@ -292,6 +305,10 @@ export async function exportPayrollFromApdata(
       folhasRes.rows.map((r) => ({
         folhaId: num(r.FOL_CdiFolha) ?? 0,
         localId: num(r.FOL_CdiLocal) ?? 0,
+      })),
+      contratadosRes.rows.map((r) => ({
+        folhaId: num(r.CON_CdiFolha) ?? 0,
+        situacao: num(r.CON_CdiSituacao),
       })),
     )
     const folhaCnpj = folhaToEstablishmentKey(establishments)

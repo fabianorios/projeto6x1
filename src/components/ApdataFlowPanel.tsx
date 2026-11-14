@@ -382,7 +382,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                     Join Folhas → Locais → Empresas. Labels:{' '}
                     <code>EMP_DssEmpresa</code> · <code>LOC_D1sLocal</code> ·
                     CNPJ (<code>EMP_NusCNPJPrefixo</code> +{' '}
-                    <code>LOC_NusCNPJSufixo</code>). Situação exclui{' '}
+                    <code>LOC_NusCNPJSufixo</code>). Contagem = vínculos
+                    (contratados) com situação fora de{' '}
                     <code>{EXCLUDED_SITUACOES.join(', ')}</code>.
                   </p>
                   {cnpjLoading && (
@@ -448,7 +449,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                                   {est.label}
                                 </span>
                                 <span className="shrink-0 text-xs text-[var(--color-muted)]">
-                                  {est.folhaIds.length} folha(s)
+                                  {est.colaboradores} vínculo(s)
                                 </span>
                               </label>
                             </li>

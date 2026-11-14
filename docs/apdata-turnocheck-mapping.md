@@ -40,7 +40,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `CON_DtdRescisao IS NULL` | 3 289 | Inclui afastados / outros |
 | `CON_CdiSituacao = 2` (demitido meses ant.) | 63 798 | Excluído (junto com 0, 3, 99) |
 
-**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI: `EMP_DssEmpresa` · `LOC_D1sLocal` · CNPJ formatado (admin runtime OK; não hardcodar nomes em git).
+**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI: `EMP_DssEmpresa` · `LOC_D1sLocal` · CNPJ formatado + **total de vínculos** (`COUNT` contratados com `CON_CdiSituacao NOT IN (0,2,3,99)` por estabelecimento — não quantidade de folhas). Admin runtime OK; não hardcodar nomes em git.
 
 **Ramos de serviço:** `Empresas.EMP_CdiRamoAtividadeEmpresa` → `RamosAtividadesEmpresas.RAE_CdiRamoAtividadeEmpresa` (`RAE_D1sRamoAtividadeEmpresa`). Lista data-driven no fluxo Apdata→Simular; keywords mapeiam para `SectorId` (varejo / hospital / construção / locação) para atrito.
 
