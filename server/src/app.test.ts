@@ -174,4 +174,26 @@ describe("API routes", () => {
     });
     assert.equal(res.status, 400);
   });
+
+  it("POST ephemeral catalog mode never echoes password", async () => {
+    const res = await app.request("/api/query/ephemeral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engine: "mssql",
+        host: "127.0.0.1",
+        port: 1,
+        database: "nope",
+        user: "ro",
+        password: "catalog-secret-must-not-leak",
+        mode: "catalog",
+      }),
+    });
+    assert.equal(res.status, 502);
+    const text = await res.text();
+    assert.ok(!text.includes("catalog-secret-must-not-leak"));
+    const body = JSON.parse(text);
+    assert.equal(body.ok, false);
+    assert.equal(body.mode, "catalog");
+  });
 });

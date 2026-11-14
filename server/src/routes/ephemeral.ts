@@ -1,10 +1,17 @@
 /**
  * POST /api/query/ephemeral — volatile connection; never persists credentials.
+ * Modes:
+ *   - extract (default): official Apdata extractor → aggregate rows
+ *   - catalog: allowlisted single-table SELECTs for CNPJ + ramos UI
  */
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { assertSelectOnly } from "@projeto-6x1/mcp";
+import {
+  assertSelectOnly,
+  buildSelectRows,
+  type SelectRowsInput,
+} from "@projeto-6x1/mcp";
 import {
   EPHEMERAL_TIMEOUT_MS,
   applyReadIsolation,
@@ -20,6 +27,7 @@ import {
   assertNoPiiColumns,
   mapExtractorRows,
 } from "../lib/extractor-map.js";
+import type { ServerConfig } from "../config.js";
 
 const ephemeralSchema = z.object({
   engine: z.enum(["mssql", "oracle"]),
@@ -30,6 +38,7 @@ const ephemeralSchema = z.object({
   password: z.string().min(1),
   encrypt: z.boolean().optional(),
   trustServerCertificate: z.boolean().optional(),
+  mode: z.enum(["extract", "catalog"]).optional().default("extract"),
   filters: z
     .object({
       cnpjs: z.array(z.string()).max(32).optional(),
@@ -37,8 +46,61 @@ const ephemeralSchema = z.object({
     .optional(),
 });
 
-export function createEphemeralRoutes() {
+/** Situações excluídas do headcount (parity with client EXCLUDED_SITUACOES). */
+const EXCLUDED_SITUACOES = [0, 2, 3, 99] as const;
+
+const CATALOG_SELECTS: SelectRowsInput[] = [
+  {
+    table: "Empresas",
+    columns: [
+      "EMP_CdiEmpresa",
+      "EMP_DssEmpresa",
+      "EMP_NusCNPJPrefixo",
+      "EMP_CdiRamoAtividadeEmpresa",
+    ],
+  },
+  {
+    table: "Locais",
+    columns: [
+      "LOC_CdiLocal",
+      "LOC_CdiEmpresa",
+      "LOC_D1sLocal",
+      "LOC_NusCNPJSufixo",
+    ],
+  },
+  {
+    table: "Folhas",
+    columns: ["FOL_CdiFolha", "FOL_CdiLocal"],
+  },
+  {
+    table: "Contratados",
+    columns: ["CON_CdiFolha", "CON_CdiSituacao", "CON_CdiVinculo"],
+    whereNotIn: { CON_CdiSituacao: [...EXCLUDED_SITUACOES] },
+  },
+  {
+    table: "Vinculos",
+    columns: ["VIN_CdiVinculo", "VIN_D1sVinculo"],
+  },
+  {
+    table: "RamosAtividadesEmpresas",
+    columns: [
+      "RAE_CdiRamoAtividadeEmpresa",
+      "RAE_D1sRamoAtividadeEmpresa",
+      "RAE_CosReferencia",
+      "RAE_OplDesativado",
+    ],
+  },
+];
+
+export type EphemeralRoutesDeps = {
+  config?: Pick<ServerConfig, "sqlMaxRows">;
+};
+
+const DEFAULT_MAX_ROWS = 5000;
+
+export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
   const app = new Hono();
+  const maxRows = deps.config?.sqlMaxRows ?? DEFAULT_MAX_ROWS;
 
   /** Aptools copy helpers — no DB connection. */
   app.get("/extractor-sql", (c) => {
@@ -80,23 +142,95 @@ export function createEphemeralRoutes() {
       trustServerCertificate: data.trustServerCertificate,
     };
 
-    const { sql, params } = buildExtractorQuery(data.engine, data.filters ?? {});
-    const policy = assertSelectOnly(sql);
-    if (!policy.ok) {
-      scrubCreds(creds);
-      return c.json({ error: `SQL blocked: ${policy.reason}` }, 400);
-    }
-
     const client = createEphemeralClient(creds, EPHEMERAL_TIMEOUT_MS);
     const started = Date.now();
+    const mode = data.mode ?? "extract";
 
     try {
       await applyReadIsolation(client);
+
+      if (mode === "catalog") {
+        const tables: Record<
+          string,
+          {
+            columns: string[];
+            rows: Record<string, unknown>[];
+            rowCount: number;
+            sql: string;
+          }
+        > = {};
+
+        const deadline = started + EPHEMERAL_TIMEOUT_MS;
+        for (const sel of CATALOG_SELECTS) {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            throw new Error(
+              `ephemeral catalog timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+            );
+          }
+          const built = buildSelectRows(sel, maxRows, client.driver);
+          if (!built.ok) {
+            scrubCreds(creds);
+            return c.json({ error: built.reason }, 400);
+          }
+          const policy = assertSelectOnly(built.sql);
+          if (!policy.ok) {
+            scrubCreds(creds);
+            return c.json({ error: `SQL blocked: ${policy.reason}` }, 400);
+          }
+          const result = await Promise.race([
+            client.query(built.sql, built.params),
+            new Promise<never>((_, reject) => {
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `ephemeral catalog timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+                    ),
+                  ),
+                Math.max(1, remaining),
+              );
+            }),
+          ]);
+          tables[sel.table] = {
+            columns: result.columns,
+            rows: result.rows,
+            rowCount: result.rowCount,
+            sql: built.sql,
+          };
+        }
+
+        return c.json({
+          ok: true,
+          mode: "catalog",
+          engine: data.engine,
+          timeoutMs: EPHEMERAL_TIMEOUT_MS,
+          latencyMs: Date.now() - started,
+          tables,
+          note: "Ephemeral catalog connection destroyed after response. Credentials were not persisted.",
+        });
+      }
+
+      const { sql, params } = buildExtractorQuery(
+        data.engine,
+        data.filters ?? {},
+      );
+      const policy = assertSelectOnly(sql);
+      if (!policy.ok) {
+        scrubCreds(creds);
+        return c.json({ error: `SQL blocked: ${policy.reason}` }, 400);
+      }
+
       const result = await Promise.race([
         client.query(sql, params),
         new Promise<never>((_, reject) => {
           setTimeout(
-            () => reject(new Error(`ephemeral query timeout (${EPHEMERAL_TIMEOUT_MS}ms)`)),
+            () =>
+              reject(
+                new Error(
+                  `ephemeral query timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+                ),
+              ),
             EPHEMERAL_TIMEOUT_MS,
           );
         }),
@@ -107,6 +241,7 @@ export function createEphemeralRoutes() {
 
       return c.json({
         ok: true,
+        mode: "extract",
         engine: data.engine,
         timeoutMs: EPHEMERAL_TIMEOUT_MS,
         latencyMs: Date.now() - started,
@@ -137,6 +272,7 @@ export function createEphemeralRoutes() {
           ok: false,
           error: err instanceof Error ? err.message : String(err),
           engine: data.engine,
+          mode,
           latencyMs: Date.now() - started,
         },
         502,
