@@ -8,6 +8,14 @@ import type {
   QueryResult,
 } from "./types.js";
 
+/** Scrub credential-like substrings from driver error text (LGPD). */
+function scrubDriverError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/(password|pwd|passwd|user|userid|uid)\s*[=:]\s*\S+/gi, "$1=[redacted]")
+    .replace(/Login failed for user '[^']*'/gi, "Login failed for user '[redacted]'");
+}
+
 export class MssqlClient implements DbClient {
   readonly driver = "mssql" as const;
   private pool: sql.ConnectionPool | null = null;
@@ -24,20 +32,35 @@ export class MssqlClient implements DbClient {
         "MSSQL config incomplete: set MSSQL_USER (and password) in env",
       );
     }
+    // Empty/whitespace → strictly undefined (never "").
     const database = this.config.database?.trim() || undefined;
-    this.pool = await new sql.ConnectionPool({
+    const connectTimeout = 10_000;
+    const requestTimeout = 15_000;
+    const pool = new sql.ConnectionPool({
       server: this.config.server,
       port: this.config.port,
-      ...(database ? { database } : {}),
+      database,
       user: this.config.user,
       password: this.config.password,
+      // Top-level mssql timeouts (tedious also reads options.connectTimeout).
+      connectionTimeout: connectTimeout,
+      requestTimeout:
+        this.requestTimeoutMs > 0
+          ? Math.min(this.requestTimeoutMs, requestTimeout)
+          : requestTimeout,
       options: {
-        encrypt: this.config.encrypt,
-        trustServerCertificate: this.config.trustServerCertificate,
+        // Always on for external/SaaS (self-signed) and TLS.
+        encrypt: true,
+        trustServerCertificate: true,
+        connectTimeout,
+        requestTimeout,
       },
-      requestTimeout: this.requestTimeoutMs,
-      connectionTimeout: Math.min(this.requestTimeoutMs, 15_000),
-    }).connect();
+    });
+    // Async driver errors must not crash the Node/Hono process.
+    pool.on("error", (err) => {
+      console.error("[mssql] pool error:", scrubDriverError(err));
+    });
+    this.pool = await pool.connect();
   }
 
   async close(): Promise<void> {
