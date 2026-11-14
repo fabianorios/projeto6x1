@@ -8,8 +8,13 @@ import { mapExtractorAggregatesToPayroll } from './mapExtractorRows'
 
 describe('extractor SQL (SPA)', () => {
   it('exposes MSSQL and Oracle Aptools scripts', () => {
-    assert.match(getAptoolsExtractorScript('mssql'), /READ UNCOMMITTED/i)
-    assert.match(getAptoolsExtractorScript('oracle'), /READ ONLY/i)
+    const mssql = getAptoolsExtractorScript('mssql')
+    const oracle = getAptoolsExtractorScript('oracle')
+    assert.match(mssql, /FROM\s+Contratados\b/i)
+    assert.match(mssql, /LPC_CdiLocal/)
+    assert.match(oracle, /FROM\s+Contratados\b/i)
+    assert.ok(!/SET\s+TRANSACTION/i.test(mssql))
+    assert.ok(!/SET\s+TRANSACTION/i.test(oracle))
     assert.match(getExtractorSelectBody('mssql'), /^WITH\b/i)
     assert.ok(!getExtractorSelectBody('mssql').includes(';'))
   })

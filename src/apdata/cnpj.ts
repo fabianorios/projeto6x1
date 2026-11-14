@@ -3,9 +3,9 @@
  *
  * Join path:
  *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
- *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
- *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
- *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LOC_NusCNPJSufixo
+ *   Folhas.FOL_CdiLocal → Locais.LPC_CdiLocal
+ *   Locais.LPC_CdiEmpresa → Empresas.EMP_CdiEmpresa
+ *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LPC_NusCNPJSufixo
  *
  * Tipo de vínculo (employment link type — not TiposContratos):
  *   Contratados.CON_CdiVinculo → Vinculos.VIN_CdiVinculo
@@ -14,7 +14,7 @@
  *
  * UI labels (admin runtime OK — LGPD):
  *   Empresas.EMP_DssEmpresa  → razão social
- *   Locais.LOC_D1sLocal      → nome da filial
+ *   Locais.LPC_D1sLocal      → nome da filial
  *   Display: `Razão · Filial · CNPJ formatado`
  *   Under each CNPJ: VIN_D1sVinculo + COUNT colaboradores
  *

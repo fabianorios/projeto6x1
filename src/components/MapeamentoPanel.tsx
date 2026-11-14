@@ -68,7 +68,7 @@ const CSV_FIELDS: {
   {
     csv: 'vt_dias_mes_atual',
     origem:
-      'HorariosTiposDiasAT ∩ HorariosJornadas com TIP_OplTrabalho=1 (tipo 88 cobre 2ª–6ª)',
+      'HorariosTiposDiasAT ∩ HorariosJornadas com TDP_OplTrabalho=1 (tipo 88 cobre 2ª–6ª)',
     notas:
       '≈ 30 × at_work_days / cycle_len. Sem AT → vazio (motor estima). Não usar CCA_QtiTotalDias.',
   },
@@ -122,36 +122,36 @@ const TIPOS_DIA: { id: number; trabalho: number; sigla: string; uso: string }[] 
 
 const SELECT_CICLO = `SELECT hj.HRI_CdiHorario,
        COUNT(*) AS cycle_len,
-       SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-       SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
+       SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+       SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
        CASE
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
            THEN '6x1'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
            THEN '5x2'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
            THEN '4x3'
          ELSE 'other'
        END AS escala_atual
 FROM dbo.HorariosJornadas hj
 JOIN dbo.TiposDiasPonto td
-  ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
 WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
 GROUP BY hj.HRI_CdiHorario;`
 
 const SELECT_EXPORT = `;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
-         SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-         SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
+         SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+         SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -174,7 +174,7 @@ ciclo_vt AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
          SUM(CASE
-               WHEN td.TIP_OplTrabalho = 1
+               WHEN td.TDP_OplTrabalho = 1
                 AND (
                   EXISTS (
                     SELECT 1 FROM at_mask m
@@ -193,7 +193,7 @@ ciclo_vt AS (
                THEN 1 ELSE 0
              END) AS at_work_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -218,7 +218,7 @@ vt_cad AS (
 )
 SELECT
   emp.EMP_NusCNPJPrefixo                   AS cnpj_prefixo,
-  loc.LOC_NusCNPJSufixo                    AS cnpj_sufixo,
+  loc.LPC_NusCNPJSufixo                    AS cnpj_sufixo,
   car.CAR_D1sCargo                         AS cargo,
   AVG(NULLIF(con.CON_VlnSalario, 0))       AS salario,
   hmv.HMV_QtnQuantidadeHoraMes             AS carga_horaria_mensal,
@@ -240,8 +240,8 @@ SELECT
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
-JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -253,7 +253,7 @@ LEFT JOIN vt_cad vt ON vt.CAS_CdiContratado = con.CON_CdiContratado
 WHERE con.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
   emp.EMP_NusCNPJPrefixo,
-  loc.LOC_NusCNPJSufixo,
+  loc.LPC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,

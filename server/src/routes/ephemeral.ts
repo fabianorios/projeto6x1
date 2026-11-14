@@ -76,10 +76,10 @@ const CATALOG_SELECTS: SelectRowsInput[] = [
   {
     table: "Locais",
     columns: [
-      "LOC_CdiLocal",
-      "LOC_CdiEmpresa",
-      "LOC_D1sLocal",
-      "LOC_NusCNPJSufixo",
+      "LPC_CdiLocal",
+      "LPC_CdiEmpresa",
+      "LPC_D1sLocal",
+      "LPC_NusCNPJSufixo",
     ],
   },
   {

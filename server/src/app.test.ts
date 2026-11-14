@@ -139,8 +139,9 @@ describe("API routes", () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.engine, "mssql");
-    assert.match(String(body.sql), /Contratos/i);
-    assert.match(String(body.sql), /READ UNCOMMITTED/i);
+    assert.match(String(body.sql), /Contratados/i);
+    assert.match(String(body.sql), /LPC_CdiLocal/);
+    assert.ok(!/SET\s+TRANSACTION/i.test(String(body.sql)));
     assert.ok(!JSON.stringify(body).toLowerCase().includes("password"));
   });
 
@@ -273,7 +274,7 @@ describe("API routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         slot: "ESTABELECIMENTOS",
-        sql: "DELETE FROM Contratos",
+        sql: "DELETE FROM Contratados",
         connection: {
           engine: "mssql",
           host: "127.0.0.1",

@@ -50,10 +50,10 @@ export function establishmentsFromEphemeralCatalog(
       ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
     })),
     locais.map((r) => ({
-      localId: num(r.LOC_CdiLocal) ?? 0,
-      empresaId: num(r.LOC_CdiEmpresa) ?? 0,
-      sufixo: str(r.LOC_NusCNPJSufixo),
-      nomeFilial: str(r.LOC_D1sLocal),
+      localId: num(r.LPC_CdiLocal) ?? 0,
+      empresaId: num(r.LPC_CdiEmpresa) ?? 0,
+      sufixo: str(r.LPC_NusCNPJSufixo),
+      nomeFilial: str(r.LPC_D1sLocal),
     })),
     folhas.map((r) => ({
       folhaId: num(r.FOL_CdiFolha) ?? 0,

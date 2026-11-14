@@ -81,7 +81,7 @@ describe("SqlProfilesStore", () => {
 
 describe("sql-slot-guard", () => {
   it("blocks PII and DDL", () => {
-    assert.equal(guardSlotSql("DELETE FROM Contratos").ok, false);
+    assert.equal(guardSlotSql("DELETE FROM Contratados").ok, false);
     assert.equal(
       guardSlotSql("SELECT FUN_NusCPF AS cpf FROM Funcionarios").ok,
       false,
