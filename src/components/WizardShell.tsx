@@ -14,6 +14,7 @@ import {
 } from '../engine'
 import { getTemplate, PILOT_TEMPLATES } from '../templates'
 import { AmbientesPanel } from './AmbientesPanel'
+import { MapeamentoPanel } from './MapeamentoPanel'
 import { ResultsView } from './ResultsView'
 import { SectorStep } from './SectorStep'
 import { InputsStep } from './InputsStep'
@@ -62,6 +63,7 @@ export function WizardShell() {
     loadScenarioBasket(),
   )
   const [ambientesOpen, setAmbientesOpen] = useState(false)
+  const [mapeamentoOpen, setMapeamentoOpen] = useState(false)
 
   function selectSector(sectorId: string) {
     const template = getTemplate(sectorId as 'varejo' | 'hospital')
@@ -107,13 +109,22 @@ export function WizardShell() {
               Simulador de impacto PEC
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setAmbientesOpen(true)}
-            className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
-          >
-            Ambientes
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setMapeamentoOpen(true)}
+              className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+            >
+              Mapeamento
+            </button>
+            <button
+              type="button"
+              onClick={() => setAmbientesOpen(true)}
+              className="border border-[var(--color-line)] bg-white/70 px-3 py-1.5 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+            >
+              Ambientes
+            </button>
+          </div>
         </div>
         <p className="mt-2 max-w-xl text-[var(--color-muted)]">
           Preencha em 3 passos e gere um relatório imprimível (PDF via
@@ -191,6 +202,10 @@ export function WizardShell() {
       <AmbientesPanel
         open={ambientesOpen}
         onClose={() => setAmbientesOpen(false)}
+      />
+      <MapeamentoPanel
+        open={mapeamentoOpen}
+        onClose={() => setMapeamentoOpen(false)}
       />
     </div>
   )

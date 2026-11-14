@@ -38,6 +38,7 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 | [`docs/schedule-policy.md`](docs/schedule-policy.md) | Allowlist / blocklist de escalas |
 | [`docs/learning-motor.md`](docs/learning-motor.md) | Feedback aceitar/editar (Fase A) |
 | [`docs/apdata-6x1-feasibility.md`](docs/apdata-6x1-feasibility.md) | Viabilidade Apdata × simulador |
+| [`docs/apdata-turnocheck-mapping.md`](docs/apdata-turnocheck-mapping.md) | Mapeamento Apdata → CSV (UI: **Mapeamento**) |
 | [`docs/sample-folha-validacao.csv`](docs/sample-folha-validacao.csv) | Folha fictícia de validação |
 | [`mcp/README.md`](mcp/README.md) | MCP SELECT-only (tools, env, Cursor config) |
 
@@ -60,7 +61,7 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 src/
   engine/       # simulate(), payroll CSV, schedule-policy/suggest, regras
   templates/    # varejo + hospital
-  components/   # wizard + Ambientes + PayrollImport + ResultsView
+  components/   # wizard + Ambientes + Mapeamento + PayrollImport + ResultsView
   api/          # client HTTP → /api (ambientes)
 public/
   sample-folha.csv
@@ -89,5 +90,6 @@ MCP read-only em `mcp/`: tools `list_tables`, `describe_table`, `select_rows` co
 | Sugestão de escalas/horários | Allowlist + blocklist (`schedule-policy-v1`) |
 | Relatório imprimível | Salários + VR/VT + centros + escalas sugeridas |
 | Ambientes multi-cliente | UI + `server/` (senha cifrada; SELECT-only) |
+| Mapeamento Apdata → CSV | UI (**Mapeamento**) + `docs/apdata-turnocheck-mapping.md` |
 | MCP Apdata | Read-only em `mcp/` (MSSQL; Oracle stub) |
 | CI | App build + MCP/server test/typecheck/build (sem DB) |
