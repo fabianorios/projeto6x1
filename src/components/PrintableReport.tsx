@@ -117,7 +117,7 @@ export function PrintableReport({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.18em] uppercase">
-              Projeto 6×1 · Consultoria
+              Turnocheck · Projeto 6×1 · AHR Brasil
             </p>
             <h1 className="mt-2 text-2xl font-semibold leading-tight">
               Relatório de impacto — PEC escala 6×1

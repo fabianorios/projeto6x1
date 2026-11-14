@@ -1,12 +1,26 @@
 @import 'tailwindcss';
 
+/*
+ * Visual identity aligned with Gestão Consultoria (AHR Brasil).
+ * Source: fabianorios/gestaoconsultoria-core src/styles.css + app shell.
+ * Product copy stays Turnocheck / Projeto 6×1; chrome shares the family look.
+ */
 :root {
-  --color-ink: #1a2332;
-  --color-paper: #f7f4ef;
-  --color-accent: #0d6e6e;
-  --color-accent-soft: #d4ebea;
-  --color-muted: #5c6b7a;
-  --color-line: #d9d2c5;
+  /* AHR Brasil — navy #143C6B / sidebar #003366 */
+  --color-ink: #143c6b;
+  --color-sidebar: #003366;
+  /* Cool paper (Gestão --background ≈ oklch(0.99 0.003 250)) */
+  --color-paper: #f5f7fa;
+  /* Primary CTAs = navy (Gestão --primary / button default) */
+  --color-accent: #143c6b;
+  /* Soft teal wash from Gestão interactive #00A896 */
+  --color-accent-soft: #d9f2ee;
+  --color-teal: #00a896;
+  --color-success: #22b24b;
+  --color-muted: #5a6b7c;
+  --color-line: #dce3ec;
+  --color-surface: #ffffff;
+  --radius: 0.625rem;
 }
 
 html,
@@ -19,10 +33,64 @@ body {
   margin: 0;
   color: var(--color-ink);
   background:
-    radial-gradient(ellipse 120% 80% at 10% -10%, #e8f0ef 0%, transparent 55%),
-    radial-gradient(ellipse 90% 60% at 100% 0%, #efe8dc 0%, transparent 50%),
+    radial-gradient(ellipse 120% 80% at 8% -10%, #e4eef6 0%, transparent 55%),
+    radial-gradient(ellipse 90% 55% at 100% 0%, #dff3ef 0%, transparent 48%),
     var(--color-paper);
-  font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    'Segoe UI',
+    Arial,
+    sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* Shared AHR chrome — matches Gestão top bar */
+.app-chrome {
+  background: var(--color-sidebar);
+  color: #fff;
+}
+
+.app-chrome-mark {
+  background: var(--color-teal);
+  color: #fff;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--radius);
+}
+
+.btn-primary:hover {
+  opacity: 0.92;
+}
+
+.btn-secondary {
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  color: var(--color-ink);
+  border-radius: var(--radius);
+}
+
+.btn-secondary:hover {
+  border-color: var(--color-teal);
+}
+
+.surface-card {
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  border-radius: var(--radius);
+}
+
+/* Gestão radius on interactive surfaces (shell stays product-specific) */
+button,
+input,
+select,
+textarea,
+fieldset {
+  border-radius: var(--radius);
 }
 
 @media print {
