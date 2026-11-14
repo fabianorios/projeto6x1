@@ -3,6 +3,11 @@
 import type { ScaleCycle } from './types'
 import type { ModoDias, RegimeFuncionamento } from '../types'
 import { isModoDias, isRegimeFuncionamento } from '../types'
+import {
+  benefitsToPayrollScalars,
+  parseBeneficiosAgg,
+  type ExtractedBenefit,
+} from '../apdata/classifyBenefit'
 
 /** Canonical CSV headers — do not rename. */
 export const PAYROLL_CSV_HEADERS = [
@@ -43,6 +48,7 @@ export const PAYROLL_CSV_HEADERS = [
   'va_modo_valor',
   'assist_medica_mes',
   'assist_odonto_mes',
+  'beneficios_agg',
   'regime_funcionamento',
   'he_media_mensal_horas',
 ] as const
@@ -104,6 +110,8 @@ export interface PayrollRow {
   assistMedicaMes: number | null
   /** Assistência odontológica — fixed R$/month (HC cost). */
   assistOdontoMes: number | null
+  /** Dynamic TiposBeneficios from extractor (auto-classified). */
+  benefits: ExtractedBenefit[]
 }
 
 export interface PayrollParseIssue {
@@ -139,6 +147,7 @@ export function emptyPayrollExtras(): Pick<
   | 'vaModoValor'
   | 'assistMedicaMes'
   | 'assistOdontoMes'
+  | 'benefits'
 > {
   return {
     codEmpresa: null,
@@ -161,6 +170,7 @@ export function emptyPayrollExtras(): Pick<
     vaModoValor: null,
     assistMedicaMes: null,
     assistOdontoMes: null,
+    benefits: [],
   }
 }
 
@@ -541,13 +551,33 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       vaModoValor = 'DIA'
     }
 
+    const benefits = parseBeneficiosAgg(cell(cols, 'beneficios_agg'))
+    const fromAgg = benefitsToPayrollScalars(benefits)
+    let resolvedVr = vrValorDia as number | null
+    let resolvedVaDia = vaValorDia as number | null
+    let resolvedVaMes = vaValorMes as number | null
+    let resolvedMed = assistMedicaMes as number | null
+    let resolvedOdonto = assistOdontoMes as number | null
+    let resolvedVaModo = vaModoValor
+    if (benefits.length > 0) {
+      if (fromAgg.vrValorDia != null) resolvedVr = fromAgg.vrValorDia
+      if (fromAgg.vaValorMes != null) {
+        resolvedVaMes = fromAgg.vaValorMes
+        resolvedVaModo = resolvedVaModo ?? 'MES'
+      }
+      if (fromAgg.assistMedicaMes != null) resolvedMed = fromAgg.assistMedicaMes
+      if (fromAgg.assistOdontoMes != null) {
+        resolvedOdonto = fromAgg.assistOdontoMes
+      }
+    }
+
     rows.push({
       cargo,
       salario,
       cargaHorariaMensal: cargaM,
       cargaHorariaSemanal: cargaS,
       centroCusto,
-      vrValorDia: vrValorDia as number | null,
+      vrValorDia: resolvedVr,
       vrDiasMesAtual: vrDiasMesAtual as number | null,
       vtValorDia: vtValorDia as number | null,
       vtDiasMesAtual: vtDiasMesAtual as number | null,
@@ -570,11 +600,12 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       modoDiasVt,
       diasBaseMesVr: diasBaseVr,
       diasBaseMesVt: diasBaseVt,
-      vaValorDia: vaValorDia as number | null,
-      vaValorMes: vaValorMes as number | null,
-      vaModoValor,
-      assistMedicaMes: assistMedicaMes as number | null,
-      assistOdontoMes: assistOdontoMes as number | null,
+      vaValorDia: resolvedVaDia,
+      vaValorMes: resolvedVaMes,
+      vaModoValor: resolvedVaModo,
+      assistMedicaMes: resolvedMed,
+      assistOdontoMes: resolvedOdonto,
+      benefits,
     })
   }
 

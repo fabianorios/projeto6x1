@@ -24,6 +24,13 @@ describe('extractor SQL (SPA)', () => {
     assert.match(oracle, /CHR\(9\)/)
     assert.match(oracle, /CHR\(10\)/)
     assert.match(oracle, /CHR\(13\)/)
+    // Dynamic TiposBeneficios (no hard-coded tipo 53 filter).
+    assert.match(mssql, /TiposBeneficios/)
+    assert.match(mssql, /beneficios_agg/)
+    assert.match(mssql, /PBV_DtdFim IS NULL/)
+    assert.ok(!/TPB_CdiTipoBeneficio\s*=\s*53/.test(mssql))
+    assert.match(oracle, /LISTAGG/)
+    assert.match(oracle, /beneficios_agg/)
   })
 })
 
@@ -52,5 +59,23 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].nome, null)
     assert.equal(rows[0].cnpjCompleto, '12345678000190')
     assert.equal(rows[0].vrValorDia, 32)
+  })
+
+  it('auto-classifies beneficios_agg into VR/VA/médica', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        desc_cargo: 'Operador',
+        cod_cc: 'CC-01',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2000,
+        carga_semanal_atual: 44,
+        beneficios_agg:
+          '53|VALE REFEICAO|30.50;52|VALE ALIMENTACAO|300;10|UNIMED TITULAR|400',
+      },
+    ])
+    assert.equal(rows[0].vrValorDia, 30.5)
+    assert.equal(rows[0].vaValorMes, 300)
+    assert.equal(rows[0].assistMedicaMes, 400)
+    assert.equal(rows[0].benefits.length, 3)
   })
 })

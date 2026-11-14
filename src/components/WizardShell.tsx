@@ -4,37 +4,22 @@ import {
   DEFAULT_OPERATING_HOURS,
   DEFAULT_REGIME_FUNCIONAMENTO,
   DEFAULT_TAX_REGIME,
-  clearScenarioBasket,
-  loadScenarioBasket,
-  resolveSectorPreset,
-  simulate,
-  upsertSimulationInBasket,
   type EstrategiaAbsorcao,
   type OperatingHours,
   type PayrollParseIssue,
   type PayrollRow,
   type RegimeFuncionamento,
-  type ScenarioBasket,
   type ScenarioId,
-  type SimulationResult,
   type TaxRegime,
 } from '../engine'
-import { getTemplate, PILOT_TEMPLATES } from '../templates'
 import { AmbientesPanel } from './AmbientesPanel'
 import { ApdataFlowPanel } from './ApdataFlowPanel'
-import { MapeamentoPanel } from './MapeamentoPanel'
-import { ResultsView } from './ResultsView'
-import { SectorStep } from './SectorStep'
-import { InputsStep } from './InputsStep'
 import { SqlStudioPanel } from './SqlStudioPanel'
 
-export type WizardStep = 'sector' | 'inputs' | 'results'
-
+/** Shared form shape kept for InputsStep / PayrollImport compatibility. */
 export interface WizardFormState {
   sectorId: string | null
-  /** Display name (preset label, Apdata ramo text, or custom). */
   sectorLabel: string
-  /** Buffer / absenteísmo % (0–100). */
   sectorBufferPct: number
   headcount: number
   currentScale: string
@@ -52,7 +37,7 @@ export interface WizardFormState {
   regimeFuncionamentoByCc: Record<string, RegimeFuncionamento>
 }
 
-const initialForm: WizardFormState = {
+export const initialWizardForm: WizardFormState = {
   sectorId: null,
   sectorLabel: '',
   sectorBufferPct: 5,
@@ -72,92 +57,17 @@ const initialForm: WizardFormState = {
   regimeFuncionamentoByCc: {},
 }
 
-const STEPS: WizardStep[] = ['sector', 'inputs', 'results']
-
-const STEP_LABELS: Record<WizardStep, string> = {
-  sector: 'Setor',
-  inputs: 'Dados',
-  results: 'Resultados',
-}
-
+/**
+ * Unified Turnocheck shell: Logo + Wizard + Studio SQL.
+ * The 5-step linear flow lives in ApdataFlowPanel (embedded).
+ * Ambientes stays reachable from Studio / saved-env path (not top nav).
+ */
 export function WizardShell() {
-  const [step, setStep] = useState<WizardStep>('sector')
-  const [form, setForm] = useState<WizardFormState>(initialForm)
-  const [result, setResult] = useState<SimulationResult | null>(null)
-  const [basket, setBasket] = useState<ScenarioBasket | null>(() =>
-    loadScenarioBasket(),
-  )
-  const [ambientesOpen, setAmbientesOpen] = useState(false)
-  const [mapeamentoOpen, setMapeamentoOpen] = useState(false)
-  const [apdataFlowOpen, setApdataFlowOpen] = useState(false)
   const [sqlStudioOpen, setSqlStudioOpen] = useState(false)
-
-  function selectSector(sectorId: string) {
-    const template = getTemplate(sectorId)
-    const preset = resolveSectorPreset(sectorId)
-    setForm((prev) => ({
-      ...prev,
-      sectorId,
-      sectorLabel:
-        sectorId === 'custom'
-          ? prev.sectorLabel
-          : template.label,
-      sectorBufferPct: preset.defaultBufferPct,
-      defaultRegimeFuncionamento: preset.defaultRegime,
-      ...template.defaults,
-    }))
-  }
-
-  function buildSimInput(state: WizardFormState) {
-    if (!state.sectorId) return null
-    return {
-      sector: state.sectorId,
-      sectorLabel: state.sectorLabel.trim() || undefined,
-      sectorBufferPct: state.sectorBufferPct,
-      headcount: state.headcount,
-      currentScale: state.currentScale,
-      averageMonthlySalary: state.averageMonthlySalary,
-      units: state.units,
-      shiftsPerDay: state.shiftsPerDay,
-      operatingHours: state.operatingHours,
-      scenarioId: state.scenarioId,
-      payrollRows:
-        state.payrollRows.length > 0 ? state.payrollRows : undefined,
-      defaultTaxRegime: state.defaultTaxRegime,
-      taxRegimeByCnpj:
-        Object.keys(state.taxRegimeByCnpj).length > 0
-          ? state.taxRegimeByCnpj
-          : undefined,
-      estrategiaAbsorcao: state.estrategiaAbsorcao,
-      defaultRegimeFuncionamento: state.defaultRegimeFuncionamento,
-      regimeFuncionamentoByCc:
-        Object.keys(state.regimeFuncionamentoByCc).length > 0
-          ? state.regimeFuncionamentoByCc
-          : undefined,
-    }
-  }
-
-  function runSimulation(nextForm: WizardFormState = form) {
-    const input = buildSimInput(nextForm)
-    if (!input) return
-    const next = simulate(input)
-    const nextBasket = upsertSimulationInBasket(next, basket)
-    setBasket(nextBasket)
-    setResult(next)
-    setStep('results')
-  }
-
-  function resimulateWith(patch: Partial<WizardFormState>) {
-    const nextForm = { ...form, ...patch }
-    setForm(nextForm)
-    runSimulation(nextForm)
-  }
-
-  const stepIndex = STEPS.indexOf(step)
+  const [ambientesOpen, setAmbientesOpen] = useState(false)
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Chrome alinhado ao shell Gestão (top bar #003366 + marca teal) */}
       <header className="app-chrome no-print sticky top-0 z-30 border-b border-white/10">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
@@ -177,13 +87,9 @@ export function WizardShell() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => setApdataFlowOpen(true)}
-              className="rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-teal)]/90 sm:px-3 sm:text-sm"
-            >
-              Fluxo 4 passos
-            </button>
+            <span className="rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm">
+              Wizard
+            </span>
             <button
               type="button"
               onClick={() => setSqlStudioOpen(true)}
@@ -192,131 +98,26 @@ export function WizardShell() {
             >
               ⚙️ Studio SQL
             </button>
-            <button
-              type="button"
-              onClick={() => setMapeamentoOpen(true)}
-              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
-            >
-              Mapeamento
-            </button>
-            <button
-              type="button"
-              onClick={() => setAmbientesOpen(true)}
-              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
-            >
-              Ambientes
-            </button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
-        <div className="no-print mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-3xl">
-            Simulador de impacto PEC
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-[var(--color-muted)] sm:text-base">
-            Preencha em 3 passos e gere um relatório imprimível (PDF via
-            navegador). Números são heurísticas versionadas — não parecer
-            jurídico.
-          </p>
-
-          <nav
-            className="mt-6 flex flex-wrap gap-2"
-            aria-label="Etapas do wizard"
-          >
-            {STEPS.map((s, i) => {
-              const active = s === step
-              const done = i < stepIndex
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={i > stepIndex && !result}
-                  onClick={() => {
-                    if (i <= stepIndex || result) setStep(s)
-                  }}
-                  className={[
-                    'rounded-[var(--radius)] px-3 py-1.5 text-sm transition',
-                    active
-                      ? 'bg-[var(--color-teal)] text-white'
-                      : done
-                        ? 'bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
-                        : 'bg-white/70 text-[var(--color-muted)]',
-                  ].join(' ')}
-                >
-                  {i + 1}. {STEP_LABELS[s]}
-                </button>
-              )
-            })}
-          </nav>
-        </div>
-
-        <main className="flex-1">
-          {step === 'sector' && (
-            <SectorStep
-              templates={PILOT_TEMPLATES}
-              selectedId={form.sectorId}
-              sectorLabel={form.sectorLabel}
-              sectorBufferPct={form.sectorBufferPct}
-              onSelect={selectSector}
-              onSectorMetaChange={(meta) =>
-                setForm((prev) => ({ ...prev, ...meta }))
-              }
-              onNext={() => form.sectorId && setStep('inputs')}
-            />
-          )}
-          {step === 'inputs' && (
-            <InputsStep
-              form={form}
-              onChange={setForm}
-              onBack={() => setStep('sector')}
-              onSubmit={runSimulation}
-            />
-          )}
-          {step === 'results' && result && (
-            <ResultsView
-              result={result}
-              basket={basket}
-              onBasketChange={setBasket}
-              onBack={() => setStep('inputs')}
-              onRestart={() => {
-                setResult(null)
-                setForm(initialForm)
-                setStep('sector')
-              }}
-              onClearBasket={() => {
-                clearScenarioBasket()
-                setBasket(null)
-              }}
-              estrategiaAbsorcao={form.estrategiaAbsorcao}
-              onEstrategiaChange={(estrategiaAbsorcao) =>
-                resimulateWith({ estrategiaAbsorcao })
-              }
-            />
-          )}
-        </main>
+        <ApdataFlowPanel
+          open
+          embedded
+          onClose={() => undefined}
+          onOpenAmbientes={() => setAmbientesOpen(true)}
+        />
       </div>
 
-      <AmbientesPanel
-        open={ambientesOpen}
-        onClose={() => setAmbientesOpen(false)}
-      />
-      <MapeamentoPanel
-        open={mapeamentoOpen}
-        onClose={() => setMapeamentoOpen(false)}
-      />
-      <ApdataFlowPanel
-        open={apdataFlowOpen}
-        onClose={() => setApdataFlowOpen(false)}
-        onManualSheet={() => {
-          setApdataFlowOpen(false)
-          setStep('inputs')
-        }}
-      />
       <SqlStudioPanel
         open={sqlStudioOpen}
         onClose={() => setSqlStudioOpen(false)}
+      />
+      <AmbientesPanel
+        open={ambientesOpen}
+        onClose={() => setAmbientesOpen(false)}
       />
     </div>
   )
