@@ -13,10 +13,13 @@ import {
   type SelectRowsInput,
 } from "@projeto-6x1/mcp";
 import {
+  EPHEMERAL_CONN_FAIL_MSG,
   EPHEMERAL_TIMEOUT_MS,
   applyReadIsolation,
   createEphemeralClient,
+  isEphemeralConnectionFailure,
   scrubCreds,
+  scrubErrorText,
   type EphemeralCreds,
 } from "../lib/ephemeral-db.js";
 import {
@@ -279,15 +282,30 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         note: "Ephemeral connection destroyed after response. Credentials were not persisted.",
       });
     } catch (err) {
+      // Connection/login/network → 422 JSON (never Nginx/Cloudflare 502 HTML).
+      const secrets = [creds.password, creds.user];
+      if (isEphemeralConnectionFailure(err)) {
+        return c.json(
+          {
+            ok: false,
+            error: EPHEMERAL_CONN_FAIL_MSG,
+            engine: data.engine,
+            mode,
+            latencyMs: Date.now() - started,
+          },
+          422,
+        );
+      }
+      const raw = err instanceof Error ? err.message : String(err);
       return c.json(
         {
           ok: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: scrubErrorText(raw, secrets),
           engine: data.engine,
           mode,
           latencyMs: Date.now() - started,
         },
-        502,
+        400,
       );
     } finally {
       try {

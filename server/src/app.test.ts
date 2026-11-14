@@ -157,13 +157,14 @@ describe("API routes", () => {
         password: "ephemeral-secret-should-not-leak",
       }),
     });
-    // Unreachable DB → 502 JSON; password must not appear
-    assert.equal(res.status, 502);
+    // Unreachable DB → 422 JSON (not Nginx 502); password must not appear
+    assert.equal(res.status, 422);
     const text = await res.text();
     assert.ok(!text.includes("ephemeral-secret-should-not-leak"));
     const body = JSON.parse(text);
     assert.equal(body.ok, false);
     assert.equal(body.engine, "mssql");
+    assert.match(String(body.error), /Falha de conexão|timeout|firewall/i);
   });
 
   it("POST ephemeral rejects incomplete body", async () => {
@@ -188,10 +189,11 @@ describe("API routes", () => {
         password: "mssql-empty-db-secret",
       }),
     });
-    // Unreachable → 502 (schema accepted empty database)
-    assert.equal(res.status, 502);
+    // Unreachable → 422 (schema accepted empty database)
+    assert.equal(res.status, 422);
     const text = await res.text();
     assert.ok(!text.includes("mssql-empty-db-secret"));
+    assert.match(text, /Falha de conexão|timeout|firewall/i);
   });
 
   it("POST ephemeral requires database for oracle", async () => {
@@ -227,12 +229,13 @@ describe("API routes", () => {
         mode: "catalog",
       }),
     });
-    assert.equal(res.status, 502);
+    assert.equal(res.status, 422);
     const text = await res.text();
     assert.ok(!text.includes("catalog-secret-must-not-leak"));
     const body = JSON.parse(text);
     assert.equal(body.ok, false);
     assert.equal(body.mode, "catalog");
+    assert.match(String(body.error), /Falha de conexão|timeout|firewall/i);
   });
 
   it("lists sql profiles with factory default", async () => {

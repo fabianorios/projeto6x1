@@ -28,6 +28,99 @@ export type EphemeralCreds = {
 
 export const EPHEMERAL_TIMEOUT_MS = 15_000;
 
+/** Clear PT message for firewall/timeout/login failures (no driver internals). */
+export const EPHEMERAL_CONN_FAIL_MSG =
+  "Falha de conexão com o servidor SQL: timeout ou acesso bloqueado pelo firewall";
+
+const CONNECTION_CODES = new Set([
+  "ELOGIN",
+  "ETIMEOUT",
+  "ESOCKET",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
+
+function collectErrorParts(err: unknown): { codes: string[]; text: string } {
+  const codes: string[] = [];
+  const chunks: string[] = [];
+  let cur: unknown = err;
+  const seen = new Set<unknown>();
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur);
+    const obj = cur as {
+      code?: unknown;
+      number?: unknown;
+      name?: unknown;
+      message?: unknown;
+      originalError?: unknown;
+      cause?: unknown;
+      precedingErrors?: unknown;
+    };
+    if (typeof obj.code === "string" && obj.code) codes.push(obj.code);
+    if (typeof obj.name === "string" && obj.name) chunks.push(obj.name);
+    if (typeof obj.message === "string" && obj.message) chunks.push(obj.message);
+    if (typeof obj.number === "number") chunks.push(String(obj.number));
+    if (Array.isArray(obj.precedingErrors)) {
+      for (const p of obj.precedingErrors) {
+        const nested = collectErrorParts(p);
+        codes.push(...nested.codes);
+        chunks.push(nested.text);
+      }
+    }
+    cur = obj.originalError ?? obj.cause ?? null;
+  }
+  if (!chunks.length && err != null) chunks.push(String(err));
+  return { codes, text: chunks.join(" ") };
+}
+
+/**
+ * True for network / login / socket failures from tedious/mssql (and similar).
+ * These must map to HTTP 4xx — never Nginx/Cloudflare 502 HTML.
+ */
+export function isEphemeralConnectionFailure(err: unknown): boolean {
+  const { codes, text } = collectErrorParts(err);
+  if (codes.some((c) => CONNECTION_CODES.has(c.toUpperCase()))) return true;
+  const lower = text.toLowerCase();
+  if (
+    /login failed|connectionerror|connect\s*etimeout|failed to connect|could not connect|socket hang up|getaddrinfo|econnrefused|timeout|firewall|server is unreachable|no connection could be made/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  // App-level ephemeral timeouts
+  if (/ephemeral (catalog |query )?timeout/i.test(text)) return true;
+  return false;
+}
+
+/** Remove passwords / usernames from error strings before JSON or logs (LGPD). */
+export function scrubErrorText(
+  text: string,
+  secrets: readonly string[] = [],
+): string {
+  let out = text;
+  for (const secret of secrets) {
+    if (!secret) continue;
+    if (out.includes(secret)) {
+      out = out.split(secret).join("[redacted]");
+    }
+  }
+  out = out.replace(
+    /(password|pwd|passwd|user|userid|uid)\s*[=:]\s*\S+/gi,
+    "$1=[redacted]",
+  );
+  out = out.replace(
+    /Login failed for user '[^']*'/gi,
+    "Login failed for user '[redacted]'",
+  );
+  return out;
+}
+
 export function createEphemeralClient(
   creds: EphemeralCreds,
   timeoutMs: number = EPHEMERAL_TIMEOUT_MS,
@@ -53,12 +146,13 @@ export function createEphemeralClient(
     {
       server: creds.host,
       port: creds.port,
-      // Empty → omit so the driver uses the login's default database.
+      // Empty → undefined so the driver uses the login's default database.
       database: creds.database?.trim() || undefined,
       user: creds.user,
       password: creds.password,
-      encrypt: creds.encrypt !== false,
-      trustServerCertificate: Boolean(creds.trustServerCertificate),
+      // Always TLS + trust self-signed SaaS certs for direct ephemeral connects.
+      encrypt: true,
+      trustServerCertificate: true,
     },
     timeoutMs,
   );
