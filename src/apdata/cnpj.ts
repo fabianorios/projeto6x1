@@ -89,7 +89,13 @@ export type Establishment = {
   empresaId: number
   /** Empresas.EMP_CdiRamoAtividadeEmpresa (0 when unset). */
   ramoId: number
+  /** Folha ids under this local (join bridge; not shown as UI count). */
   folhaIds: number[]
+  /**
+   * Headcount of Contratados (vínculos) on this establishment's folhas,
+   * with CON_CdiSituacao NOT IN (0, 2, 3, 99).
+   */
+  colaboradores: number
   prefixo: string
   sufixo: string
   razaoSocial: string
@@ -117,14 +123,22 @@ export type FolhaRow = {
   localId: number
 }
 
+/** Minimal contratado row for per-establishment vínculo counts. */
+export type ContratadoFolhaRow = {
+  folhaId: number
+  situacao: number | null
+}
+
 /**
  * Build establishments present in Folhas (reachable via join).
  * One row per Local that has ≥1 Folha and a resolvable Empresa prefix.
+ * `colaboradores` = COUNT of contratados matching situação rule per establishment.
  */
 export function buildEstablishments(
   empresas: EmpresaRow[],
   locais: LocalRow[],
   folhas: FolhaRow[],
+  contratados: ContratadoFolhaRow[] = [],
 ): Establishment[] {
   const empById = new Map<number, EmpresaRow>()
   for (const e of empresas) {
@@ -140,6 +154,16 @@ export function buildEstablishments(
     folhasByLocal.set(f.localId, list)
   }
 
+  const headcountByFolha = new Map<number, number>()
+  for (const c of contratados) {
+    if (!Number.isFinite(c.folhaId)) continue
+    if (!isIncludedSituacao(c.situacao)) continue
+    headcountByFolha.set(
+      c.folhaId,
+      (headcountByFolha.get(c.folhaId) ?? 0) + 1,
+    )
+  }
+
   const out: Establishment[] = []
   for (const loc of locais) {
     if (!Number.isFinite(loc.localId) || !Number.isFinite(loc.empresaId)) continue
@@ -153,12 +177,17 @@ export function buildEstablishments(
     const nomeFilial = (loc.nomeFilial ?? '').trim()
     const ramoId =
       emp.ramoId != null && Number.isFinite(emp.ramoId) ? Number(emp.ramoId) : 0
+    const colaboradores = folhaIds.reduce(
+      (n, fid) => n + (headcountByFolha.get(fid) ?? 0),
+      0,
+    )
     out.push({
       key,
       localId: loc.localId,
       empresaId: loc.empresaId,
       ramoId,
       folhaIds: [...folhaIds],
+      colaboradores,
       prefixo: emp.prefixo,
       sufixo: loc.sufixo,
       razaoSocial,
