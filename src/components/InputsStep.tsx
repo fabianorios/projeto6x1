@@ -27,8 +27,9 @@ interface InputsStepProps {
 
 const SCENARIO_ORDER: ScenarioId[] = [
   'status_quo',
-  'pec_draft_conservative',
-  'pec_draft_aggressive',
+  'fase1_2026_42h',
+  'fase2_2027_40h',
+  'stress_test_4x3',
 ]
 
 export function InputsStep({

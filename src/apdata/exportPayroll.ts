@@ -6,7 +6,11 @@
  */
 
 import { selectRows } from '../api/query'
-import type { PayrollParseIssue, PayrollRow } from '../engine'
+import {
+  emptyPayrollExtras,
+  type PayrollParseIssue,
+  type PayrollRow,
+} from '../engine'
 import {
   buildAtWorkDaysMap,
   buildCycleMap,
@@ -620,6 +624,10 @@ export async function exportPayrollFromApdata(
         quantidade: agg.quantidade,
         escalaAtual: agg.escala,
         sourceLine: line,
+        ...emptyPayrollExtras(),
+        codCc: agg.centroCusto,
+        descCargo: agg.cargo,
+        massaSalarialBase: salario * agg.quantidade,
       })
       line += 1
     }

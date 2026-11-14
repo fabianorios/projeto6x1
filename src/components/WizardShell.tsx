@@ -43,7 +43,7 @@ const initialForm: WizardFormState = {
   units: 1,
   shiftsPerDay: 2,
   operatingHours: DEFAULT_OPERATING_HOURS,
-  scenarioId: 'pec_draft_conservative',
+  scenarioId: 'fase1_2026_42h',
   payrollRows: [],
   payrollIssues: [],
 }

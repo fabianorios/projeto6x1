@@ -1,10 +1,12 @@
 import type {
+  LegacyScenarioId,
   RuleVersion,
   ScaleCycle,
   ScenarioId,
   SectorCalibration,
   SectorId,
 } from './types'
+import { SALARY_DIVISOR_BASELINE } from '../types'
 
 /** Build a scale cycle and derive workRatio. */
 export function makeScale(workDays: number, restDays: number): ScaleCycle {
@@ -21,6 +23,30 @@ export function makeScale(workDays: number, restDays: number): ScaleCycle {
 }
 
 /**
+ * Map legacy basket / UI IDs onto the v2 scenario set.
+ * `pec_draft_conservative` → fase1; `pec_draft_aggressive` → stress 4×3.
+ */
+export function normalizeScenarioId(
+  id: string,
+): ScenarioId {
+  if (id === 'pec_draft_conservative') return 'fase1_2026_42h'
+  if (id === 'pec_draft_aggressive') return 'stress_test_4x3'
+  if (
+    id === 'status_quo' ||
+    id === 'fase1_2026_42h' ||
+    id === 'fase2_2027_40h' ||
+    id === 'stress_test_4x3'
+  ) {
+    return id
+  }
+  return 'fase1_2026_42h'
+}
+
+export function isLegacyScenarioId(id: string): id is LegacyScenarioId {
+  return id === 'pec_draft_conservative' || id === 'pec_draft_aggressive'
+}
+
+/**
  * Versioned scenario parameters (data, not hard-coded in formulas).
  *
  * These are TRANSPARENT HEURISTICS for consulting simulations — not the
@@ -29,54 +55,78 @@ export function makeScale(workDays: number, restDays: number): ScaleCycle {
  */
 export const RULE_VERSIONS: Record<ScenarioId, RuleVersion> = {
   status_quo: {
-    id: 'rules-status-quo-v1',
+    id: 'rules-status-quo-v2',
     label: 'Status quo (escala atual)',
     summary:
-      'Mantém a escala informada pelo cliente. Útil como baseline: delta de ' +
-      'folha e headcount adicional tendem a zero (salvo arredondamentos).',
+      'Mantém a escala informada pelo cliente e o divisor salarial 220. ' +
+      'Útil como baseline: delta de folha e headcount adicional tendem a zero ' +
+      '(salvo arredondamentos e provisões configuradas).',
     effectiveAsOf: '2026-01-01',
     params: {
       scenarioId: 'status_quo',
-      // Placeholder target; simulate() replaces with parsed current scale.
       targetScale: makeScale(6, 1),
       preserveCurrentScale: true,
       coverageBuffer: 0,
       projectedChargeFactor: 1,
       hoursPerShift: 8,
+      weeklyHoursCap: 44,
+      salaryDivisor: SALARY_DIVISOR_BASELINE,
     },
   },
-  pec_draft_conservative: {
-    id: 'rules-pec-draft-conservative-v1',
-    label: 'PEC rascunho — conservador',
+  fase1_2026_42h: {
+    id: 'rules-fase1-2026-42h-v1',
+    label: 'Fase 1 — 2026 (42h)',
     summary:
-      'Hipótese conservadora: migração estimada para escala 5×2, buffer de ' +
-      'cobertura de 5% e encargos projetados leves (+8% sobre a massa ' +
-      'salarial projetada). Não é o texto oficial da PEC.',
-    effectiveAsOf: '2026-draft',
+      'Hipótese de fase 1: teto semanal ~42h, divisor salarial 210, migração ' +
+      'estimada para 5×2, buffer de cobertura de 5%. Encargos vêm do regime ' +
+      'tributário por CNPJ (não deste fator). Não é o texto oficial da PEC.',
+    effectiveAsOf: '2026-fase1',
     params: {
-      scenarioId: 'pec_draft_conservative',
+      scenarioId: 'fase1_2026_42h',
       targetScale: makeScale(5, 2),
       preserveCurrentScale: false,
       coverageBuffer: 0.05,
       projectedChargeFactor: 1.08,
       hoursPerShift: 8,
+      weeklyHoursCap: 42,
+      salaryDivisor: 210,
     },
   },
-  pec_draft_aggressive: {
-    id: 'rules-pec-draft-aggressive-v1',
-    label: 'PEC rascunho — agressivo',
+  fase2_2027_40h: {
+    id: 'rules-fase2-2027-40h-v1',
+    label: 'Fase 2 — 2027 (40h)',
     summary:
-      'Hipótese mais agressiva: migração estimada para escala 4×3 (mais ' +
-      'folgas), buffer de cobertura de 12% e encargos projetados maiores ' +
-      '(+15%). Destinado a stress-test de custo — não é previsão jurídica.',
-    effectiveAsOf: '2026-draft',
+      'Hipótese de fase 2: teto semanal ~40h, divisor salarial 200, 5×2 com ' +
+      'buffer de 8%. Destinado a projetar o segundo degrau de jornada — ' +
+      'estimativa de consultoria, não previsão jurídica.',
+    effectiveAsOf: '2027-fase2',
     params: {
-      scenarioId: 'pec_draft_aggressive',
+      scenarioId: 'fase2_2027_40h',
+      targetScale: makeScale(5, 2),
+      preserveCurrentScale: false,
+      coverageBuffer: 0.08,
+      projectedChargeFactor: 1.1,
+      hoursPerShift: 8,
+      weeklyHoursCap: 40,
+      salaryDivisor: 200,
+    },
+  },
+  stress_test_4x3: {
+    id: 'rules-stress-test-4x3-v1',
+    label: 'Stress-test 4×3',
+    summary:
+      'Stress-test agressivo: escala-alvo 4×3, divisor 180, buffer de 12%. ' +
+      'Serve para teto de custo — não é previsão de desfecho normativo.',
+    effectiveAsOf: '2026-stress',
+    params: {
+      scenarioId: 'stress_test_4x3',
       targetScale: makeScale(4, 3),
       preserveCurrentScale: false,
       coverageBuffer: 0.12,
       projectedChargeFactor: 1.15,
       hoursPerShift: 8,
+      weeklyHoursCap: 36,
+      salaryDivisor: 180,
     },
   },
 }
@@ -113,12 +163,14 @@ export const SECTOR_CALIBRATION: Record<SectorId, SectorCalibration> = {
 export const DEFAULT_DISCLAIMER =
   'Este relatório é uma simulação estimativa para apoio a consultoria. ' +
   'Não constitui parecer jurídico, cálculo oficial de folha nem previsão de ' +
-  'todas as mudanças operacionais. Os cenários “PEC rascunho” são hipóteses ' +
-  'transparentes (escala-alvo, buffer, encargos), não o texto legal aprovado. ' +
-  'Valide hipóteses e regras com assessoria jurídica e RH.'
+  'todas as mudanças operacionais. Os cenários de fase / stress-test são ' +
+  'hipóteses transparentes (escala-alvo, divisor, buffer, encargos por CNPJ), ' +
+  'não o texto legal aprovado. Valide hipóteses e regras com assessoria ' +
+  'jurídica e RH.'
 
-export function getRuleVersion(scenarioId: ScenarioId): RuleVersion {
-  return RULE_VERSIONS[scenarioId]
+export function getRuleVersion(scenarioId: ScenarioId | string): RuleVersion {
+  const id = normalizeScenarioId(String(scenarioId))
+  return RULE_VERSIONS[id]
 }
 
 export function getSectorCalibration(sector: SectorId): SectorCalibration {

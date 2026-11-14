@@ -48,8 +48,9 @@ interface ApdataFlowPanelProps {
 
 const SCENARIO_ORDER: ScenarioId[] = [
   'status_quo',
-  'pec_draft_conservative',
-  'pec_draft_aggressive',
+  'fase1_2026_42h',
+  'fase2_2027_40h',
+  'stress_test_4x3',
 ]
 
 export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
@@ -66,7 +67,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
 
   const [sector, setSector] = useState<SectorId>('varejo')
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
-    'pec_draft_conservative',
+    'fase1_2026_42h',
   )
   const [defaultSalario, setDefaultSalario] = useState('2200')
   const [vrValorDia, setVrValorDia] = useState('30.56')

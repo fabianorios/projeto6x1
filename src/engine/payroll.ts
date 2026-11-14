@@ -1,6 +1,8 @@
 /** Payroll CSV import + aggregation helpers (layout: docs/import-layout.md). */
 
 import type { ScaleCycle } from './types'
+import type { RegimeFuncionamento } from '../types'
+import { isRegimeFuncionamento } from '../types'
 
 /** Canonical CSV headers — do not rename. */
 export const PAYROLL_CSV_HEADERS = [
@@ -16,11 +18,28 @@ export const PAYROLL_CSV_HEADERS = [
   'nome',
   'quantidade',
   'escala_atual',
+  // Native Apdata extractor columns (SPEC-V2 / apdata-extractor.sql)
+  'cod_empresa',
+  'cod_filial',
+  'cnpj_completo',
+  'cod_cc',
+  'cod_cargo',
+  'desc_cargo',
+  'cod_vinculo',
+  'cod_horario_atual',
+  'carga_semanal_atual',
+  'qtd_colaboradores',
+  'massa_salarial_base',
+  'vr_dia_medio',
+  'vt_dia_medio',
+  'dias_trabalho_mes_atual',
+  'regime_funcionamento',
+  'he_media_mensal_horas',
 ] as const
 
 export type PayrollCsvHeader = (typeof PAYROLL_CSV_HEADERS)[number]
 
-const REQUIRED_HEADERS = [
+const REQUIRED_HEADERS_LEGACY = [
   'cargo',
   'salario',
   'carga_horaria_mensal',
@@ -47,6 +66,20 @@ export interface PayrollRow {
   escalaAtual: string | null
   /** 1-based CSV line number (header = 1). */
   sourceLine: number
+  // --- SPEC-V2 / extractor fields (safe defaults when absent) ---
+  codEmpresa: string | null
+  codFilial: string | null
+  cnpjCompleto: string | null
+  codCc: string | null
+  codCargo: string | null
+  descCargo: string | null
+  codVinculo: string | null
+  codHorarioAtual: string | null
+  /** Existing overtime hours/month (cascade input). */
+  heMediaMensalHoras: number
+  regimeFuncionamento: RegimeFuncionamento | null
+  /** Raw massa salarial base from extractor (before ÷ qty). */
+  massaSalarialBase: number | null
 }
 
 export interface PayrollParseIssue {
@@ -57,6 +90,36 @@ export interface PayrollParseIssue {
 export interface PayrollParseResult {
   rows: PayrollRow[]
   issues: PayrollParseIssue[]
+}
+
+/** Empty / missing SPEC-V2 fields for legacy CSV rows. */
+export function emptyPayrollExtras(): Pick<
+  PayrollRow,
+  | 'codEmpresa'
+  | 'codFilial'
+  | 'cnpjCompleto'
+  | 'codCc'
+  | 'codCargo'
+  | 'descCargo'
+  | 'codVinculo'
+  | 'codHorarioAtual'
+  | 'heMediaMensalHoras'
+  | 'regimeFuncionamento'
+  | 'massaSalarialBase'
+> {
+  return {
+    codEmpresa: null,
+    codFilial: null,
+    cnpjCompleto: null,
+    codCc: null,
+    codCargo: null,
+    descCargo: null,
+    codVinculo: null,
+    codHorarioAtual: null,
+    heMediaMensalHoras: 0,
+    regimeFuncionamento: null,
+    massaSalarialBase: null,
+  }
 }
 
 /**
@@ -78,8 +141,7 @@ export function parseNumberBr(raw: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function splitCsvLine(line: string): string[] {
-  // Semicolon layout; support quoted fields with `;` inside.
+function splitCsvLine(line: string, separator: string): string[] {
   const out: string[] = []
   let cur = ''
   let inQuotes = false
@@ -94,7 +156,7 @@ function splitCsvLine(line: string): string[] {
       }
       continue
     }
-    if (ch === ';' && !inQuotes) {
+    if (ch === separator && !inQuotes) {
       out.push(cur)
       cur = ''
       continue
@@ -103,6 +165,24 @@ function splitCsvLine(line: string): string[] {
   }
   out.push(cur)
   return out.map((c) => c.trim())
+}
+
+function detectSeparator(headerLine: string): ';' | ',' {
+  // Prefer `;` when present (canonical); else comma.
+  let semis = 0
+  let commas = 0
+  let inQuotes = false
+  for (let i = 0; i < headerLine.length; i++) {
+    const ch = headerLine[i]
+    if (ch === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+    if (inQuotes) continue
+    if (ch === ';') semis++
+    if (ch === ',') commas++
+  }
+  return semis >= commas ? ';' : ','
 }
 
 function normalizeHeader(h: string): string {
@@ -114,7 +194,8 @@ function normalizeHeader(h: string): string {
 }
 
 /**
- * Parse payroll CSV/paste text (`;` separator, UTF-8 header row).
+ * Parse payroll CSV/paste text (`;` or `,` separator, UTF-8 header row).
+ * Accepts legacy layout and native extractor columns (safe defaults).
  * Invalid lines are collected; ≥1 valid row is enough to proceed.
  */
 export function parsePayrollCsv(text: string): PayrollParseResult {
@@ -140,7 +221,8 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
     }
   }
 
-  const headerCells = splitCsvLine(lines[0]).map(normalizeHeader)
+  const separator = detectSeparator(lines[0])
+  const headerCells = splitCsvLine(lines[0], separator).map(normalizeHeader)
   const index: Partial<Record<PayrollCsvHeader, number>> = {}
   for (let i = 0; i < headerCells.length; i++) {
     const h = headerCells[i] as PayrollCsvHeader
@@ -149,16 +231,45 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
     }
   }
 
-  for (const req of REQUIRED_HEADERS) {
-    if (index[req] === undefined) {
+  const hasNative =
+    index.desc_cargo !== undefined ||
+    index.cod_cc !== undefined ||
+    index.massa_salarial_base !== undefined ||
+    index.qtd_colaboradores !== undefined
+
+  if (!hasNative) {
+    for (const req of REQUIRED_HEADERS_LEGACY) {
+      if (index[req] === undefined) {
+        issues.push({
+          line: 1,
+          message: `Cabeçalho obrigatório ausente: ${req}`,
+        })
+      }
+    }
+    if (issues.some((i) => i.line === 1 && i.message.includes('ausente'))) {
+      return { rows: [], issues }
+    }
+  } else {
+    // Native extractor: need cargo-like + cc-like + qty/mass or salario
+    const hasCargo =
+      index.cargo !== undefined || index.desc_cargo !== undefined
+    const hasCc =
+      index.centro_custo !== undefined || index.cod_cc !== undefined
+    if (!hasCargo) {
       issues.push({
         line: 1,
-        message: `Cabeçalho obrigatório ausente: ${req}`,
+        message: 'Cabeçalho obrigatório ausente: cargo ou desc_cargo',
       })
     }
-  }
-  if (issues.some((i) => i.line === 1 && i.message.includes('ausente'))) {
-    return { rows: [], issues }
+    if (!hasCc) {
+      issues.push({
+        line: 1,
+        message: 'Cabeçalho obrigatório ausente: centro_custo ou cod_cc',
+      })
+    }
+    if (issues.some((i) => i.line === 1 && i.message.includes('ausente'))) {
+      return { rows: [], issues }
+    }
   }
 
   const cell = (cols: string[], key: PayrollCsvHeader): string => {
@@ -171,41 +282,15 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
 
   for (let li = 1; li < lines.length; li++) {
     const lineNo = li + 1
-    const cols = splitCsvLine(lines[li])
-    const cargo = cell(cols, 'cargo')
-    const centroCusto = cell(cols, 'centro_custo')
-    const salario = parseNumberBr(cell(cols, 'salario'))
-    const cargaM = parseNumberBr(cell(cols, 'carga_horaria_mensal'))
-    const cargaS = parseNumberBr(cell(cols, 'carga_horaria_semanal'))
+    const cols = splitCsvLine(lines[li], separator)
 
-    if (!cargo) {
-      issues.push({ line: lineNo, message: 'cargo vazio' })
-      continue
-    }
-    if (!centroCusto) {
-      issues.push({ line: lineNo, message: 'centro_custo vazio' })
-      continue
-    }
-    if (salario === null || salario < 0) {
-      issues.push({ line: lineNo, message: 'salario inválido' })
-      continue
-    }
-    if (cargaM === null || cargaM < 0) {
-      issues.push({
-        line: lineNo,
-        message: 'carga_horaria_mensal inválida',
-      })
-      continue
-    }
-    if (cargaS === null || cargaS < 0) {
-      issues.push({
-        line: lineNo,
-        message: 'carga_horaria_semanal inválida',
-      })
-      continue
-    }
+    const cargo =
+      cell(cols, 'cargo') || cell(cols, 'desc_cargo') || 'NAO_INFORMADO'
+    const centroCusto =
+      cell(cols, 'centro_custo') || cell(cols, 'cod_cc') || 'SEM_CC'
 
-    const qtyRaw = cell(cols, 'quantidade')
+    const qtyRaw =
+      cell(cols, 'quantidade') || cell(cols, 'qtd_colaboradores')
     let quantidade = 1
     if (qtyRaw.trim() !== '') {
       const q = parseNumberBr(qtyRaw)
@@ -216,10 +301,75 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       quantidade = q
     }
 
-    const vrValorDia = parseOptionalNonNeg(cell(cols, 'vr_valor_dia'))
-    const vrDiasMesAtual = parseOptionalNonNeg(cell(cols, 'vr_dias_mes_atual'))
-    const vtValorDia = parseOptionalNonNeg(cell(cols, 'vt_valor_dia'))
-    const vtDiasMesAtual = parseOptionalNonNeg(cell(cols, 'vt_dias_mes_atual'))
+    const massaRaw = cell(cols, 'massa_salarial_base')
+    const salarioRaw = cell(cols, 'salario')
+    let salario: number | null = null
+    let massaSalarialBase: number | null = null
+    if (massaRaw.trim() !== '') {
+      const massa = parseNumberBr(massaRaw)
+      if (massa === null || massa < 0) {
+        issues.push({ line: lineNo, message: 'massa_salarial_base inválida' })
+        continue
+      }
+      massaSalarialBase = massa
+      salario = quantidade > 0 ? massa / quantidade : massa
+    } else if (salarioRaw.trim() !== '') {
+      salario = parseNumberBr(salarioRaw)
+    } else {
+      salario = 0
+    }
+    if (salario === null || salario < 0) {
+      issues.push({ line: lineNo, message: 'salario inválido' })
+      continue
+    }
+
+    const cargaSRaw =
+      cell(cols, 'carga_horaria_semanal') || cell(cols, 'carga_semanal_atual')
+    let cargaS = parseNumberBr(cargaSRaw)
+    if (cargaSRaw.trim() === '') cargaS = 44
+    if (cargaS === null || cargaS < 0) {
+      issues.push({
+        line: lineNo,
+        message: 'carga_horaria_semanal inválida',
+      })
+      continue
+    }
+
+    const cargaMRaw = cell(cols, 'carga_horaria_mensal')
+    let cargaM = parseNumberBr(cargaMRaw)
+    if (cargaMRaw.trim() === '') {
+      // Derive from weekly ≈ weekly × 5 (legacy 220 for 44h)
+      cargaM = Math.round(cargaS * 5 * 100) / 100
+    }
+    if (cargaM === null || cargaM < 0) {
+      issues.push({
+        line: lineNo,
+        message: 'carga_horaria_mensal inválida',
+      })
+      continue
+    }
+
+    const vrValorDia = parseOptionalNonNeg(
+      cell(cols, 'vr_valor_dia') || cell(cols, 'vr_dia_medio'),
+    )
+    const vtValorDia = parseOptionalNonNeg(
+      cell(cols, 'vt_valor_dia') || cell(cols, 'vt_dia_medio'),
+    )
+    const diasTrabalho = parseOptionalNonNeg(
+      cell(cols, 'dias_trabalho_mes_atual'),
+    )
+    const vrDiasMesAtual = parseOptionalNonNeg(
+      cell(cols, 'vr_dias_mes_atual') ||
+        (diasTrabalho !== 'invalid' && diasTrabalho !== null
+          ? String(diasTrabalho)
+          : ''),
+    )
+    const vtDiasMesAtual = parseOptionalNonNeg(
+      cell(cols, 'vt_dias_mes_atual') ||
+        (diasTrabalho !== 'invalid' && diasTrabalho !== null
+          ? String(diasTrabalho)
+          : ''),
+    )
 
     if (vrValorDia === 'invalid') {
       issues.push({ line: lineNo, message: 'vr_valor_dia inválido' })
@@ -237,9 +387,38 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       issues.push({ line: lineNo, message: 'vt_dias_mes_atual inválido' })
       continue
     }
+    if (diasTrabalho === 'invalid') {
+      issues.push({ line: lineNo, message: 'dias_trabalho_mes_atual inválido' })
+      continue
+    }
+
+    const heRaw = cell(cols, 'he_media_mensal_horas')
+    let heMediaMensalHoras = 0
+    if (heRaw.trim() !== '') {
+      const he = parseNumberBr(heRaw)
+      if (he === null || he < 0) {
+        issues.push({ line: lineNo, message: 'he_media_mensal_horas inválido' })
+        continue
+      }
+      heMediaMensalHoras = he
+    }
+
+    const regimeRaw = cell(cols, 'regime_funcionamento').trim().toUpperCase()
+    let regimeFuncionamento: RegimeFuncionamento | null = null
+    if (regimeRaw) {
+      if (!isRegimeFuncionamento(regimeRaw)) {
+        issues.push({
+          line: lineNo,
+          message: 'regime_funcionamento inválido',
+        })
+        continue
+      }
+      regimeFuncionamento = regimeRaw
+    }
 
     const nomeRaw = cell(cols, 'nome')
     const escalaRaw = cell(cols, 'escala_atual')
+    const descCargo = cell(cols, 'desc_cargo') || null
 
     rows.push({
       cargo,
@@ -247,14 +426,25 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       cargaHorariaMensal: cargaM,
       cargaHorariaSemanal: cargaS,
       centroCusto,
-      vrValorDia,
-      vrDiasMesAtual,
-      vtValorDia,
-      vtDiasMesAtual,
+      vrValorDia: vrValorDia as number | null,
+      vrDiasMesAtual: vrDiasMesAtual as number | null,
+      vtValorDia: vtValorDia as number | null,
+      vtDiasMesAtual: vtDiasMesAtual as number | null,
       nome: nomeRaw || null,
       quantidade,
       escalaAtual: escalaRaw || null,
       sourceLine: lineNo,
+      codEmpresa: cell(cols, 'cod_empresa') || null,
+      codFilial: cell(cols, 'cod_filial') || null,
+      cnpjCompleto: cell(cols, 'cnpj_completo') || null,
+      codCc: cell(cols, 'cod_cc') || null,
+      codCargo: cell(cols, 'cod_cargo') || null,
+      descCargo,
+      codVinculo: cell(cols, 'cod_vinculo') || null,
+      codHorarioAtual: cell(cols, 'cod_horario_atual') || null,
+      heMediaMensalHoras,
+      regimeFuncionamento,
+      massaSalarialBase,
     })
   }
 
@@ -294,6 +484,10 @@ export interface CostCenterTotals {
   avgVtValorDia: number
   peopleWithVr: number
   peopleWithVt: number
+  /** Weighted HE hours/month. */
+  heMediaMensalHoras: number
+  regimeFuncionamento: RegimeFuncionamento | null
+  cnpjCompleto: string | null
 }
 
 /**
@@ -323,7 +517,11 @@ export function aggregateByCostCenter(
 ): CostCenterTotals[] {
   const map = new Map<
     string,
-    CostCenterTotals & { vrDiaSum: number; vtDiaSum: number }
+    CostCenterTotals & {
+      vrDiaSum: number
+      vtDiaSum: number
+      heSum: number
+    }
   >()
 
   for (const row of rows) {
@@ -351,8 +549,12 @@ export function aggregateByCostCenter(
         avgVtValorDia: 0,
         peopleWithVr: 0,
         peopleWithVt: 0,
+        heMediaMensalHoras: 0,
+        regimeFuncionamento: row.regimeFuncionamento,
+        cnpjCompleto: row.cnpjCompleto,
         vrDiaSum: 0,
         vtDiaSum: 0,
+        heSum: 0,
       }
       map.set(key, agg)
     }
@@ -362,6 +564,13 @@ export function aggregateByCostCenter(
     agg.headcount += qty
     agg.baselinePayroll += row.salario * qty
     agg.salaryMass += row.salario * qty
+    agg.heSum += (row.heMediaMensalHoras || 0) * qty
+    if (!agg.regimeFuncionamento && row.regimeFuncionamento) {
+      agg.regimeFuncionamento = row.regimeFuncionamento
+    }
+    if (!agg.cnpjCompleto && row.cnpjCompleto) {
+      agg.cnpjCompleto = row.cnpjCompleto
+    }
 
     if (row.vrValorDia !== null) {
       const { currentDays, proposedDays } = resolveBenefitDays(
@@ -393,10 +602,11 @@ export function aggregateByCostCenter(
   }
 
   return [...map.values()]
-    .map(({ vrDiaSum, vtDiaSum, ...rest }) => ({
+    .map(({ vrDiaSum, vtDiaSum, heSum, ...rest }) => ({
       ...rest,
       avgVrValorDia: rest.peopleWithVr > 0 ? vrDiaSum / rest.peopleWithVr : 0,
       avgVtValorDia: rest.peopleWithVt > 0 ? vtDiaSum / rest.peopleWithVt : 0,
+      heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
     }))
     .sort((a, b) => a.centroCusto.localeCompare(b.centroCusto, 'pt-BR'))
 }

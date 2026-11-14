@@ -40,7 +40,7 @@ export interface ExcludedScheduleDef {
 /** Hard cap: never suggest a default daily shift longer than this. */
 export const MAX_SUGGESTED_DAILY_HOURS = 10
 
-export const SCHEDULE_POLICY_VERSION = 'schedule-policy-v2'
+export const SCHEDULE_POLICY_VERSION = 'schedule-policy-v3'
 
 export const ALLOWED_SCHEDULES: readonly AllowedScheduleDef[] = [
   {
@@ -238,7 +238,7 @@ export function checkScheduleExclusion(
 
 /**
  * Allowlist codes eligible for a scenario.
- * Never includes 6×1 / 6x1_ajustada. `4x3` only under aggressive draft.
+ * Never includes 6×1 / 6x1_ajustada. `4x3` only under stress_test_4x3.
  */
 export function listSuggestableCodes(
   scenarioId: ScenarioId,
@@ -247,9 +247,11 @@ export function listSuggestableCodes(
   switch (scenarioId) {
     case 'status_quo':
       return ['5x2', 'turnos_8h']
-    case 'pec_draft_conservative':
+    case 'fase1_2026_42h':
       return ['5x2', 'turnos_8h']
-    case 'pec_draft_aggressive':
+    case 'fase2_2027_40h':
+      return ['5x2', 'turnos_8h']
+    case 'stress_test_4x3':
       return ['4x3', '5x2', 'turnos_8h']
     default:
       return ['5x2', 'turnos_8h']
