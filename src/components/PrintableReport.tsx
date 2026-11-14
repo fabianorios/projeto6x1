@@ -1,4 +1,5 @@
 import {
+  REGIME_FUNCIONAMENTO_LABELS,
   formatShiftRange,
   summarizeOperatingHours,
   type ResultLineItem,
@@ -67,6 +68,10 @@ export function PrintableReport({
     scheduleSuggestions,
     excludedScheduleNotice,
     scheduleSuggestionDisclaimer,
+    absorption,
+    heCascade,
+    distribuicaoTurmas,
+    charges,
   } = result
 
   const bestLabel =
@@ -166,6 +171,29 @@ export function PrintableReport({
           proposed={compareSides.proposed}
           footerNote={`Cenário ativo · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)} · HC adicional +${coverage.additionalHeadcount} · gap ${coverage.uncoveredShiftHoursPerWeek.toFixed(0)} h/sem se não contratar. ${ruleVersion.summary}`}
         />
+      </section>
+
+      <section className="mt-6 text-xs">
+        <h2 className="text-base font-semibold tracking-wide uppercase">
+          Absorção · HE · turmas
+        </h2>
+        <p className="mt-2">
+          Estratégia: <strong>{absorption.estrategia}</strong>
+          {' · '}
+          HE cap{' '}
+          <strong>
+            {absorption.heCapReached ? 'atingido' : 'ok'}
+          </strong>{' '}
+          ({absorption.heHoursUsed.toFixed(0)}/{absorption.heCapHours.toFixed(0)}{' '}
+          h) · encargos {charges.taxRegime} · divisor{' '}
+          {heCascade.baselineDivisor}→{heCascade.scenarioDivisor}
+        </p>
+        <p className="mt-1 text-neutral-700">
+          {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
+          {distribuicaoTurmas.crewCount} turma(s) · cobertura diária{' '}
+          {distribuicaoTurmas.dailyCoverageNeed} · HC{' '}
+          {distribuicaoTurmas.totalHeadcount}. {distribuicaoTurmas.note}
+        </p>
       </section>
 
       {excludedScheduleNotice ? (

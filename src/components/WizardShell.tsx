@@ -1,16 +1,22 @@
 import { useState } from 'react'
 import {
+  DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
+  DEFAULT_REGIME_FUNCIONAMENTO,
+  DEFAULT_TAX_REGIME,
   clearScenarioBasket,
   loadScenarioBasket,
   simulate,
   upsertSimulationInBasket,
+  type EstrategiaAbsorcao,
   type OperatingHours,
   type PayrollParseIssue,
   type PayrollRow,
+  type RegimeFuncionamento,
   type ScenarioBasket,
   type ScenarioId,
   type SimulationResult,
+  type TaxRegime,
 } from '../engine'
 import { getTemplate, PILOT_TEMPLATES } from '../templates'
 import { AmbientesPanel } from './AmbientesPanel'
@@ -33,6 +39,11 @@ export interface WizardFormState {
   scenarioId: ScenarioId
   payrollRows: PayrollRow[]
   payrollIssues: PayrollParseIssue[]
+  defaultTaxRegime: TaxRegime
+  taxRegimeByCnpj: Record<string, TaxRegime>
+  estrategiaAbsorcao: EstrategiaAbsorcao
+  defaultRegimeFuncionamento: RegimeFuncionamento
+  regimeFuncionamentoByCc: Record<string, RegimeFuncionamento>
 }
 
 const initialForm: WizardFormState = {
@@ -46,6 +57,11 @@ const initialForm: WizardFormState = {
   scenarioId: 'fase1_2026_42h',
   payrollRows: [],
   payrollIssues: [],
+  defaultTaxRegime: DEFAULT_TAX_REGIME,
+  taxRegimeByCnpj: {},
+  estrategiaAbsorcao: DEFAULT_ESTRATEGIA_ABSORCAO,
+  defaultRegimeFuncionamento: DEFAULT_REGIME_FUNCIONAMENTO,
+  regimeFuncionamentoByCc: {},
 }
 
 const STEPS: WizardStep[] = ['sector', 'inputs', 'results']
@@ -79,28 +95,51 @@ export function WizardShell() {
     }))
   }
 
-  function runSimulation() {
-    if (!form.sectorId) return
-    const next = simulate({
-      sector: form.sectorId as
+  function buildSimInput(state: WizardFormState) {
+    if (!state.sectorId) return null
+    return {
+      sector: state.sectorId as
         | 'varejo'
         | 'hospital'
         | 'construcao'
         | 'locacao',
-      headcount: form.headcount,
-      currentScale: form.currentScale,
-      averageMonthlySalary: form.averageMonthlySalary,
-      units: form.units,
-      shiftsPerDay: form.shiftsPerDay,
-      operatingHours: form.operatingHours,
-      scenarioId: form.scenarioId,
+      headcount: state.headcount,
+      currentScale: state.currentScale,
+      averageMonthlySalary: state.averageMonthlySalary,
+      units: state.units,
+      shiftsPerDay: state.shiftsPerDay,
+      operatingHours: state.operatingHours,
+      scenarioId: state.scenarioId,
       payrollRows:
-        form.payrollRows.length > 0 ? form.payrollRows : undefined,
-    })
+        state.payrollRows.length > 0 ? state.payrollRows : undefined,
+      defaultTaxRegime: state.defaultTaxRegime,
+      taxRegimeByCnpj:
+        Object.keys(state.taxRegimeByCnpj).length > 0
+          ? state.taxRegimeByCnpj
+          : undefined,
+      estrategiaAbsorcao: state.estrategiaAbsorcao,
+      defaultRegimeFuncionamento: state.defaultRegimeFuncionamento,
+      regimeFuncionamentoByCc:
+        Object.keys(state.regimeFuncionamentoByCc).length > 0
+          ? state.regimeFuncionamentoByCc
+          : undefined,
+    }
+  }
+
+  function runSimulation(nextForm: WizardFormState = form) {
+    const input = buildSimInput(nextForm)
+    if (!input) return
+    const next = simulate(input)
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
     setStep('results')
+  }
+
+  function resimulateWith(patch: Partial<WizardFormState>) {
+    const nextForm = { ...form, ...patch }
+    setForm(nextForm)
+    runSimulation(nextForm)
   }
 
   const stepIndex = STEPS.indexOf(step)
@@ -226,6 +265,10 @@ export function WizardShell() {
                 clearScenarioBasket()
                 setBasket(null)
               }}
+              estrategiaAbsorcao={form.estrategiaAbsorcao}
+              onEstrategiaChange={(estrategiaAbsorcao) =>
+                resimulateWith({ estrategiaAbsorcao })
+              }
             />
           )}
         </main>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
   clearCalibrationHistory,
   downloadCalibrationJson,
@@ -10,6 +11,7 @@ import {
   setBestScenario,
   type CalibrationFeedbackEntry,
   type EditedShiftFields,
+  type EstrategiaAbsorcao,
   type FeedbackAction,
   type ResultLineItem,
   type ScenarioBasket,
@@ -18,6 +20,7 @@ import {
   type SimulationResult,
 } from '../engine'
 import { getTemplate } from '../templates'
+import { downloadAhrHandoff } from '../utils/exportHandoff'
 import { CalibrationHistory } from './CalibrationHistory'
 import { PrintableReport } from './PrintableReport'
 import { ScenarioBasketCompare } from './ScenarioBasketCompare'
@@ -34,7 +37,15 @@ interface ResultsViewProps {
   onBack: () => void
   onRestart: () => void
   onClearBasket: () => void
+  estrategiaAbsorcao: EstrategiaAbsorcao
+  onEstrategiaChange: (next: EstrategiaAbsorcao) => void
 }
+
+const ABSORCAO_OPTIONS: { id: EstrategiaAbsorcao; label: string }[] = [
+  { id: 'CONTRATACAO_INTEGRAL', label: 'Contratação integral' },
+  { id: 'HORA_EXTRA_MAXIMA', label: 'Hora extra máxima (cap 44h/mês)' },
+  { id: 'HIBRIDO_INTERMITENTE', label: 'Híbrido / intermitente' },
+]
 
 function suggestionKey(s: ScheduleSuggestion): string {
   return `${s.centroCusto}::${s.code}`
@@ -91,6 +102,8 @@ export function ResultsView({
   onBack,
   onRestart,
   onClearBasket,
+  estrategiaAbsorcao,
+  onEstrategiaChange,
 }: ResultsViewProps) {
   const template = getTemplate(result.input.sector)
   const {
@@ -107,6 +120,10 @@ export function ResultsView({
     scheduleSuggestions,
     excludedScheduleNotice,
     scheduleSuggestionDisclaimer,
+    absorption,
+    heCascade,
+    distribuicaoTurmas,
+    charges,
   } = result
 
   const [history, setHistory] = useState<CalibrationFeedbackEntry[]>(() =>
@@ -208,6 +225,13 @@ export function ResultsView({
             </button>
             <button
               type="button"
+              onClick={() => downloadAhrHandoff(result)}
+              className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
+            >
+              Exportar para Gerador AHR (JSON)
+            </button>
+            <button
+              type="button"
               onClick={onRestart}
               className="min-h-11 px-4 py-2.5 text-sm text-[var(--color-muted)] underline"
             >
@@ -273,6 +297,84 @@ export function ResultsView({
             Baseline {brl(cost.baselineMonthlyPayroll)} → projetado{' '}
             {brl(cost.projectedMonthlyPayroll)}
           </p>
+        </div>
+
+        {/* Absorption + HE cap */}
+        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                Estratégia de absorção
+              </span>
+              <select
+                value={estrategiaAbsorcao}
+                onChange={(e) =>
+                  onEstrategiaChange(e.target.value as EstrategiaAbsorcao)
+                }
+                className="border border-[var(--color-line)] bg-white px-3 py-2"
+              >
+                {ABSORCAO_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={
+                  absorption.heCapReached
+                    ? 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-1 text-[11px] font-semibold tracking-wide text-amber-950 uppercase'
+                    : 'inline-block border border-[var(--color-line)] bg-white px-2 py-1 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase'
+                }
+                title="Teto legal simulado de HE (44h/mês × HC atual)"
+              >
+                HE cap{' '}
+                {absorption.heCapReached ? 'atingido' : 'ok'} ·{' '}
+                {absorption.heHoursUsed.toFixed(0)}/
+                {absorption.heCapHours.toFixed(0)} h
+              </span>
+              <span className="text-xs text-[var(--color-muted)]">
+                Encargos {charges.taxRegime} · divisor{' '}
+                {heCascade.baselineDivisor}→{heCascade.scenarioDivisor}
+              </span>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-[var(--color-muted)]">
+            Hires {absorption.hiresHeadcount} · intermitente{' '}
+            {absorption.intermittentHeadcount} · custo HE absorção{' '}
+            {brl(absorption.heAbsorptionCost)} · Δ HE por divisor{' '}
+            {brl(heCascade.heCostDelta)}
+          </p>
+        </div>
+
+        {/* distribuicao_turmas */}
+        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+          <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+            Distribuição de turmas
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
+            {distribuicaoTurmas.crewCount} turma(s) · cobertura diária{' '}
+            {distribuicaoTurmas.dailyCoverageNeed} · HC total{' '}
+            {distribuicaoTurmas.totalHeadcount}
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            {distribuicaoTurmas.note}
+          </p>
+          {distribuicaoTurmas.crews.length > 1 ? (
+            <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+              {distribuicaoTurmas.crews.map((c) => (
+                <li
+                  key={c.turmaIndex}
+                  className="border border-[var(--color-line)] bg-white px-2 py-1"
+                >
+                  <strong>{c.label}</strong> · {c.headcount} pess. · trabalha{' '}
+                  {c.workDays.join(', ')} · folga {c.restDays.join(', ')}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         {/* (2) Atual × Proposto: basket when ≥2 proposals; panel when 0–1 */}
