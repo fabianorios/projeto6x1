@@ -79,6 +79,8 @@ describe("allowlist", () => {
       "Cargos",
       "QuantidadesHorasMes",
       "Folhas",
+      "Locais",
+      "Empresas",
       "HorariosTiposDiasAT",
       "ConATransportes",
       "MeiosTransportesItens",

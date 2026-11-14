@@ -10,9 +10,11 @@ import {
   getActiveEnvironment,
   type EnvironmentPublic,
 } from '../api/environments'
+import { EXCLUDED_SITUACOES, type Establishment } from '../apdata/cnpj'
 import { REVIEW_SELECTS, LIVE_SELECT_STEPS } from '../apdata/selects'
 import {
   exportPayrollFromApdata,
+  loadEstablishmentsFromApdata,
   type ExportProgressStep,
   type ExportResult,
 } from '../apdata/exportPayroll'
@@ -63,14 +65,21 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [vrValorDia, setVrValorDia] = useState('30.56')
   const [vtValorDia, setVtValorDia] = useState('')
   const [operatingHours] = useState<OperatingHours>(DEFAULT_OPERATING_HOURS)
+  const [establishments, setEstablishments] = useState<Establishment[]>([])
+  const [selectedCnpjKeys, setSelectedCnpjKeys] = useState<string[]>([])
+  const [cnpjLoading, setCnpjLoading] = useState(false)
+  const [cnpjError, setCnpjError] = useState<string | null>(null)
 
   const refreshEnv = useCallback(async () => {
     setError(null)
+    setCnpjError(null)
     try {
       const healthy = await checkApiHealth()
       setApiOk(healthy)
       if (!healthy) {
         setActiveEnv(null)
+        setEstablishments([])
+        setSelectedCnpjKeys([])
         setError(
           'API indisponível. Suba o server/ (porta 8787) ou o proxy /api na VPS.',
         )
@@ -79,9 +88,26 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       const { environment } = await getActiveEnvironment()
       setActiveEnv(environment)
       if (!environment) {
+        setEstablishments([])
+        setSelectedCnpjKeys([])
         setError(
           'Nenhum ambiente ativo. Abra Ambientes, cadastre a base e selecione ativo.',
         )
+        return
+      }
+      setCnpjLoading(true)
+      try {
+        const list = await loadEstablishmentsFromApdata({
+          environmentId: environment.id,
+        })
+        setEstablishments(list)
+        setSelectedCnpjKeys(list.map((e) => e.key))
+      } catch (err) {
+        setEstablishments([])
+        setSelectedCnpjKeys([])
+        setCnpjError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setCnpjLoading(false)
       }
     } catch (err) {
       setApiOk(false)
@@ -102,10 +128,20 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
 
   if (!open) return null
 
+  function toggleCnpj(key: string) {
+    setSelectedCnpjKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    )
+  }
+
   async function handleRun() {
     setError(null)
     setExported(null)
     setResult(null)
+    if (establishments.length > 0 && selectedCnpjKeys.length === 0) {
+      setError('Selecione ao menos um CNPJ (estabelecimento).')
+      return
+    }
     setPhase('running')
     const sal = Number(defaultSalario.replace(',', '.'))
     const vr = vrValorDia.trim()
@@ -121,6 +157,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           defaultSalario: Number.isFinite(sal) && sal > 0 ? sal : undefined,
           vrValorDia: vr !== null && Number.isFinite(vr) ? vr : null,
           vtValorDia: vt !== null && Number.isFinite(vt) ? vt : null,
+          selectedCnpjKeys:
+            selectedCnpjKeys.length > 0 ? selectedCnpjKeys : undefined,
         },
         setSteps,
       )
@@ -296,6 +334,90 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
               <>
                 <section className="mt-5 space-y-2">
                   <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                    Estabelecimentos (CNPJ)
+                  </h3>
+                  <p className="text-sm text-[var(--color-muted)]">
+                    Join Folhas → Locais → Empresas. Prefixo{' '}
+                    <code>EMP_NusCNPJPrefixo</code> + sufixo{' '}
+                    <code>LOC_NusCNPJSufixo</code>. Situação exclui{' '}
+                    <code>{EXCLUDED_SITUACOES.join(', ')}</code> (ativos +
+                    afastados entram no headcount). Sem nomes de cliente.
+                  </p>
+                  {cnpjLoading && (
+                    <p className="text-sm text-[var(--color-muted)]">
+                      Carregando CNPJs do ambiente…
+                    </p>
+                  )}
+                  {cnpjError && (
+                    <p className="text-sm text-red-700" role="alert">
+                      CNPJ: {cnpjError}
+                    </p>
+                  )}
+                  {!cnpjLoading &&
+                    !cnpjError &&
+                    establishments.length === 0 &&
+                    activeEnv && (
+                      <p className="text-sm text-[var(--color-muted)]">
+                        Nenhum estabelecimento com Folha/Local/Empresa no
+                        ambiente.
+                      </p>
+                    )}
+                  {establishments.length > 0 && (
+                    <>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <button
+                          type="button"
+                          className="border border-[var(--color-line)] px-2 py-1"
+                          onClick={() =>
+                            setSelectedCnpjKeys(
+                              establishments.map((e) => e.key),
+                            )
+                          }
+                        >
+                          Todos ({establishments.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="border border-[var(--color-line)] px-2 py-1"
+                          onClick={() => setSelectedCnpjKeys([])}
+                        >
+                          Nenhum
+                        </button>
+                        <span className="self-center text-[var(--color-muted)]">
+                          {selectedCnpjKeys.length} selecionado(s)
+                        </span>
+                      </div>
+                      <ul className="max-h-48 overflow-y-auto border border-[var(--color-line)] bg-white/60">
+                        {establishments.map((est) => {
+                          const checked = selectedCnpjKeys.includes(est.key)
+                          return (
+                            <li
+                              key={est.key}
+                              className="border-b border-[var(--color-line)]/60 last:border-b-0"
+                            >
+                              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-accent-soft)]/30">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleCnpj(est.key)}
+                                />
+                                <span className="font-mono text-[var(--color-ink)]">
+                                  {est.label}
+                                </span>
+                                <span className="text-xs text-[var(--color-muted)]">
+                                  {est.folhaIds.length} folha(s)
+                                </span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </section>
+
+                <section className="mt-5 space-y-2">
+                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
                     SELECTs (revisão de lógica)
                   </h3>
                   <p className="text-sm text-[var(--color-muted)]">
@@ -307,7 +429,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                     <details
                       key={q.id}
                       className="border border-[var(--color-line)] bg-white/60"
-                      open={q.id === 'C'}
+                      open={q.id === 'C' || q.id === 'F'}
                     >
                       <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)]/40">
                         {q.title}
@@ -429,7 +551,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                 </h3>
                 <ProgressList steps={steps.length ? steps : exported.steps} />
                 <p className="text-sm text-[var(--color-muted)]">
-                  {exported.stats.contratadosAtivos} ativos ·{' '}
+                  {exported.stats.contratadosAtivos} vínculos ·{' '}
+                  {exported.stats.estabelecimentosFiltrados} CNPJ ·{' '}
                   {exported.stats.linhasAgregadas} linhas agregadas
                   {exported.stats.comVtCadastro > 0 && (
                     <> · {exported.stats.comVtCadastro} c/ VT cadastro</>

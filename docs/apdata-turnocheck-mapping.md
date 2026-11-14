@@ -18,7 +18,9 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `QuantidadesHorasMes` | 16 | Catálogo horas-mês / horas-semana (sem código 210) |
 | `Cargos` | 2 225 | `CAR_D1sCargo` → `cargo` |
 | `CentrosCustos` | 2 000 | `CCU_D1sCentroCusto` / `CCU_CosEstrutura` → `centro_custo` |
-| `Folhas` | 437 | Recorte organizacional (filtro opcional) |
+| `Folhas` | 437 | Ponte `CON_CdiFolha` → local (filtro CNPJ) |
+| `Locais` | — | `LOC_CdiEmpresa` + `LOC_NusCNPJSufixo` (estabelecimento) |
+| `Empresas` | — | `EMP_NusCNPJPrefixo` (raiz CNPJ) |
 | `HorariosTiposDiasAT` | 1 072 | Dias de calendário elegíveis a auxílio-transporte |
 | `TiposEscalas` | 8 | Domínio eSocial / tipo de jornada |
 | `TiposDiasCalendarios` | 12 | Dom/Seg…/Feriado/`88`=2ª–6ª |
@@ -28,15 +30,18 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `TiposBeneficios` | — | 52=VA, 53=VR, 20=refeitório; **sem tipo VT dedicado** |
 | `RegimesJornadaTrabalho` | 5 | Cap. II CLT / art. 62 / teletrabalho |
 
-### Recorte “ativos” (contagens, sem PII)
+### Recorte headcount / export (contagens, sem PII)
 
 | Critério | N | Notas |
 |----------|---|--------|
-| `CON_CdiSituacao = 1` (Em Atividade Normal) | 778 | Preferido para export |
+| `CON_CdiSituacao = 1` (Em Atividade Normal) | 778 | Incluído |
+| `CON_CdiSituacao NOT IN (0, 2, 3, 99)` | — | **Regra de export** — ativos + afastados etc. |
 | `CON_DtdRescisao IS NULL` | 3 289 | Inclui afastados / outros |
-| `CON_CdiSituacao = 2` (demitido meses ant.) | 63 798 | Excluir do CSV |
+| `CON_CdiSituacao = 2` (demitido meses ant.) | 63 798 | Excluído (junto com 0, 3, 99) |
 
-Entre sit=1: 63 horários distintos, 121 CC, 232 cargos; HMV dominante **220h/44h** (613). Classificação de ciclo (sit=1): **5×2-like** 577 · **other** 194 · **6×1** 7.
+**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI Apdata→Simular permite multi-select de estabelecimentos (sem nomes de empresa/local).
+
+Entre sit=1 (referência TEMP): 63 horários distintos, 121 CC, 232 cargos; HMV dominante **220h/44h** (613). Classificação de ciclo (sit=1): **5×2-like** 577 · **other** 194 · **6×1** 7.
 
 ### Gaps desta TEMP (não bloqueiam o mapa)
 
@@ -192,14 +197,20 @@ SELECT
   -- Runtime Apdata→Simular preenche via allowlist single-table + join cliente.
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
+JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
   ON hmv.HMV_CdiQuantidadeHoraMes = con.CON_CdiQuantidadeHoraMes
 LEFT JOIN dbo.Horarios hor ON hor.HOR_CdiHorario = con.CON_CdiHorario
 LEFT JOIN class cl ON cl.HRI_CdiHorario = con.CON_CdiHorario
-WHERE con.CON_CdiSituacao = 1
+WHERE con.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+  -- AND estabelecimento (EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo) IN (…)
 GROUP BY
+  emp.EMP_NusCNPJPrefixo,
+  loc.LOC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,
@@ -210,7 +221,7 @@ GROUP BY
   cl.work_days;
 ```
 
-Exportar o result set como CSV `;` com cabeçalho do layout. Preencher `vt_*` via SELECT E / adapter (`src/apdata/`).
+Exportar o result set como CSV `;` com cabeçalho do layout. Preencher `vt_*` via SELECT E / adapter (`src/apdata/`). Runtime: allowlist single-table + join cliente (`exportPayroll.ts`) com filtro CNPJ.
 
 ### D) VR valor/dia (planos tipo 53)
 
@@ -272,7 +283,8 @@ ORDER BY HOR_CdiHorario;
 
 ```text
 MSSQL apdata_6x1 (SELECT)
-  → recorte sit=1 (+ regime CLT opcional)
+  → recorte CON_CdiSituacao NOT IN (0,2,3,99)
+  → filtro CNPJ: Folhas→Locais→Empresas (prefixo+sufixo)
   → JOIN cargo × CC × HMV × horário
   → classificar ciclo (B) → escala_atual
   → agregar COUNT → quantidade

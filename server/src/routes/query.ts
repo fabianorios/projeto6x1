@@ -21,6 +21,9 @@ const selectSchema = z.object({
   where: z
     .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
     .optional(),
+  whereNotIn: z
+    .record(z.string(), z.array(z.union([z.string(), z.number()])).min(1).max(32))
+    .optional(),
   orderBy: z.string().optional(),
   orderDir: z.enum(["ASC", "DESC"]).optional(),
   limit: z.number().int().positive().optional(),
@@ -88,6 +91,7 @@ export function createQueryRoutes(deps: QueryRoutesDeps) {
         table: args.table,
         columns: args.columns,
         where: args.where,
+        whereNotIn: args.whereNotIn,
         orderBy: args.orderBy,
         orderDir: args.orderDir,
         limit: args.limit,

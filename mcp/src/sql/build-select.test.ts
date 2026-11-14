@@ -87,4 +87,63 @@ describe("buildSelectRows", () => {
     if (!built.ok) return;
     assert.doesNotMatch(built.sql, /\b(INSERT|UPDATE|DELETE|DROP|ALTER)\b/i);
   });
+
+  it("binds whereNotIn params", () => {
+    const built = buildSelectRows(
+      {
+        table: "Contratados",
+        columns: ["CON_CdiContratado", "CON_CdiSituacao"],
+        whereNotIn: { CON_CdiSituacao: [0, 2, 3, 99] },
+        limit: 100,
+      },
+      5000,
+    );
+    assert.equal(built.ok, true);
+    if (!built.ok) return;
+    assert.match(
+      built.sql,
+      /CON_CdiSituacao NOT IN \(@w0, @w1, @w2, @w3\)/i,
+    );
+    assert.equal(built.params.w0, 0);
+    assert.equal(built.params.w3, 99);
+    assert.equal(assertSelectOnly(built.sql).ok, true);
+  });
+
+  it("rejects empty or oversized whereNotIn", () => {
+    assert.equal(
+      buildSelectRows(
+        { table: "Contratados", whereNotIn: { CON_CdiSituacao: [] }, limit: 1 },
+        100,
+      ).ok,
+      false,
+    );
+    assert.equal(
+      buildSelectRows(
+        {
+          table: "Contratados",
+          whereNotIn: { CON_CdiSituacao: Array.from({ length: 33 }, (_, i) => i) },
+          limit: 1,
+        },
+        100,
+      ).ok,
+      false,
+    );
+  });
+
+  it("allowlists Locais and Empresas", () => {
+    assert.equal(
+      buildSelectRows(
+        { table: "Locais", columns: ["LOC_CdiLocal"], limit: 5 },
+        100,
+      ).ok,
+      true,
+    );
+    assert.equal(
+      buildSelectRows(
+        { table: "Empresas", columns: ["EMP_CdiEmpresa"], limit: 5 },
+        100,
+      ).ok,
+      true,
+    );
+  });
 });

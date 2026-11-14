@@ -96,6 +96,8 @@ describe("API routes", () => {
     const body = await res.json();
     assert.ok(body.tables.includes("Horarios"));
     assert.ok(body.tables.includes("Contratados"));
+    assert.ok(body.tables.includes("Locais"));
+    assert.ok(body.tables.includes("Empresas"));
   });
 
   it("test connection returns JSON 200 even when DB is unreachable", async () => {
