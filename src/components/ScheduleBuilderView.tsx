@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   COVERAGE_WEEKDAYS,
   COVERAGE_WEEKDAY_LABELS,
+  MONTH_LABELS_PT,
   REGIME_FUNCIONAMENTO_LABELS,
+  baselineCrewsForCalendar,
+  buildMonthCalendarMatrix,
   coberturaPropostaFromCrews,
   compareCoverageDay,
+  defaultReferencePeriod,
   deriveCoberturaAtualPorDia,
   distributeCrews,
   formatHourClock,
@@ -15,10 +19,12 @@ import {
   type CoberturaPorDia,
   type CostCenterResult,
   type CoverageWeekday,
+  type MonthCalendarMatrix,
   type OperatingHours,
   type SimulationResult,
   type TurmaCrew,
 } from '../engine'
+import { downloadEscalasTurmasExcel } from '../utils/exportExcel'
 
 export interface EditableTurmaRow {
   turmaIndex: number
@@ -36,6 +42,8 @@ interface ScheduleBuilderViewProps {
   /** Optional: print-friendly static summary (no inputs). */
   variant?: 'interactive' | 'print'
 }
+
+type QuadroMode = 'atual' | 'proposto'
 
 function defaultShiftHours(operatingHours: OperatingHours): {
   startHour: number
@@ -138,42 +146,345 @@ function toneClass(tone: ReturnType<typeof compareCoverageDay>): string {
   return 'bg-neutral-100 text-neutral-700'
 }
 
-function CoverageMiniMatrix({
-  cobertura,
-  caption,
+function markCellClass(mark: 'T' | 'F', print?: boolean): string {
+  if (mark === 'T') {
+    return print
+      ? 'bg-emerald-50 text-emerald-900'
+      : 'bg-emerald-50/90 text-emerald-900'
+  }
+  return print
+    ? 'bg-amber-50 text-neutral-600'
+    : 'bg-neutral-100 text-neutral-500'
+}
+
+function PeriodSelector({
+  year,
+  month,
+  onChange,
+  print,
 }: {
-  cobertura: CoberturaPorDia
-  caption: string
+  year: number
+  month: number
+  onChange?: (next: { year: number; month: number }) => void
+  print?: boolean
+}) {
+  const years = useMemo(() => {
+    const base = [2025, 2026, 2027, 2028, 2029, 2030]
+    if (!base.includes(year)) return [year, ...base].sort((a, b) => a - b)
+    return base
+  }, [year])
+
+  if (print) {
+    return (
+      <p className="text-[11px] text-neutral-700">
+        Período de Referência:{' '}
+        <strong>
+          {MONTH_LABELS_PT[month - 1]} / {year}
+        </strong>
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <div>
+        <label
+          htmlFor="periodo-mes"
+          className="block text-[11px] font-semibold tracking-wide text-[var(--color-ink)] uppercase"
+        >
+          Período de Referência
+        </label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          <select
+            id="periodo-mes"
+            value={month}
+            onChange={(e) =>
+              onChange?.({ year, month: Number(e.target.value) })
+            }
+            className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+          >
+            {MONTH_LABELS_PT.map((label, i) => (
+              <option key={label} value={i + 1}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            id="periodo-ano"
+            aria-label="Ano de referência"
+            value={year}
+            onChange={(e) =>
+              onChange?.({ year: Number(e.target.value), month })
+            }
+            className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={2000}
+            max={2100}
+            aria-label="Ano personalizado"
+            value={year}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n) && n >= 2000 && n <= 2100) {
+                onChange?.({ year: Math.round(n), month })
+              }
+            }}
+            className="min-h-11 w-24 border border-[var(--color-line)] bg-white px-2 py-2 text-sm tabular-nums"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function QuadroToggle({
+  mode,
+  onChange,
+  print,
+}: {
+  mode: QuadroMode
+  onChange?: (m: QuadroMode) => void
+  print?: boolean
+}) {
+  if (print) {
+    return (
+      <p className="text-[10px] font-semibold tracking-wide uppercase">
+        {mode === 'atual'
+          ? 'Quadro Atual (Baseline)'
+          : 'Quadro Proposto (Nova Escala)'}
+      </p>
+    )
+  }
+  return (
+    <div
+      className="inline-flex border border-[var(--color-line)] bg-[var(--color-paper)] p-0.5"
+      role="group"
+      aria-label="Quadro Atual ou Proposto"
+    >
+      <button
+        type="button"
+        onClick={() => onChange?.('atual')}
+        className={`min-h-11 px-3 py-2 text-xs font-medium ${
+          mode === 'atual'
+            ? 'bg-[var(--color-accent)] text-white'
+            : 'bg-transparent text-[var(--color-ink)]'
+        }`}
+      >
+        Quadro Atual (Baseline)
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange?.('proposto')}
+        className={`min-h-11 px-3 py-2 text-xs font-medium ${
+          mode === 'proposto'
+            ? 'bg-[var(--color-accent)] text-white'
+            : 'bg-transparent text-[var(--color-ink)]'
+        }`}
+      >
+        Quadro Proposto (Nova Escala)
+      </button>
+    </div>
+  )
+}
+
+function MonthlyCalendarGrid({
+  matrix,
+  mode,
+  print,
+  editable,
+  onHeadcountChange,
+}: {
+  matrix: MonthCalendarMatrix
+  mode: QuadroMode
+  print?: boolean
+  editable?: boolean
+  onHeadcountChange?: (turmaIndex: number, headcount: number) => void
 }) {
   return (
     <div className="mt-2 overflow-x-auto">
-      <p className="mb-1 text-[11px] text-[var(--color-muted)]">{caption}</p>
-      <table className="w-full min-w-[18rem] border-collapse text-center text-xs">
+      <table className="w-max min-w-full border-collapse text-center text-[11px]">
         <thead>
           <tr>
-            {COVERAGE_WEEKDAYS.map((d) => (
+            <th
+              className={`sticky left-0 z-10 px-2 py-1.5 text-left font-semibold ${
+                print
+                  ? 'border border-neutral-300 bg-white'
+                  : 'border border-[var(--color-line)] bg-[var(--color-paper)]'
+              }`}
+            >
+              Turma
+            </th>
+            <th
+              className={`px-2 py-1.5 font-semibold ${
+                print
+                  ? 'border border-neutral-300'
+                  : 'border border-[var(--color-line)]'
+              }`}
+            >
+              HC
+            </th>
+            {matrix.days.map((d) => (
               <th
-                key={d}
-                className="border border-[var(--color-line)] px-1.5 py-1 font-semibold"
+                key={d.day}
+                className={`min-w-[2.1rem] px-1 py-1 font-semibold ${
+                  print
+                    ? 'border border-neutral-300'
+                    : 'border border-[var(--color-line)]'
+                } ${
+                  d.isWeekend
+                    ? print
+                      ? 'bg-amber-50 text-amber-950'
+                      : 'bg-amber-50/80 text-amber-950'
+                    : ''
+                }`}
+                title={`${d.weekdayLabel} ${String(d.day).padStart(2, '0')}`}
               >
-                {COVERAGE_WEEKDAY_LABELS[d]}
+                <span className="block text-[9px] font-normal opacity-80">
+                  {d.weekdayLabel}
+                </span>
+                {String(d.day).padStart(2, '0')}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          <tr>
-            {COVERAGE_WEEKDAYS.map((d) => (
-              <td
-                key={d}
-                className="border border-[var(--color-line)] px-1.5 py-1 tabular-nums"
+          {matrix.rows.map((row) => (
+            <tr key={`${mode}-${row.turmaIndex}`}>
+              <th
+                scope="row"
+                className={`sticky left-0 z-10 px-2 py-1 text-left font-medium whitespace-nowrap ${
+                  print
+                    ? 'border border-neutral-300 bg-white'
+                    : 'border border-[var(--color-line)] bg-white'
+                }`}
               >
-                {cobertura[d]}
+                T{row.turmaIndex}
+                <span
+                  className={`ml-1 font-normal ${
+                    print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
+                  }`}
+                >
+                  ({row.escala})
+                </span>
+              </th>
+              <td
+                className={`px-1 py-1 tabular-nums ${
+                  print
+                    ? 'border border-neutral-300'
+                    : 'border border-[var(--color-line)]'
+                }`}
+              >
+                {editable && onHeadcountChange ? (
+                  <>
+                    <label className="sr-only">
+                      Headcount T{row.turmaIndex}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={row.headcount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value)
+                        onHeadcountChange(
+                          row.turmaIndex,
+                          Number.isFinite(n)
+                            ? Math.max(0, Math.round(n))
+                            : row.headcount,
+                        )
+                      }}
+                      className="min-h-9 w-14 border border-[var(--color-line)] bg-white px-1 py-1 text-center tabular-nums"
+                    />
+                  </>
+                ) : (
+                  row.headcount
+                )}
+              </td>
+              {row.marks.map((mark, i) => (
+                <td
+                  key={`${row.turmaIndex}-${matrix.days[i].day}`}
+                  className={`px-1 py-1 font-semibold ${
+                    print
+                      ? 'border border-neutral-300'
+                      : 'border border-[var(--color-line)]'
+                  } ${markCellClass(mark, print)} ${
+                    matrix.days[i].isWeekend ? 'opacity-95' : ''
+                  }`}
+                >
+                  {mark}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr>
+            <th
+              scope="row"
+              className={`sticky left-0 z-10 px-2 py-1.5 text-left text-[10px] font-semibold tracking-wide uppercase ${
+                print
+                  ? 'border border-neutral-300 bg-neutral-50'
+                  : 'border border-[var(--color-line)] bg-[var(--color-paper)]'
+              }`}
+            >
+              Total no dia
+            </th>
+            <td
+              className={
+                print
+                  ? 'border border-neutral-300 bg-neutral-50'
+                  : 'border border-[var(--color-line)] bg-[var(--color-paper)]'
+              }
+            />
+            {matrix.daily.map((d) => (
+              <td
+                key={`tot-${d.day}`}
+                className={`px-1 py-1.5 tabular-nums font-semibold ${
+                  print
+                    ? 'border border-neutral-300'
+                    : 'border border-[var(--color-line)]'
+                } ${
+                  d.uncovered
+                    ? 'bg-red-100 text-red-950'
+                    : print
+                      ? 'bg-neutral-50'
+                      : 'bg-[var(--color-paper)]'
+                }`}
+                title={
+                  d.uncovered
+                    ? `Descoberto: ${d.working} < mínimo ${d.need}`
+                    : `${d.working} / mínimo ${d.need}`
+                }
+              >
+                {d.working}
+                <span
+                  className={`mt-0.5 block text-[9px] font-normal ${
+                    d.uncovered
+                      ? 'text-red-800'
+                      : print
+                        ? 'text-neutral-500'
+                        : 'text-[var(--color-muted)]'
+                  }`}
+                >
+                  /{d.need}
+                </span>
               </td>
             ))}
           </tr>
         </tbody>
       </table>
+      {!print ? (
+        <p className="mt-2 text-[11px] text-[var(--color-muted)]">
+          T = trabalha · F = folga. Sáb/Dom destacados. Vermelho no rodapé =
+          dia abaixo do mínimo do regime ({'SEG_SEX'} / {'SEG_SAB'} /{' '}
+          {'CONTINUO_7D'}). Sem nomes de pessoas (LGPD).
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -196,7 +507,7 @@ function CoverageCompareFooter({
             : 'mb-1 text-[11px] font-semibold tracking-wide text-[var(--color-ink)] uppercase'
         }
       >
-        Cobertura Diária (Atual → Proposto)
+        Cobertura semanal (Atual → Proposto)
       </p>
       <table className="w-full min-w-[22rem] border-collapse text-center text-xs">
         <thead>
@@ -250,16 +561,25 @@ function CostCenterScheduleCard({
   cc,
   operatingHours,
   variant,
+  year,
+  month,
+  mode,
+  onModeChange,
 }: {
   cc: CostCenterResult
   operatingHours: OperatingHours
   variant: 'interactive' | 'print'
+  year: number
+  month: number
+  mode: QuadroMode
+  onModeChange?: (m: QuadroMode) => void
 }) {
   const print = variant === 'print'
   const dist =
     cc.distribuicaoTurmas ??
     distributeCrews(cc.regimeFuncionamento ?? 'SEG_SEX', cc.requiredHeadcount)
   const atual = resolveAtualCoverage(cc)
+  const regime = dist.regime
 
   const crewSeed = `${cc.centroCusto}|${dist.regime}|${dist.totalHeadcount}|${dist.crews.map((c) => `${c.turmaIndex}:${c.headcount}`).join(',')}`
   const [rows, setRows] = useState<EditableTurmaRow[]>(() =>
@@ -272,13 +592,45 @@ function CostCenterScheduleCard({
 
   const proposto = useMemo(() => coberturaPropostaFromCrews(rows), [rows])
 
+  const atualCrews = useMemo(
+    () =>
+      baselineCrewsForCalendar({
+        currentHeadcount: cc.currentHeadcount,
+        escalaAtual: cc.escalaAtual,
+        regime,
+      }),
+    [cc.currentHeadcount, cc.escalaAtual, regime],
+  )
+
+  const matrix = useMemo(() => {
+    const crews =
+      mode === 'atual'
+        ? atualCrews
+        : rows.map((r) => ({
+            turmaIndex: r.turmaIndex,
+            label: r.label,
+            escala: r.escala,
+            workDays: r.workDays,
+            restDays: r.restDays,
+            headcount: r.headcount,
+          }))
+    return buildMonthCalendarMatrix({
+      year,
+      month,
+      crews,
+      regime,
+      dailyCoverageNeed: dist.dailyCoverageNeed,
+      rotateWeekly: regime === 'CONTINUO_7D',
+    })
+  }, [mode, atualCrews, rows, year, month, regime, dist.dailyCoverageNeed])
+
   const escalaLabel = cc.escalaAtual ?? '—'
   const cargaLabel =
     cc.cargaSemanalAtual != null
       ? `${cc.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
       : '—'
   const codLabel = cc.codHorarioAtual?.trim() || '—'
-  const regimeLabel = REGIME_FUNCIONAMENTO_LABELS[dist.regime]
+  const regimeLabel = REGIME_FUNCIONAMENTO_LABELS[regime]
 
   return (
     <article
@@ -309,28 +661,18 @@ function CostCenterScheduleCard({
         </p>
       </header>
 
-      {/* Escala Atual (De) */}
       <section
         className={
           print
-            ? 'mt-3 border-t border-neutral-200 pt-2'
+            ? 'mt-2 border-t border-neutral-200 pt-2'
             : 'mt-3 border-t border-[var(--color-line)] pt-3'
         }
       >
-        <h5
-          className={
-            print
-              ? 'text-xs font-semibold uppercase tracking-wide'
-              : 'text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase'
-          }
-        >
-          Escala Atual (Baseline)
-        </h5>
         <dl
           className={
             print
-              ? 'mt-1 grid gap-1 text-[11px] sm:grid-cols-3'
-              : 'mt-2 grid gap-2 text-xs sm:grid-cols-3'
+              ? 'grid gap-1 text-[11px] sm:grid-cols-3'
+              : 'grid gap-2 text-xs sm:grid-cols-3'
           }
         >
           <div>
@@ -364,13 +706,8 @@ function CostCenterScheduleCard({
             <dd className="font-medium tabular-nums">{cargaLabel}</dd>
           </div>
         </dl>
-        <CoverageMiniMatrix
-          cobertura={atual}
-          caption="Cobertura atual (pessoas no posto / dia)"
-        />
       </section>
 
-      {/* Escala Proposta (Para) */}
       <section
         className={
           print
@@ -378,70 +715,50 @@ function CostCenterScheduleCard({
             : 'mt-4 border-t border-[var(--color-line)] pt-3'
         }
       >
-        <h5
-          className={
-            print
-              ? 'text-xs font-semibold uppercase tracking-wide'
-              : 'text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase'
-          }
-        >
-          Escala Proposta (Alvo)
-        </h5>
-        <p
-          className={
-            print
-              ? 'mt-0.5 text-[10px] text-neutral-600'
-              : 'mt-1 text-[11px] text-[var(--color-muted)]'
-          }
-        >
-          {dist.note}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <QuadroToggle
+            mode={mode}
+            onChange={onModeChange}
+            print={print}
+          />
+          <p
+            className={
+              print
+                ? 'text-[10px] text-neutral-600'
+                : 'text-[11px] text-[var(--color-muted)]'
+            }
+          >
+            {dist.note}
+          </p>
+        </div>
 
-        {print ? (
-          <table className="mt-2 w-full border-collapse text-[11px]">
-            <thead>
-              <tr className="border-b border-neutral-300 text-left">
-                <th className="py-1 pr-2 font-semibold">Turma</th>
-                <th className="py-1 pr-2 font-semibold">HC</th>
-                <th className="py-1 pr-2 font-semibold">Entrada–Saída</th>
-                <th className="py-1 font-semibold">Trabalha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.turmaIndex}
-                  className="border-b border-neutral-200"
-                >
-                  <td className="py-1 pr-2 font-medium">
-                    T{row.turmaIndex}
-                    <span className="ml-1 font-normal text-neutral-600">
-                      ({row.escala})
-                    </span>
-                  </td>
-                  <td className="py-1 pr-2 tabular-nums">{row.headcount}</td>
-                  <td className="py-1 pr-2 tabular-nums">
-                    {formatHourClock(row.startHour)}–
-                    {formatHourClock(row.endHour)}
-                  </td>
-                  <td className="py-1">
-                    {row.workDays.map((d) => d.toUpperCase()).join(', ')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[36rem] border-collapse text-xs">
+        <MonthlyCalendarGrid
+          matrix={matrix}
+          mode={mode}
+          print={print}
+          editable={!print && mode === 'proposto'}
+          onHeadcountChange={(turmaIndex, headcount) => {
+            setRows((prev) =>
+              prev.map((p) =>
+                p.turmaIndex === turmaIndex ? { ...p, headcount } : p,
+              ),
+            )
+          }}
+        />
+
+        {mode === 'proposto' && !print ? (
+          <div className="mt-3 overflow-x-auto">
+            <p className="mb-1 text-[11px] font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+              Turnos (entrada / saída)
+            </p>
+            <table className="w-full min-w-[28rem] border-collapse text-xs">
               <thead>
                 <tr className="border-b border-[var(--color-line)] text-left text-[var(--color-muted)]">
                   <th className="px-2 py-1.5 font-normal">Turma</th>
-                  <th className="px-2 py-1.5 font-normal">HC</th>
                   <th className="px-2 py-1.5 font-normal">Entrada</th>
                   <th className="px-2 py-1.5 font-normal">Saída</th>
-                  <th className="px-2 py-1.5 font-normal">Trabalha</th>
-                  <th className="px-2 py-1.5 font-normal">Folga</th>
+                  <th className="px-2 py-1.5 font-normal">Trabalha (base)</th>
+                  <th className="px-2 py-1.5 font-normal">Folga (base)</th>
                 </tr>
               </thead>
               <tbody>
@@ -452,36 +769,6 @@ function CostCenterScheduleCard({
                   >
                     <td className="px-2 py-1.5 font-medium">
                       T{row.turmaIndex}
-                      <span className="ml-1 font-normal text-[var(--color-muted)]">
-                        {row.escala}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <label className="sr-only">
-                        Headcount T{row.turmaIndex}
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={row.headcount}
-                        onChange={(e) => {
-                          const n = Number(e.target.value)
-                          setRows((prev) =>
-                            prev.map((p, j) =>
-                              j === i
-                                ? {
-                                    ...p,
-                                    headcount: Number.isFinite(n)
-                                      ? Math.max(0, Math.round(n))
-                                      : p.headcount,
-                                  }
-                                : p,
-                            ),
-                          )
-                        }}
-                        className="min-h-11 w-16 border border-[var(--color-line)] bg-white px-2 py-1.5 tabular-nums"
-                      />
                     </td>
                     <td className="px-2 py-1.5">
                       <label className="sr-only">
@@ -530,23 +817,52 @@ function CostCenterScheduleCard({
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
+
+        {print && mode === 'proposto' ? (
+          <table className="mt-2 w-full border-collapse text-[11px]">
+            <thead>
+              <tr className="border-b border-neutral-300 text-left">
+                <th className="py-1 pr-2 font-semibold">Turma</th>
+                <th className="py-1 pr-2 font-semibold">HC</th>
+                <th className="py-1 pr-2 font-semibold">Entrada–Saída</th>
+                <th className="py-1 font-semibold">Base (sem rot.)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.turmaIndex}
+                  className="border-b border-neutral-200"
+                >
+                  <td className="py-1 pr-2 font-medium">
+                    T{row.turmaIndex}
+                    <span className="ml-1 font-normal text-neutral-600">
+                      ({row.escala})
+                    </span>
+                  </td>
+                  <td className="py-1 pr-2 tabular-nums">{row.headcount}</td>
+                  <td className="py-1 pr-2 tabular-nums">
+                    {formatHourClock(row.startHour)}–
+                    {formatHourClock(row.endHour)}
+                  </td>
+                  <td className="py-1">
+                    {row.workDays.map((d) => d.toUpperCase()).join(', ')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
 
         <CoverageCompareFooter atual={atual} proposto={proposto} print={print} />
-        {!print ? (
-          <p className="mt-2 text-[11px] text-[var(--color-muted)]">
-            Verde: proposto ≥ cobertura atual do dia. Vermelho: abaixo do
-            mínimo atual. Sem nomes de pessoas (LGPD).
-          </p>
-        ) : null}
       </section>
     </article>
   )
 }
 
 /**
- * Escala Atual (De) × Escala Proposta (Para) por centro de custo.
- * Interactive in Results; static in PrintableReport.
+ * Escala Atual × Proposta: calendário mensal T/F por turma + cobertura diária.
  */
 export function ScheduleBuilderView({
   result,
@@ -554,6 +870,17 @@ export function ScheduleBuilderView({
 }: ScheduleBuilderViewProps) {
   const centers = centersFromResult(result)
   const print = variant === 'print'
+  const defaults = defaultReferencePeriod(result.input.scenarioId)
+  const [year, setYear] = useState(defaults.year)
+  const [month, setMonth] = useState(defaults.month)
+  const [mode, setMode] = useState<QuadroMode>('proposto')
+
+  useEffect(() => {
+    const next = defaultReferencePeriod(result.input.scenarioId)
+    setYear(next.year)
+    setMonth(next.month)
+  }, [result.input.scenarioId])
+
   const maxCrews = centers.reduce(
     (m, c) => Math.max(m, c.distribuicaoTurmas?.crewCount ?? 1),
     1,
@@ -562,38 +889,89 @@ export function ScheduleBuilderView({
   return (
     <section
       className={print ? 'mt-6' : ''}
-      aria-label="Escala Atual × Escala Proposta"
+      aria-label="Calendário mensal Escala Atual × Proposta"
     >
-      <h3
-        className={
-          print
-            ? 'text-base font-semibold tracking-wide uppercase'
-            : 'text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase'
-        }
-      >
-        Escala Atual → Escala Proposta
-      </h3>
-      <p
-        className={
-          print
-            ? 'mt-1 text-xs text-neutral-600'
-            : 'mt-1 text-xs text-[var(--color-muted)]'
-        }
-      >
-        Comparativo por centro de custo: baseline (cód. horário, modelo, carga)
-        × turmas sugeridas (T1…T{maxCrews}) com cobertura diária Atual →
-        Proposto.
-      </p>
-      <div className={print ? 'mt-3 space-y-3' : 'mt-3 space-y-4'}>
-        {centers.map((cc) => (
-          <CostCenterScheduleCard
-            key={cc.centroCusto}
-            cc={cc}
-            operatingHours={result.input.operatingHours}
-            variant={variant}
-          />
-        ))}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3
+            className={
+              print
+                ? 'text-base font-semibold tracking-wide uppercase'
+                : 'text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase'
+            }
+          >
+            Calendário mensal — Atual × Proposto
+          </h3>
+          <p
+            className={
+              print
+                ? 'mt-1 text-xs text-neutral-600'
+                : 'mt-1 text-xs text-[var(--color-muted)]'
+            }
+          >
+            Projeção dia a dia (T/F) por turma (T1…T{maxCrews}) no período
+            selecionado, com total operacional vs mínimo do centro de custo.
+          </p>
+        </div>
+        {!print ? (
+          <button
+            type="button"
+            onClick={() =>
+              downloadEscalasTurmasExcel(result, { year, month })
+            }
+            className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
+          >
+            Exportar Excel (Escalas e Turmas)
+          </button>
+        ) : null}
       </div>
+
+      <div className={print ? 'mt-2' : 'mt-3'}>
+        <PeriodSelector
+          year={year}
+          month={month}
+          print={print}
+          onChange={({ year: y, month: m }) => {
+            setYear(y)
+            setMonth(m)
+          }}
+        />
+      </div>
+
+      {print ? (
+        <div className="mt-3 space-y-4">
+          {(['atual', 'proposto'] as const).map((m) => (
+            <div key={m} className="space-y-3">
+              {centers.map((cc) => (
+                <CostCenterScheduleCard
+                  key={`${m}-${cc.centroCusto}`}
+                  cc={cc}
+                  operatingHours={result.input.operatingHours}
+                  variant="print"
+                  year={year}
+                  month={month}
+                  mode={m}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {centers.map((cc) => (
+            <CostCenterScheduleCard
+              key={cc.centroCusto}
+              cc={cc}
+              operatingHours={result.input.operatingHours}
+              variant="interactive"
+              year={year}
+              month={month}
+              mode={mode}
+              onModeChange={setMode}
+            />
+          ))}
+        </div>
+      )}
     </section>
   )
 }

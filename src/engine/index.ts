@@ -76,6 +76,27 @@ export type {
   CoverageWeekday,
 } from './coverage-days'
 export {
+  MONTH_LABELS_PT,
+  WEEKDAY_SHORT_PT,
+  baselineCrewsForCalendar,
+  buildMonthCalendarMatrix,
+  buildMonthDays,
+  crewWorksOnDay,
+  crewsWithTotalHeadcount,
+  daysInMonth,
+  defaultReferencePeriod,
+  minimumNeedForWeekday,
+  shiftCoverageWeekday,
+  shouldRotateWeekly,
+} from './monthly-calendar'
+export type {
+  DailyCoverageCell,
+  DayMark,
+  MonthCalendarMatrix,
+  MonthDayCell,
+  TurmaMonthRow,
+} from './monthly-calendar'
+export {
   cascadeHeOnDivisor,
   planAbsorption,
 } from './absorption'
