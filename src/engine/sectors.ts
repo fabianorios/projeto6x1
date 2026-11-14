@@ -39,7 +39,7 @@ const LEGACY_SECTOR_ALIASES: Record<string, SectorPresetId> = {
 export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   {
     id: 'varejo',
-    label: 'Varejo',
+    label: 'Varejo e Supermercados',
     // Legacy friction 1.0 — baseline (no extra absenteísmo beyond scenario buffer).
     defaultBufferPct: 0,
     defaultRegime: 'SEG_SAB',
@@ -48,7 +48,7 @@ export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   },
   {
     id: 'hospital',
-    label: 'Hospital / Saúde',
+    label: 'Saúde e Hospitais',
     defaultBufferPct: 6,
     defaultRegime: 'CONTINUO_7D',
     shortDescription:
@@ -80,7 +80,7 @@ export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   },
   {
     id: 'construcao',
-    label: 'Construção',
+    label: 'Construção Civil',
     defaultBufferPct: 4,
     defaultRegime: 'SEG_SAB',
     shortDescription:
@@ -88,7 +88,7 @@ export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   },
   {
     id: 'alimentacao_hotelaria',
-    label: 'Alimentação / Hotelaria',
+    label: 'Alimentação e Hotelaria',
     defaultBufferPct: 8,
     defaultRegime: 'CONTINUO_7D',
     shortDescription:
@@ -104,7 +104,7 @@ export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   },
   {
     id: 'tecnologia_admin',
-    label: 'Tecnologia / Admin',
+    label: 'Tecnologia/Admin',
     defaultBufferPct: 3,
     defaultRegime: 'SEG_SEX',
     shortDescription:
@@ -112,7 +112,7 @@ export const MARKET_SECTOR_PRESETS: SectorPreset[] = [
   },
   {
     id: 'locacao_facilities',
-    label: 'Locação / Facilities',
+    label: 'Locação/Facilities',
     defaultBufferPct: 3,
     defaultRegime: 'SEG_SAB',
     shortDescription:

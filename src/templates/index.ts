@@ -22,13 +22,22 @@ export {
 }
 
 const RICH_BY_ID: Record<string, SectorTemplate> = {
-  varejo: varejoTemplate,
+  varejo: {
+    ...varejoTemplate,
+    label: 'Varejo e Supermercados',
+  },
   hospital: {
     ...hospitalTemplate,
-    label: 'Hospital / Saúde',
+    label: 'Saúde e Hospitais',
   },
-  construcao: construcaoTemplate,
-  locacao_facilities: locacaoTemplate,
+  construcao: {
+    ...construcaoTemplate,
+    label: 'Construção Civil',
+  },
+  locacao_facilities: {
+    ...locacaoTemplate,
+    label: 'Locação/Facilities',
+  },
   custom: customTemplate,
 }
 

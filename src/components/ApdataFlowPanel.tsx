@@ -1,7 +1,7 @@
 /**
- * Fluxo executivo 4 passos (sem jargão de DB na visão RH):
- * 1) Origem dos Dados  2) Escopo  3) Premissas  4) Resultados
- * Reusa Ambiente Salvo / Conexão Direta (PR #21). LGPD: sem nomes de pessoas.
+ * Wizard linear unificado (5 passos):
+ * 1) Segmento  2) Origem  3) Escopo  4) Premissas + benefícios  5) Resultados
+ * Reusa Ambiente Salvo / Conexão Direta / Aptools. LGPD: sem nomes de pessoas.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -64,16 +64,32 @@ import {
 } from '../engine'
 import { PILOT_TEMPLATES } from '../templates'
 import type { SqlProfile } from '../types/sql-profile'
+import {
+  applyBenefitOverrides,
+  benefitsToPayrollScalars,
+  collectUniqueBenefits,
+  type BenefitClass,
+  type ExtractedBenefit,
+} from '../apdata/classifyBenefit'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
+import { BenefitMappingTable } from './BenefitMappingTable'
 import {
   DEFAULT_EPHEMERAL_CREDS_FORM,
   EphemeralCredsFields,
   ephemeralFormComplete,
   type EphemeralCredsFormValue,
 } from './EphemeralCredsFields'
+import { PayrollImport } from './PayrollImport'
 import { ResultsView } from './ResultsView'
+import { SectorStep } from './SectorStep'
 
-type Phase = 'origem' | 'escopo' | 'premissas' | 'running' | 'resultados'
+type Phase =
+  | 'segment'
+  | 'origem'
+  | 'escopo'
+  | 'premissas'
+  | 'running'
+  | 'resultados'
 type AmbMode = 'saved' | 'direct'
 type OriginCard = 'apdata' | 'aptools' | 'manual'
 
@@ -95,17 +111,27 @@ function formToSessionCreds(
 interface ApdataFlowPanelProps {
   open: boolean
   onClose: () => void
-  /** Planilha Manual → fecha o fluxo e abre o wizard de importação. */
+  /** Planilha Manual — no modo embutido vai a Premissas; no modal chama o callback. */
   onManualSheet?: () => void
+  /** Render as page body (unified wizard) instead of modal overlay. */
+  embedded?: boolean
+  /** Open Ambientes panel (saved DB envs) — header no longer exposes it. */
+  onOpenAmbientes?: () => void
 }
 
 export function ApdataFlowPanel({
   open,
   onClose,
   onManualSheet,
+  embedded = false,
+  onOpenAmbientes,
 }: ApdataFlowPanelProps) {
-  const [phase, setPhase] = useState<Phase>('origem')
+  const [phase, setPhase] = useState<Phase>(embedded ? 'segment' : 'origem')
   const [originCard, setOriginCard] = useState<OriginCard>('apdata')
+  const [manualMode, setManualMode] = useState(false)
+  const [benefitOverrides, setBenefitOverrides] = useState<
+    Record<string, BenefitClass>
+  >({})
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -242,8 +268,10 @@ export function ApdataFlowPanel({
 
   useEffect(() => {
     if (open) {
-      setPhase('origem')
+      setPhase(embedded ? 'segment' : 'origem')
       setOriginCard('apdata')
+      setManualMode(false)
+      setBenefitOverrides({})
       setExported(null)
       setResult(null)
       setSteps([])
@@ -258,14 +286,14 @@ export function ApdataFlowPanel({
         .catch(() => {
           setSqlProfiles([])
         })
-    } else {
+    } else if (!embedded) {
       // Drop volatile password when the panel closes.
       setEphemeralCreds(null)
       setDirectForm(DEFAULT_EPHEMERAL_CREDS_FORM)
       setDirectConnected(false)
       setShowAptools(false)
     }
-  }, [open, refreshEnv])
+  }, [open, embedded, refreshEnv])
 
   function switchAmbMode(next: AmbMode) {
     if (next === ambMode) return
@@ -307,7 +335,34 @@ export function ApdataFlowPanel({
       // Keep password only in React state for the export step.
       setEphemeralCreds(creds)
       setDirectConnected(true)
-      setPhase('escopo')
+      if (list.length <= 1) {
+        // Skip Escopo UI when there is at most one CNPJ — extract → Premissas.
+        setPhase('running')
+        const cnpjs = list
+          .map((e) => cnpjDigits(e.key))
+          .filter(Boolean)
+          .slice(0, 32)
+        const extracted = await postEphemeralExtract(creds, { cnpjs })
+        const out = exportResultFromEphemeralRows(
+          extracted.rows,
+          {
+            selectedCnpjKeys: list.map((e) => e.key),
+          },
+          [
+            {
+              id: 'ephemeral-extract',
+              label: 'Extrator efêmero (POST /api/query/ephemeral)',
+              status: 'done',
+              detail: `${extracted.rowCount} linha(s) · ${extracted.latencyMs}ms`,
+            },
+          ],
+        )
+        setExported(out)
+        setSteps(out.steps)
+        setPhase('premissas')
+      } else {
+        setPhase('escopo')
+      }
     } catch (err) {
       setEphemeralCreds(null)
       setDirectConnected(false)
@@ -326,6 +381,11 @@ export function ApdataFlowPanel({
       return
     }
     setError(null)
+    // Single establishment → skip scope picker when consultant wants speed.
+    if (establishments.length <= 1) {
+      void handleRun()
+      return
+    }
     setPhase('escopo')
   }
 
@@ -441,11 +501,46 @@ export function ApdataFlowPanel({
     }
   }
 
+  const mappedBenefits = useMemo((): ExtractedBenefit[] => {
+    if (!exported) return []
+    const raw = collectUniqueBenefits(
+      exported.rows.map((r) => ({
+        benefits: (r as { benefits?: ExtractedBenefit[] }).benefits ?? [],
+      })),
+    )
+    return applyBenefitOverrides(raw, benefitOverrides)
+  }, [exported, benefitOverrides])
+
+  function applyBenefitOverridesToRows(
+    rows: PayrollRow[],
+  ): PayrollRow[] {
+    if (Object.keys(benefitOverrides).length === 0 && mappedBenefits.length === 0) {
+      return rows
+    }
+    return rows.map((row) => {
+      const raw = (row as { benefits?: ExtractedBenefit[] }).benefits ?? []
+      if (raw.length === 0) return row
+      const overridden = applyBenefitOverrides(raw, benefitOverrides)
+      const scalars = benefitsToPayrollScalars(overridden)
+      return {
+        ...row,
+        benefits: overridden,
+        vrValorDia: scalars.vrValorDia ?? row.vrValorDia,
+        vaValorMes: scalars.vaValorMes ?? row.vaValorMes,
+        vaModoValor:
+          scalars.vaValorMes != null ? 'MES' : row.vaModoValor,
+        assistMedicaMes: scalars.assistMedicaMes ?? row.assistMedicaMes,
+        assistOdontoMes: scalars.assistOdontoMes ?? row.assistOdontoMes,
+      }
+    })
+  }
+
   function handleSimulate() {
     if (!exported || exported.rows.length === 0) return
+    const payrollRows = applyBenefitOverridesToRows(exported.rows)
     // Dominant headcount scale as wizard default; per-row escalaAtual still wins.
     const byScale = new Map<string, number>()
-    for (const r of exported.rows) {
+    for (const r of payrollRows) {
       const code = r.escalaAtual || '6x1'
       byScale.set(code, (byScale.get(code) ?? 0) + r.quantidade)
     }
@@ -468,7 +563,7 @@ export function ApdataFlowPanel({
       shiftsPerDay: 2,
       operatingHours,
       scenarioId,
-      payrollRows: exported.rows,
+      payrollRows,
       estrategiaAbsorcao,
       defaultTaxRegime,
       defaultRegimeFuncionamento: defaultRegime,
@@ -516,9 +611,12 @@ export function ApdataFlowPanel({
     setResult(next)
   }
 
-  const stepOrder: Phase[] = ['origem', 'escopo', 'premissas', 'resultados']
+  const stepOrder: Phase[] = embedded
+    ? ['segment', 'origem', 'escopo', 'premissas', 'resultados']
+    : ['origem', 'escopo', 'premissas', 'resultados']
   const stepLabels: Record<string, string> = {
-    origem: 'Origem dos Dados',
+    segment: 'Segmento',
+    origem: 'Origem',
     escopo: 'Escopo',
     premissas: 'Premissas',
     resultados: 'Resultados',
@@ -535,55 +633,90 @@ export function ApdataFlowPanel({
       ? Boolean(activeEnv)
       : Boolean(ephemeralCreds && directConnected)
 
+  const shellClass = embedded
+    ? 'w-full'
+    : 'fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[var(--color-ink)]/40 px-4 py-8'
+  const panelClass = embedded
+    ? 'w-full'
+    : 'w-full max-w-3xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 shadow-lg sm:p-6'
+
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[var(--color-ink)]/40 px-4 py-8"
-      role="dialog"
-      aria-modal="true"
+      className={shellClass}
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : true}
       aria-labelledby="apdata-flow-title"
-      onClick={(ev) => {
-        if (ev.target === ev.currentTarget) onClose()
-      }}
+      onClick={
+        embedded
+          ? undefined
+          : (ev) => {
+              if (ev.target === ev.currentTarget) onClose()
+            }
+      }
     >
-      <div className="w-full max-w-3xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 shadow-lg sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+      <div className={panelClass}>
+        {!embedded && (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2
+                id="apdata-flow-title"
+                className="text-xl font-semibold text-[var(--color-ink)]"
+              >
+                Simulação executiva
+              </h2>
+              <p className="mt-1 text-sm text-[var(--color-muted)]">
+                Origem · escopo · premissas · resultados.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+        {embedded && (
+          <div className="mb-2">
             <h2
               id="apdata-flow-title"
-              className="text-xl font-semibold text-[var(--color-ink)]"
+              className="text-2xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-3xl"
             >
-              Simulação executiva
+              Simulador de impacto PEC
             </h2>
-            <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Quatro passos: origem · escopo · premissas · resultados.
+            <p className="mt-2 max-w-xl text-sm text-[var(--color-muted)] sm:text-base">
+              Wizard linear em 5 passos. Números são heurísticas versionadas —
+              não parecer jurídico. LGPD: sem nomes de pessoas.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-          >
-            Fechar
-          </button>
-        </div>
+        )}
 
         <ol className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Passos">
           {stepOrder.map((id, i) => {
             const active = visualStep === id
             const past = stepOrder.indexOf(visualStep as Phase) > i
             return (
-              <li
-                key={id}
-                className={[
-                  'border px-2.5 py-1',
-                  active
-                    ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
-                    : past
-                      ? 'border-[var(--color-line)] text-[var(--color-muted)]'
-                      : 'border-[var(--color-line)]/60 text-[var(--color-muted)]/70',
-                ].join(' ')}
-              >
-                {i + 1}. {stepLabels[id]}
+              <li key={id}>
+                <button
+                  type="button"
+                  disabled={!past && !active && !(result && id === 'resultados')}
+                  onClick={() => {
+                    if (past || active || (result && id === 'resultados')) {
+                      setPhase(id)
+                    }
+                  }}
+                  className={[
+                    'border px-2.5 py-1',
+                    active
+                      ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
+                      : past
+                        ? 'border-[var(--color-line)] text-[var(--color-muted)]'
+                        : 'border-[var(--color-line)]/60 text-[var(--color-muted)]/70',
+                  ].join(' ')}
+                >
+                  {i + 1}. {stepLabels[id]}
+                </button>
               </li>
             )
           })}
@@ -610,7 +743,9 @@ export function ApdataFlowPanel({
               onRestart={() => {
                 setResult(null)
                 setExported(null)
-                setPhase('origem')
+                setManualMode(false)
+                setBenefitOverrides({})
+                setPhase(embedded ? 'segment' : 'origem')
               }}
               onClearBasket={() => {
                 clearScenarioBasket()
@@ -622,17 +757,60 @@ export function ApdataFlowPanel({
           </div>
         ) : (
           <>
+            {phase === 'segment' && (
+              <section className="mt-5">
+                <SectorStep
+                  templates={PILOT_TEMPLATES}
+                  selectedId={sector}
+                  sectorLabel={sectorLabel}
+                  sectorBufferPct={sectorBufferPct}
+                  defaultRegime={defaultRegime}
+                  onSelect={(id) => {
+                    const preset = resolveSectorPreset(id)
+                    setSector(id)
+                    if (id !== CUSTOM_SECTOR_ID) {
+                      setSectorLabel(preset.label)
+                    }
+                    setSectorBufferPct(preset.defaultBufferPct)
+                    setDefaultRegime(preset.defaultRegime)
+                  }}
+                  onSectorMetaChange={(meta) => {
+                    if (meta.sectorLabel != null) setSectorLabel(meta.sectorLabel)
+                    if (meta.sectorBufferPct != null) {
+                      setSectorBufferPct(meta.sectorBufferPct)
+                    }
+                    if (meta.defaultRegimeFuncionamento != null) {
+                      setDefaultRegime(meta.defaultRegimeFuncionamento)
+                    }
+                  }}
+                  onNext={() => setPhase('origem')}
+                />
+              </section>
+            )}
+
             {phase === 'origem' && (
               <section className="mt-5 space-y-4">
                 <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Passo 1 — Origem dos Dados
+                  {embedded ? 'Passo 2' : 'Passo 1'} — Origem dos Dados
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {(
                     [
-                      ['apdata', 'Conexão Direta Apdata', 'Ambiente salvo ou IP/porta + perfil SQL do Studio.'],
-                      ['aptools', 'Extrair via Aptools', 'Copiar queries oficiais e/ou enviar CSV agregado.'],
-                      ['manual', 'Planilha Manual', 'Importar folha no wizard (CSV/;).'],
+                      [
+                        'apdata',
+                        'Conexão Direta Apdata',
+                        'Sessão Rápida (IP/Porta) ou Ambiente Salvo.',
+                      ],
+                      [
+                        'aptools',
+                        'Extrair via Aptools',
+                        'Copiar query MSSQL/Oracle + upload .txt/.csv.',
+                      ],
+                      [
+                        'manual',
+                        'Planilha / Manual',
+                        'Entrada manual ou planilha — pula Escopo.',
+                      ],
                     ] as const
                   ).map(([id, title, blurb]) => (
                     <button
@@ -642,8 +820,13 @@ export function ApdataFlowPanel({
                         setOriginCard(id)
                         if (id === 'aptools') setShowAptools(true)
                         if (id === 'manual') {
-                          onManualSheet?.()
-                          onClose()
+                          setManualMode(true)
+                          if (embedded) {
+                            setPhase('premissas')
+                          } else {
+                            onManualSheet?.()
+                            onClose()
+                          }
                         }
                       }}
                       className={[
@@ -662,6 +845,15 @@ export function ApdataFlowPanel({
                     </button>
                   ))}
                 </div>
+                {embedded && (
+                  <button
+                    type="button"
+                    onClick={() => setPhase('segment')}
+                    className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                  >
+                    Voltar ao Segmento
+                  </button>
+                )}
 
                 {originCard === 'apdata' && (
                   <div className="space-y-3 border border-[var(--color-line)] bg-white/70 px-3 py-3">
@@ -672,8 +864,8 @@ export function ApdataFlowPanel({
                     >
                       {(
                         [
+                          ['direct', 'Sessão Rápida (IP / Porta)'],
                           ['saved', 'Ambiente Salvo'],
-                          ['direct', 'Conexão Rápida (IP / Porta)'],
                         ] as const
                       ).map(([id, label]) => {
                         const selected = ambMode === id
@@ -743,6 +935,15 @@ export function ApdataFlowPanel({
                           </p>
                         )}
                         <div className="flex flex-wrap gap-2">
+                          {onOpenAmbientes && (
+                            <button
+                              type="button"
+                              onClick={onOpenAmbientes}
+                              className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                            >
+                              Gerenciar Ambientes
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => void refreshEnv()}
@@ -792,7 +993,7 @@ export function ApdataFlowPanel({
             {phase === 'escopo' && (
               <section className="mt-5 space-y-3">
                 <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Passo 2 — Escopo
+                  {embedded ? 'Passo 3' : 'Passo 2'} — Escopo (Empresas & Filiais)
                 </h3>
                 <p className="text-sm text-[var(--color-muted)]">
                   Selecione razão social, filial e CNPJ. Totais = colaboradores
@@ -927,7 +1128,7 @@ export function ApdataFlowPanel({
             {phase === 'premissas' && (
               <section className="mt-5 space-y-4">
                 <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Passo 3 — Premissas
+                  {embedded ? 'Passo 4' : 'Passo 3'} — Premissas, Encargos & Benefícios
                 </h3>
                 {exported && (
                   <p className="text-sm text-[var(--color-muted)]">
@@ -936,6 +1137,48 @@ export function ApdataFlowPanel({
                     {exported.stats.linhasAgregadas} linhas agregadas
                   </p>
                 )}
+                {manualMode && (
+                  <div className="space-y-2 border border-[var(--color-line)] bg-white/80 px-3 py-3">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Importação planilha / manual
+                    </p>
+                    <PayrollImport
+                      rows={exported?.rows ?? []}
+                      issues={exported?.issues ?? []}
+                      onParsed={(rows, issues) => {
+                        const out = exportResultFromPayrollRows(rows, issues, [
+                          {
+                            id: 'manual-sheet',
+                            label: 'Planilha / manual',
+                            status: 'done',
+                            detail: `${rows.length} linha(s)`,
+                          },
+                        ])
+                        setExported(out)
+                        setSteps(out.steps)
+                        setError(null)
+                        setBenefitOverrides({})
+                      }}
+                      onClear={() => {
+                        setExported(null)
+                        setBenefitOverrides({})
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                    Mapeamento de benefícios (TiposBeneficios)
+                  </p>
+                  <BenefitMappingTable
+                    benefits={mappedBenefits}
+                    overrides={benefitOverrides}
+                    onOverrideChange={(key, next) =>
+                      setBenefitOverrides((prev) => ({ ...prev, [key]: next }))
+                    }
+                  />
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">
@@ -1127,7 +1370,13 @@ export function ApdataFlowPanel({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setPhase('escopo')}
+                    onClick={() =>
+                      setPhase(
+                        manualMode || originCard === 'aptools'
+                          ? 'origem'
+                          : 'escopo',
+                      )
+                    }
                     className="border border-[var(--color-line)] px-3 py-2 text-sm"
                   >
                     Voltar

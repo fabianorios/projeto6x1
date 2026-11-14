@@ -6,6 +6,11 @@ import {
   emptyPayrollExtras,
   type PayrollRow,
 } from '../engine'
+import {
+  benefitsToPayrollScalars,
+  parseBeneficiosAgg,
+  type ExtractedBenefit,
+} from './classifyBenefit'
 
 export type ExtractorAggregate = {
   cod_empresa?: string
@@ -27,6 +32,8 @@ export type ExtractorAggregate = {
   assist_medica_mes?: number
   assist_odonto_mes?: number
   dias_trabalho_mes_atual?: number
+  /** Dynamic TiposBeneficios: codigo|desc|valor;… */
+  beneficios_agg?: string
   /** From SqlProfile.benefitParams.vaModoValor when mapping after extract. */
   va_modo_valor?: 'DIA' | 'MES'
 }
@@ -37,22 +44,48 @@ function num(v: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+export type PayrollRowWithBenefits = PayrollRow & {
+  benefits: ExtractedBenefit[]
+}
+
 /** Convert LGPD-safe extractor rows into engine PayrollRow[]. */
 export function mapExtractorAggregatesToPayroll(
   rows: ExtractorAggregate[],
-): PayrollRow[] {
+): PayrollRowWithBenefits[] {
   return rows.map((r, i) => {
     const qty = Math.max(0, num(r.qtd_colaboradores, 0))
     const massa = num(r.massa_salarial_base, 0)
     const salario = qty > 0 ? massa / qty : massa
     const cargaSemanal = num(r.carga_semanal_atual, 44)
     const dias = num(r.dias_trabalho_mes_atual, 22)
-    const vr = num(r.vr_dia_medio, 0)
+    const benefits = parseBeneficiosAgg(r.beneficios_agg)
+    const fromAgg = benefitsToPayrollScalars(benefits)
+
+    // Prefer dynamic agg classification; fall back to legacy scalar columns.
+    const vrLegacy = num(r.vr_dia_medio, 0)
     const vt = num(r.vt_dia_medio, 0)
-    const va = num(r.va_valor_medio, 0)
-    const med = num(r.assist_medica_mes, 0)
-    const odonto = num(r.assist_odonto_mes, 0)
+    const vaLegacy = num(r.va_valor_medio, 0)
+    const medLegacy = num(r.assist_medica_mes, 0)
+    const odontoLegacy = num(r.assist_odonto_mes, 0)
     const vaModo = r.va_modo_valor === 'DIA' ? 'DIA' : 'MES'
+
+    const vr =
+      fromAgg.vrValorDia != null && fromAgg.vrValorDia > 0
+        ? fromAgg.vrValorDia
+        : vrLegacy
+    const va =
+      fromAgg.vaValorMes != null && fromAgg.vaValorMes > 0
+        ? fromAgg.vaValorMes
+        : vaLegacy
+    const med =
+      fromAgg.assistMedicaMes != null && fromAgg.assistMedicaMes > 0
+        ? fromAgg.assistMedicaMes
+        : medLegacy
+    const odonto =
+      fromAgg.assistOdontoMes != null && fromAgg.assistOdontoMes > 0
+        ? fromAgg.assistOdontoMes
+        : odontoLegacy
+
     const cargo = (r.desc_cargo || 'NAO_INFORMADO').trim()
     const centro = (r.cod_cc || 'SEM_CC').trim()
 
@@ -85,6 +118,7 @@ export function mapExtractorAggregatesToPayroll(
       vaValorMes: va > 0 && vaModo === 'MES' ? va : null,
       assistMedicaMes: med > 0 ? med : null,
       assistOdontoMes: odonto > 0 ? odonto : null,
+      benefits,
     }
   })
 }
