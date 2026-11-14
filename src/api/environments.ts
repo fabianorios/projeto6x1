@@ -131,9 +131,21 @@ export async function testEnvironment(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
-  const body = (await res.json()) as Partial<TestConnectionResult> & {
+  let body: Partial<TestConnectionResult> & {
     error?: string
     driver?: string
+  } | null = null
+  try {
+    body = (await res.json()) as Partial<TestConnectionResult> & {
+      error?: string
+      driver?: string
+    }
+  } catch {
+    return {
+      ok: false,
+      error: `Resposta não-JSON do proxy (HTTP ${res.status}). Verifique /api → API.`,
+      driver: 'unknown',
+    }
   }
   if (body && typeof body === 'object' && body.ok === true) {
     return {

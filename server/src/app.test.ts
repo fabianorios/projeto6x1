@@ -98,6 +98,33 @@ describe("API routes", () => {
     assert.ok(body.tables.includes("Contratados"));
   });
 
+  it("test connection returns JSON 200 even when DB is unreachable", async () => {
+    const createRes = await app.request("/api/environments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Unreachable",
+        engine: "mssql",
+        host: "127.0.0.1",
+        port: 1,
+        database: "nope",
+        user: "ro",
+        password: "x",
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const { environment } = await createRes.json();
+    const res = await app.request(`/api/environments/${environment.id}/test`, {
+      method: "POST",
+    });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /json/i);
+    const body = await res.json();
+    assert.equal(body.ok, false);
+    assert.equal(typeof body.error, "string");
+    assert.equal(body.driver, "mssql");
+  });
+
   it("reuses MCP SELECT-only guard for DML", () => {
     assert.equal(assertSelectOnly("DELETE FROM Contratados").ok, false);
     assert.equal(assertSelectOnly("SELECT TOP (1) 1 FROM Horarios").ok, true);

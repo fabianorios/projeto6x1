@@ -125,11 +125,11 @@ export function createEnvironmentRoutes(deps: EnvRoutesDeps) {
       store,
       config.sqlTimeoutMs,
     );
+    // Always HTTP 200 with { ok: true|false }. A 502 here is rewritten by
+    // Cloudflare into HTML/plain "error code: 502", so the SPA's res.json()
+    // throws: Unexpected token '<' / "<!DOCTYPE"...
     const result = await testConnection(client);
-    if (result.ok) {
-      return c.json(result);
-    }
-    return c.json(result, 502);
+    return c.json(result);
   });
 
   return app;
