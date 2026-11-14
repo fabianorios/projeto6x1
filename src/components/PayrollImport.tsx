@@ -1,9 +1,8 @@
 import { useId, useState } from 'react'
-import {
-  parsePayrollCsv,
-  type PayrollParseIssue,
-  type PayrollRow,
-} from '../engine'
+import type { PayrollParseIssue, PayrollRow } from '../engine'
+import { AptoolsExtractModal } from './AptoolsExtractModal'
+import { readCsvFileText, type CsvEncoding } from '../utils/csvEncoding'
+import { parsePayrollTolerant } from '../utils/parsePayrollTolerant'
 
 interface PayrollImportProps {
   rows: PayrollRow[]
@@ -13,7 +12,8 @@ interface PayrollImportProps {
 }
 
 /**
- * CSV file + paste import mapped to docs/import-layout.md headers.
+ * CSV file + paste import — tolerant `;`/`,`, UTF-8/Windows-1252, BR numbers,
+ * native extractor columns. Includes Aptools query modal.
  */
 export function PayrollImport({
   rows,
@@ -25,25 +25,32 @@ export function PayrollImport({
   const pasteId = useId()
   const [paste, setPaste] = useState('')
   const [fileName, setFileName] = useState<string | null>(null)
+  const [encoding, setEncoding] = useState<CsvEncoding | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingSample, setLoadingSample] = useState(false)
+  const [showAptools, setShowAptools] = useState(false)
 
-  function applyText(text: string, name: string | null) {
-    const result = parsePayrollCsv(text)
+  function applyText(
+    text: string,
+    name: string | null,
+    detectedEncoding: CsvEncoding | null = null,
+  ) {
+    const result = parsePayrollTolerant(text)
     setFileName(name)
+    setEncoding(detectedEncoding)
     setLoadError(null)
     setPaste(text)
     onParsed(result.rows, result.issues)
   }
 
-  function onFileChange(file: File | null) {
+  async function onFileChange(file: File | null) {
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const text = typeof reader.result === 'string' ? reader.result : ''
-      applyText(text, file.name)
+    try {
+      const { text, encoding: enc } = await readCsvFileText(file)
+      applyText(text, file.name, enc)
+    } catch {
+      setLoadError('Não foi possível ler o arquivo CSV.')
     }
-    reader.readAsText(file, 'UTF-8')
   }
 
   async function loadValidationSample() {
@@ -55,7 +62,7 @@ export function PayrollImport({
         throw new Error(`HTTP ${res.status}`)
       }
       const text = await res.text()
-      applyText(text, 'sample-folha.csv (validação)')
+      applyText(text, 'sample-folha.csv (validação)', 'utf-8')
     } catch {
       setLoadError(
         'Não foi possível carregar sample-folha.csv. Cole o CSV ou escolha um arquivo.',
@@ -74,22 +81,11 @@ export function PayrollImport({
         Importar folha (CSV / colar)
       </legend>
       <p className="text-xs text-[var(--color-muted)]">
-        Separador <strong>;</strong>, UTF-8. Cabeçalhos exatos:{' '}
-        <code className="text-[11px]">
-          cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo
-        </code>{' '}
-        + VR/VT (<code className="text-[11px]">vr_valor_dia</code>,{' '}
-        <code className="text-[11px]">vr_dias_mes_atual</code>,{' '}
-        <code className="text-[11px]">vt_valor_dia</code>,{' '}
-        <code className="text-[11px]">vt_dias_mes_atual</code>). Ver{' '}
-        <a
-          href="/sample-folha.csv"
-          download
-          className="text-[var(--color-accent)] underline"
-        >
-          sample-folha.csv
-        </a>
-        .
+        Aceita <strong>;</strong> ou <strong>,</strong>; UTF-8 ou
+        Windows-1252; números BR (<code className="text-[11px]">1.234,56</code>
+        ). Layout legado ou colunas do extrator Aptools (
+        <code className="text-[11px]">desc_cargo</code>,{' '}
+        <code className="text-[11px]">massa_salarial_base</code>, …).
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -112,10 +108,20 @@ export function PayrollImport({
           type="file"
           accept=".csv,text/csv,text/plain"
           className="sr-only"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+          onChange={(e) => void onFileChange(e.target.files?.[0] ?? null)}
         />
+        <button
+          type="button"
+          onClick={() => setShowAptools(true)}
+          className="border border-[var(--color-line)] bg-white px-3 py-2 text-sm hover:border-[var(--color-accent)]"
+        >
+          Extrair via Aptools…
+        </button>
         {fileName ? (
-          <span className="text-xs text-[var(--color-muted)]">{fileName}</span>
+          <span className="text-xs text-[var(--color-muted)]">
+            {fileName}
+            {encoding ? ` · ${encoding}` : ''}
+          </span>
         ) : null}
         <a
           href="/sample-folha.csv"
@@ -138,7 +144,7 @@ export function PayrollImport({
           rows={5}
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          placeholder="cargo;salario;carga_horaria_mensal;..."
+          placeholder="cargo;salario;… ou colunas do extrator Aptools"
           className="w-full border border-[var(--color-line)] bg-white px-3 py-2 font-mono text-xs"
         />
       </label>
@@ -146,7 +152,7 @@ export function PayrollImport({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => applyText(paste, fileName)}
+          onClick={() => applyText(paste, fileName, encoding)}
           className="bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white"
         >
           Processar importação
@@ -157,6 +163,7 @@ export function PayrollImport({
             onClick={() => {
               setPaste('')
               setFileName(null)
+              setEncoding(null)
               onClear()
             }}
             className="border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
@@ -234,6 +241,10 @@ export function PayrollImport({
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {showAptools ? (
+        <AptoolsExtractModal onClose={() => setShowAptools(false)} />
       ) : null}
     </fieldset>
   )
