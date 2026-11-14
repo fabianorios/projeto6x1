@@ -67,6 +67,9 @@ export function mapExtractorRows(
 
 /** Forbidden PII column names — reject if present in result set. */
 const PII_COLUMNS = [
+  "fun_nosfuncionario",
+  "fun_nuscpf",
+  "fun_nuspis",
   "nome",
   "cpf",
   "pis",
@@ -84,4 +87,60 @@ export function assertNoPiiColumns(columns: string[]): void {
       throw new Error(`PII column blocked in extractor result: ${bad}`);
     }
   }
+}
+
+/**
+ * Join Folha + Regra VR/VT by empresa/filial/cc.
+ * Used when modular SqlProfile slots are extracted separately.
+ */
+export type RegraBeneficioRow = {
+  cod_empresa: string;
+  cod_filial: string;
+  cod_cc: string;
+  valor_dia: number;
+  modo_dias: "ESCALA" | "FIXO_MES" | "CALENDARIO_LOCAL";
+  dias_base_mes: number;
+};
+
+export type FolhaEscalaRow = ExtractorAggregateRow & {
+  modo_dias_vr?: RegraBeneficioRow["modo_dias"];
+  modo_dias_vt?: RegraBeneficioRow["modo_dias"];
+  vr_dias_base_mes?: number;
+  vt_dias_base_mes?: number;
+};
+
+function joinKey(empresa: string, filial: string, cc: string): string {
+  return `${empresa}||${filial}||${cc}`;
+}
+
+export function joinFolhaComRegras(
+  folha: ExtractorAggregateRow[],
+  regrasVr: RegraBeneficioRow[],
+  regrasVt: RegraBeneficioRow[],
+): FolhaEscalaRow[] {
+  const vrMap = new Map(
+    regrasVr.map((r) => [joinKey(r.cod_empresa, r.cod_filial, r.cod_cc), r]),
+  );
+  const vtMap = new Map(
+    regrasVt.map((r) => [joinKey(r.cod_empresa, r.cod_filial, r.cod_cc), r]),
+  );
+
+  return folha.map((row) => {
+    const key = joinKey(row.cod_empresa, row.cod_filial, row.cod_cc);
+    const vr = vrMap.get(key);
+    const vt = vtMap.get(key);
+    return {
+      ...row,
+      vr_dia_medio: vr?.valor_dia ?? row.vr_dia_medio,
+      vt_dia_medio: vt?.valor_dia ?? row.vt_dia_medio,
+      modo_dias_vr: vr?.modo_dias,
+      modo_dias_vt: vt?.modo_dias,
+      vr_dias_base_mes: vr?.dias_base_mes,
+      vt_dias_base_mes: vt?.dias_base_mes,
+      dias_trabalho_mes_atual:
+        vr?.dias_base_mes ??
+        vt?.dias_base_mes ??
+        row.dias_trabalho_mes_atual,
+    };
+  });
 }

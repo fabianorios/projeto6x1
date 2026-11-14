@@ -25,3 +25,19 @@ export {
   REGIME_FUNCIONAMENTO_LABELS,
   isRegimeFuncionamento,
 } from './regime'
+
+export type {
+  ModoDias,
+  SqlDialect,
+  SqlProfile,
+  SqlSlotId,
+  SqlSlotQueries,
+} from './sql-profile'
+export {
+  MODO_DIAS_OPTIONS,
+  SQL_SLOT_CONTRACT,
+  SQL_SLOT_EXAMPLES,
+  SQL_SLOT_IDS,
+  SQL_SLOT_LABELS,
+  isModoDias,
+} from './sql-profile'
