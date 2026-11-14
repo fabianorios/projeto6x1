@@ -25,11 +25,13 @@ import {
 import { REVIEW_SELECTS, LIVE_SELECT_STEPS } from '../apdata/selects'
 import {
   clearScenarioBasket,
+  DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
   RULE_VERSIONS,
   simulate,
   upsertSimulationInBasket,
   loadScenarioBasket,
+  type EstrategiaAbsorcao,
   type OperatingHours,
   type ScenarioBasket,
   type ScenarioId,
@@ -69,6 +71,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
     'fase1_2026_42h',
   )
+  const [estrategiaAbsorcao, setEstrategiaAbsorcao] =
+    useState<EstrategiaAbsorcao>(DEFAULT_ESTRATEGIA_ABSORCAO)
   const [defaultSalario, setDefaultSalario] = useState('2200')
   const [vrValorDia, setVrValorDia] = useState('30.56')
   const [vtValorDia, setVtValorDia] = useState('')
@@ -240,11 +244,45 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       operatingHours,
       scenarioId,
       payrollRows: exported.rows,
+      estrategiaAbsorcao,
     })
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
     setPhase('results')
+  }
+
+  function resimulateWithAbsorcao(nextAbs: EstrategiaAbsorcao) {
+    if (!exported) return
+    setEstrategiaAbsorcao(nextAbs)
+    const byScale = new Map<string, number>()
+    for (const r of exported.rows) {
+      const code = r.escalaAtual || '6x1'
+      byScale.set(code, (byScale.get(code) ?? 0) + r.quantidade)
+    }
+    let dominant = '6x1'
+    let best = 0
+    for (const [code, n] of byScale) {
+      if (n > best) {
+        best = n
+        dominant = code
+      }
+    }
+    const next = simulate({
+      sector,
+      headcount: exported.stats.contratadosAtivos || 1,
+      currentScale: dominant,
+      averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
+      units: 1,
+      shiftsPerDay: 2,
+      operatingHours,
+      scenarioId,
+      payrollRows: exported.rows,
+      estrategiaAbsorcao: nextAbs,
+    })
+    const nextBasket = upsertSimulationInBasket(next, basket)
+    setBasket(nextBasket)
+    setResult(next)
   }
 
   return (
@@ -344,6 +382,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                 clearScenarioBasket()
                 setBasket(null)
               }}
+              estrategiaAbsorcao={estrategiaAbsorcao}
+              onEstrategiaChange={resimulateWithAbsorcao}
             />
           </div>
         ) : (

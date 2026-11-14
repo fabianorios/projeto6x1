@@ -1,22 +1,43 @@
 import { useMemo } from 'react'
 import {
+  REGIME_FUNCIONAMENTO_LABELS,
   RULE_VERSIONS,
   checkScheduleExclusion,
   formatShiftRange,
   loadScenarioBasket,
   simulate,
+  type EstrategiaAbsorcao,
   type PayrollParseIssue,
   type PayrollRow,
+  type RegimeFuncionamento,
   type ScenarioId,
+  type TaxRegime,
 } from '../engine'
 import { getTemplate } from '../templates'
 import type { WizardFormState } from './WizardShell'
+import { EphemeralConnectPanel } from './EphemeralConnectPanel'
 import { OperatingHoursFields } from './OperatingHoursFields'
 import { PayrollImport } from './PayrollImport'
 import {
   ScenarioComparePanel,
   sidesFromSimulation,
 } from './ScenarioComparePanel'
+
+const TAX_OPTIONS: { id: TaxRegime; label: string }[] = [
+  { id: 'SIMPLES', label: 'Simples Nacional' },
+  { id: 'LUCRO_PRESUMIDO', label: 'Lucro Presumido' },
+  { id: 'LUCRO_REAL', label: 'Lucro Real' },
+]
+
+const ABSORCAO_OPTIONS: { id: EstrategiaAbsorcao; label: string }[] = [
+  { id: 'CONTRATACAO_INTEGRAL', label: 'Contratação integral' },
+  { id: 'HORA_EXTRA_MAXIMA', label: 'Hora extra máxima (cap 44h/mês)' },
+  { id: 'HIBRIDO_INTERMITENTE', label: 'Híbrido / intermitente' },
+]
+
+const REGIME_OPTIONS = (
+  Object.keys(REGIME_FUNCIONAMENTO_LABELS) as RegimeFuncionamento[]
+).map((id) => ({ id, label: REGIME_FUNCIONAMENTO_LABELS[id] }))
 
 interface InputsStepProps {
   form: WizardFormState
@@ -67,6 +88,17 @@ export function InputsStep({
         scenarioId: form.scenarioId,
         payrollRows:
           form.payrollRows.length > 0 ? form.payrollRows : undefined,
+        defaultTaxRegime: form.defaultTaxRegime,
+        taxRegimeByCnpj:
+          Object.keys(form.taxRegimeByCnpj).length > 0
+            ? form.taxRegimeByCnpj
+            : undefined,
+        estrategiaAbsorcao: form.estrategiaAbsorcao,
+        defaultRegimeFuncionamento: form.defaultRegimeFuncionamento,
+        regimeFuncionamentoByCc:
+          Object.keys(form.regimeFuncionamentoByCc).length > 0
+            ? form.regimeFuncionamentoByCc
+            : undefined,
       })
     } catch {
       return null
@@ -248,6 +280,31 @@ export function InputsStep({
             Importação opcional — atualiza headcount e salário médio quando
             houver linhas válidas.
           </p>
+          <div className="mb-3 space-y-3">
+            <EphemeralConnectPanel
+              onImported={(rows, issues) => {
+                const hc = rows.reduce((s, r) => s + r.quantidade, 0)
+                const mass = rows.reduce(
+                  (s, r) => s + r.salario * r.quantidade,
+                  0,
+                )
+                onChange({
+                  ...form,
+                  payrollRows: rows,
+                  payrollIssues: issues,
+                  ...(rows.length > 0
+                    ? {
+                        headcount: hc,
+                        averageMonthlySalary:
+                          hc > 0
+                            ? Math.round(mass / hc)
+                            : form.averageMonthlySalary,
+                      }
+                    : {}),
+                })
+              }}
+            />
+          </div>
           <PayrollImport
             rows={form.payrollRows}
             issues={form.payrollIssues}
@@ -280,6 +337,80 @@ export function InputsStep({
               })
             }
           />
+        </fieldset>
+
+        <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
+          <legend className="px-1 text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+            Premissas (encargos / absorção / regime)
+          </legend>
+          <p className="mb-3 text-xs text-[var(--color-muted)]">
+            Regime tributário por CNPJ, estratégia de absorção do gap e
+            funcionamento do estabelecimento (turmas).
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                Regime tributário (padrão)
+              </span>
+              <select
+                value={form.defaultTaxRegime}
+                onChange={(e) =>
+                  patch('defaultTaxRegime', e.target.value as TaxRegime)
+                }
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              >
+                {TAX_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                Estratégia de absorção
+              </span>
+              <select
+                value={form.estrategiaAbsorcao}
+                onChange={(e) =>
+                  patch(
+                    'estrategiaAbsorcao',
+                    e.target.value as EstrategiaAbsorcao,
+                  )
+                }
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              >
+                {ABSORCAO_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="mb-1 block text-[var(--color-muted)]">
+                Regime de funcionamento (padrão / CC)
+              </span>
+              <select
+                value={form.defaultRegimeFuncionamento}
+                onChange={(e) =>
+                  patch(
+                    'defaultRegimeFuncionamento',
+                    e.target.value as RegimeFuncionamento,
+                  )
+                }
+                className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
+              >
+                {REGIME_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <TaxRegimeByCnpjFields form={form} onChange={onChange} />
+          <RegimeByCcFields form={form} onChange={onChange} />
         </fieldset>
 
         <fieldset className="border border-[var(--color-line)] bg-white/70 p-4">
@@ -398,5 +529,107 @@ export function InputsStep({
         </div>
       </form>
     </section>
+  )
+}
+
+function uniqueCnpjs(rows: PayrollRow[]): string[] {
+  const set = new Set<string>()
+  for (const r of rows) {
+    const dig = (r.cnpjCompleto ?? '').replace(/\D/g, '')
+    if (dig.length >= 8) set.add(dig)
+  }
+  return [...set].sort()
+}
+
+function uniqueCostCenters(rows: PayrollRow[]): string[] {
+  return [...new Set(rows.map((r) => r.centroCusto).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, 'pt-BR'),
+  )
+}
+
+function TaxRegimeByCnpjFields({
+  form,
+  onChange,
+}: {
+  form: WizardFormState
+  onChange: (next: WizardFormState) => void
+}) {
+  const cnpjs = uniqueCnpjs(form.payrollRows)
+  if (cnpjs.length === 0) return null
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs font-medium text-[var(--color-muted)]">
+        Regime por CNPJ (da folha importada)
+      </p>
+      {cnpjs.map((cnpj) => (
+        <label key={cnpj} className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-mono">{cnpj}</span>
+          <select
+            value={form.taxRegimeByCnpj[cnpj] ?? form.defaultTaxRegime}
+            onChange={(e) =>
+              onChange({
+                ...form,
+                taxRegimeByCnpj: {
+                  ...form.taxRegimeByCnpj,
+                  [cnpj]: e.target.value as TaxRegime,
+                },
+              })
+            }
+            className="border border-[var(--color-line)] bg-white px-2 py-1"
+          >
+            {TAX_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function RegimeByCcFields({
+  form,
+  onChange,
+}: {
+  form: WizardFormState
+  onChange: (next: WizardFormState) => void
+}) {
+  const ccs = uniqueCostCenters(form.payrollRows)
+  if (ccs.length === 0) return null
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs font-medium text-[var(--color-muted)]">
+        Regime de funcionamento por centro de custo
+      </p>
+      {ccs.map((cc) => (
+        <label key={cc} className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="min-w-24">{cc}</span>
+          <select
+            value={
+              form.regimeFuncionamentoByCc[cc] ??
+              form.defaultRegimeFuncionamento
+            }
+            onChange={(e) =>
+              onChange({
+                ...form,
+                regimeFuncionamentoByCc: {
+                  ...form.regimeFuncionamentoByCc,
+                  [cc]: e.target.value as RegimeFuncionamento,
+                },
+              })
+            }
+            className="border border-[var(--color-line)] bg-white px-2 py-1"
+          >
+            {REGIME_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
   )
 }
