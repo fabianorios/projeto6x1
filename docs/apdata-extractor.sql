@@ -8,7 +8,8 @@
    3. VR: Plano de Benefício tipo 53 (PlanosBeneficiosValores).
    4. VT: Soma ativa (CAS_DtdFim IS NULL) em ConATransportes x MeiosTransportesItens.
           (Ignora ConCalculoATransportes conforme regra canônica).
-   5. Sanitização: Remove ';' de textos para não quebrar CSV exportado pelo Aptools.
+   5. Sanitização: Remove ';', TAB e quebras de linha de textos (cod_cc, desc_cargo, …)
+      para não deslocar colunas no export Aptools TXT (TAB) ou CSV.
    6. Prefixos Aptools: Contratados=CON, Locais=LPC, HorariosJornadas=HRI,
       TiposDiasPonto=TDP, ConATransportes=CAS, MeiosTransportesItens=MRI.
       Estabelecimento: CON_CdiFolha → Folhas → Locais(LPC) → Empresas(EMP).
@@ -57,9 +58,9 @@ SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20))                                           AS cod_empresa,
     CAST(l.LPC_CdiLocal AS VARCHAR(20))                                             AS cod_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '')              AS cnpj_completo,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')                        AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')                        AS cod_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20))                                  AS cod_cargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' ')                     AS desc_cargo,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')                     AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20))                                AS cod_vinculo,
     CAST(ISNULL(c.CON_CdiHorario, 0) AS VARCHAR(20))                                AS cod_horario_atual,
     CASE
@@ -105,9 +106,9 @@ GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''),
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
     c.CON_CdiCargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
     c.CON_CdiVinculo,
     c.CON_CdiHorario,
     cic.cycle_len,
@@ -156,9 +157,9 @@ SELECT
     TO_CHAR(e.EMP_CdiEmpresa)                                                       AS cod_empresa,
     TO_CHAR(l.LPC_CdiLocal)                                                         AS cod_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '')                   AS cnpj_completo,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')                           AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')                           AS cod_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0))                                                 AS cod_cargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' ')                        AS desc_cargo,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')                        AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0))                                               AS cod_vinculo,
     TO_CHAR(NVL(c.CON_CdiHorario, 0))                                               AS cod_horario_atual,
     CASE
@@ -204,9 +205,9 @@ GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''),
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
     c.CON_CdiCargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
     c.CON_CdiVinculo,
     c.CON_CdiHorario,
     cic.cycle_len,

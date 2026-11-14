@@ -14,6 +14,7 @@ export { simulate } from './simulate'
 export {
   PAYROLL_CSV_HEADERS,
   aggregateByCostCenter,
+  detectPayrollDelimiter,
   emptyPayrollExtras,
   estimateWorkDaysPerMonth,
   parseNumberBr,
