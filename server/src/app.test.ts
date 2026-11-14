@@ -175,6 +175,44 @@ describe("API routes", () => {
     assert.equal(res.status, 400);
   });
 
+  it("POST ephemeral allows empty database for mssql", async () => {
+    const res = await app.request("/api/query/ephemeral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engine: "mssql",
+        host: "127.0.0.1",
+        port: 1,
+        database: "",
+        user: "ro",
+        password: "mssql-empty-db-secret",
+      }),
+    });
+    // Unreachable → 502 (schema accepted empty database)
+    assert.equal(res.status, 502);
+    const text = await res.text();
+    assert.ok(!text.includes("mssql-empty-db-secret"));
+  });
+
+  it("POST ephemeral requires database for oracle", async () => {
+    const res = await app.request("/api/query/ephemeral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engine: "oracle",
+        host: "127.0.0.1",
+        port: 1521,
+        database: "   ",
+        user: "ro",
+        password: "oracle-missing-service",
+      }),
+    });
+    assert.equal(res.status, 400);
+    const text = await res.text();
+    assert.ok(!text.includes("oracle-missing-service"));
+    assert.match(text, /database|Service Name|SID|oracle/i);
+  });
+
   it("POST ephemeral catalog mode never echoes password", async () => {
     const res = await app.request("/api/query/ephemeral", {
       method: "POST",

@@ -33,9 +33,11 @@ export const DEFAULT_EPHEMERAL_CREDS_FORM: EphemeralCredsFormValue = {
 }
 
 export function ephemeralFormComplete(v: EphemeralCredsFormValue): boolean {
-  return Boolean(
-    v.database.trim() && v.user.trim() && v.password && v.host.trim(),
-  )
+  const base = Boolean(v.user.trim() && v.password && v.host.trim())
+  if (!base) return false
+  // Oracle: Service Name / SID obrigatório. MSSQL: banco opcional (default do usuário).
+  if (v.engine === 'oracle') return Boolean(v.database.trim())
+  return true
 }
 
 export function EphemeralCredsFields({
@@ -88,11 +90,19 @@ export function EphemeralCredsFields({
           />
         </label>
         <label className="block text-xs">
-          Database / Service
+          {value.engine === 'oracle'
+            ? 'Service Name / SID (Obrigatório)'
+            : 'Banco de Dados (Opcional)'}
           <input
             value={value.database}
             disabled={disabled}
             onChange={(e) => patch({ database: e.target.value })}
+            placeholder={
+              value.engine === 'oracle'
+                ? 'Ex: ORCL ou APDATA'
+                : 'Usa o banco padrão do usuário se vazio'
+            }
+            required={value.engine === 'oracle'}
             className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm"
           />
         </label>

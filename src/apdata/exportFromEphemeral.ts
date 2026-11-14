@@ -58,6 +58,64 @@ function filterByCnpj(
   })
 }
 
+/** Build ExportResult stats from already-mapped payroll rows. */
+export function exportResultFromPayrollRows(
+  payrollRows: ReturnType<typeof mapExtractorAggregatesToPayroll>,
+  parseIssues: PayrollParseIssue[] = [],
+  steps?: ExportProgressStep[],
+  emptyMessage = 'Nenhuma linha válida após o parse.',
+): ExportResult {
+  const escalaCounts: Record<string, number> = {}
+  let contratadosAtivos = 0
+  let salariosZerados = 0
+  let comVtCadastro = 0
+  const cnpjs = new Set<string>()
+  for (const r of payrollRows) {
+    contratadosAtivos += r.quantidade
+    if (!(r.salario > 0)) salariosZerados += 1
+    if (r.vtValorDia != null && r.vtValorDia > 0) comVtCadastro += 1
+    const esc = r.escalaAtual || 'NA'
+    escalaCounts[esc] = (escalaCounts[esc] ?? 0) + r.quantidade
+    const dig = cnpjDigits(r.cnpjCompleto ?? '')
+    if (dig) cnpjs.add(dig)
+  }
+
+  const issues = [...parseIssues]
+  if (payrollRows.length === 0) {
+    issues.push({ line: 0, message: emptyMessage })
+  }
+
+  const doneSteps: ExportProgressStep[] = steps ?? [
+    {
+      id: 'aptools-csv',
+      label: 'CSV Aptools (parse local)',
+      status: 'done',
+      detail: `${payrollRows.length} linha(s)`,
+    },
+  ]
+
+  return {
+    rows: payrollRows,
+    issues,
+    stats: {
+      contratadosAtivos,
+      linhasAgregadas: payrollRows.length,
+      salariosZerados,
+      comVtCadastro,
+      estabelecimentosFiltrados: cnpjs.size,
+      escalaCounts,
+      sample: payrollRows.slice(0, 8).map((r) => ({
+        cargo: r.cargo,
+        centroCusto: r.centroCusto,
+        escala: r.escalaAtual || '—',
+        quantidade: r.quantidade,
+        cargaMensal: r.cargaHorariaMensal,
+      })),
+    },
+    steps: doneSteps,
+  }
+}
+
 /** Map extractor API rows → ExportResult for ApdataFlowPanel ready phase. */
 export function exportResultFromEphemeralRows(
   rawRows: Record<string, unknown>[],
@@ -73,52 +131,26 @@ export function exportResultFromEphemeralRows(
     overrides,
   )
 
-  const escalaCounts: Record<string, number> = {}
-  let contratadosAtivos = 0
-  const cnpjs = new Set<string>()
-  for (const r of rows) {
-    contratadosAtivos += r.quantidade
-    const esc = r.escalaAtual || 'NA'
-    escalaCounts[esc] = (escalaCounts[esc] ?? 0) + r.quantidade
-    const dig = cnpjDigits(r.cnpjCompleto ?? '')
-    if (dig) cnpjs.add(dig)
-  }
-
-  const issues: PayrollParseIssue[] = []
-  if (rows.length === 0) {
-    issues.push({
-      line: 0,
-      message: 'Extrator efêmero não retornou linhas após filtros.',
-    })
-  }
-
-  const doneSteps: ExportProgressStep[] = steps ?? [
-    {
-      id: 'ephemeral-extract',
-      label: 'Extrator efêmero (POST /api/query/ephemeral)',
-      status: 'done',
-      detail: `${rawRows.length} linha(s) agregadas`,
-    },
-  ]
+  const base = exportResultFromPayrollRows(
+    rows,
+    [],
+    steps ?? [
+      {
+        id: 'ephemeral-extract',
+        label: 'Extrator efêmero (POST /api/query/ephemeral)',
+        status: 'done',
+        detail: `${rawRows.length} linha(s) agregadas`,
+      },
+    ],
+    'Extrator efêmero não retornou linhas após filtros.',
+  )
 
   return {
-    rows,
-    issues,
+    ...base,
     stats: {
-      contratadosAtivos,
-      linhasAgregadas: rows.length,
+      ...base.stats,
       salariosZerados,
       comVtCadastro,
-      estabelecimentosFiltrados: cnpjs.size,
-      escalaCounts,
-      sample: rows.slice(0, 8).map((r) => ({
-        cargo: r.cargo,
-        centroCusto: r.centroCusto,
-        escala: r.escalaAtual || '—',
-        quantidade: r.quantidade,
-        cargaMensal: r.cargaHorariaMensal,
-      })),
     },
-    steps: doneSteps,
   }
 }

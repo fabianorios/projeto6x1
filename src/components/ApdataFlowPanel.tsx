@@ -21,7 +21,10 @@ import {
   establishmentsFromEphemeralCatalog,
   ramosFromEphemeralCatalog,
 } from '../apdata/ephemeralCatalog'
-import { exportResultFromEphemeralRows } from '../apdata/exportFromEphemeral'
+import {
+  exportResultFromEphemeralRows,
+  exportResultFromPayrollRows,
+} from '../apdata/exportFromEphemeral'
 import {
   exportPayrollFromApdata,
   loadEstablishmentsFromApdata,
@@ -46,6 +49,8 @@ import {
   loadScenarioBasket,
   type EstrategiaAbsorcao,
   type OperatingHours,
+  type PayrollParseIssue,
+  type PayrollRow,
   type RegimeFuncionamento,
   type ScenarioBasket,
   type ScenarioId,
@@ -1079,7 +1084,25 @@ export function ApdataFlowPanel({
         )}
       </div>
       {showAptools && (
-        <AptoolsExtractModal onClose={() => setShowAptools(false)} />
+        <AptoolsExtractModal
+          onClose={() => setShowAptools(false)}
+          onImported={(rows: PayrollRow[], issues: PayrollParseIssue[]) => {
+            const out = exportResultFromPayrollRows(rows, issues, [
+              {
+                id: 'aptools-csv',
+                label: 'CSV Aptools (parse local)',
+                status: 'done',
+                detail: `${rows.length} linha(s) importadas`,
+              },
+            ])
+            setExported(out)
+            setSteps(out.steps)
+            setError(null)
+            setShowAptools(false)
+            setOriginCard('aptools')
+            setPhase('premissas')
+          }}
+        />
       )}
     </div>
   )

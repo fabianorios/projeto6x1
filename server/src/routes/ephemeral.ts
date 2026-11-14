@@ -29,22 +29,33 @@ import {
 } from "../lib/extractor-map.js";
 import type { ServerConfig } from "../config.js";
 
-const ephemeralSchema = z.object({
-  engine: z.enum(["mssql", "oracle"]),
-  host: z.string().min(1),
-  port: z.number().int().positive().optional(),
-  database: z.string().min(1),
-  user: z.string().min(1),
-  password: z.string().min(1),
-  encrypt: z.boolean().optional(),
-  trustServerCertificate: z.boolean().optional(),
-  mode: z.enum(["extract", "catalog"]).optional().default("extract"),
-  filters: z
-    .object({
-      cnpjs: z.array(z.string()).max(32).optional(),
-    })
-    .optional(),
-});
+const ephemeralSchema = z
+  .object({
+    engine: z.enum(["mssql", "oracle"]),
+    host: z.string().min(1),
+    port: z.number().int().positive().optional(),
+    /** MSSQL: optional. Oracle: Service Name / SID (required via refine). */
+    database: z.string().optional().default(""),
+    user: z.string().min(1),
+    password: z.string().min(1),
+    encrypt: z.boolean().optional(),
+    trustServerCertificate: z.boolean().optional(),
+    mode: z.enum(["extract", "catalog"]).optional().default("extract"),
+    filters: z
+      .object({
+        cnpjs: z.array(z.string()).max(32).optional(),
+      })
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.engine === "oracle" && !data.database?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "database (Service Name / SID) is required for oracle",
+        path: ["database"],
+      });
+    }
+  });
 
 /** Situações excluídas do headcount (parity with client EXCLUDED_SITUACOES). */
 const EXCLUDED_SITUACOES = [0, 2, 3, 99] as const;
@@ -135,7 +146,8 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
       engine: data.engine,
       host: data.host,
       port: data.port ?? defaultPort,
-      database: data.database,
+      // MSSQL: empty → undefined (login default DB). Oracle: required non-empty (refined).
+      database: data.database?.trim() || undefined,
       user: data.user,
       password: data.password,
       encrypt: data.encrypt,

@@ -15,8 +15,11 @@ export type EphemeralCreds = {
   engine: EphemeralEngine;
   host: string;
   port: number;
-  /** MSSQL database name, or Oracle service name. */
-  database: string;
+  /**
+   * MSSQL: optional database (driver uses the login default when omitted).
+   * Oracle: required service name / SID.
+   */
+  database?: string;
   user: string;
   password: string;
   encrypt?: boolean;
@@ -30,11 +33,15 @@ export function createEphemeralClient(
   timeoutMs: number = EPHEMERAL_TIMEOUT_MS,
 ): DbClient {
   if (creds.engine === "oracle") {
+    const serviceName = creds.database?.trim();
+    if (!serviceName) {
+      throw new Error("Oracle service name / SID is required");
+    }
     return new OracleClient(
       {
         host: creds.host,
         port: creds.port,
-        serviceName: creds.database,
+        serviceName,
         user: creds.user,
         password: creds.password,
       },
@@ -46,7 +53,8 @@ export function createEphemeralClient(
     {
       server: creds.host,
       port: creds.port,
-      database: creds.database,
+      // Empty → omit so the driver uses the login's default database.
+      database: creds.database?.trim() || undefined,
       user: creds.user,
       password: creds.password,
       encrypt: creds.encrypt !== false,
