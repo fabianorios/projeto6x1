@@ -6,6 +6,7 @@ import {
   cnpjDigits,
   establishmentKey,
   formatCnpjDisplay,
+  formatEstablishmentLabel,
   folhaToEstablishmentKey,
   isIncludedSituacao,
 } from './cnpj'
@@ -36,16 +37,54 @@ describe('CNPJ formatting', () => {
     )
     assert.equal(establishmentKey('12.345.678', '0001-90'), '12345678000190')
   })
+
+  it('builds Razão · Filial · CNPJ label', () => {
+    assert.equal(
+      formatEstablishmentLabel({
+        razaoSocial: 'Empresa Exemplo Ltda',
+        nomeFilial: 'Filial Centro',
+        prefixo: '12.345.678',
+        sufixo: '0001-90',
+      }),
+      'Empresa Exemplo Ltda · Filial Centro · 12.345.678/0001-90',
+    )
+    assert.equal(
+      formatEstablishmentLabel({
+        razaoSocial: '',
+        nomeFilial: '',
+        prefixo: '12.345.678',
+        sufixo: '0001-90',
+      }),
+      '12.345.678/0001-90',
+    )
+  })
 })
 
 describe('buildEstablishments', () => {
-  it('joins Folhas→Locais→Empresas without names', () => {
+  it('joins Folhas→Locais→Empresas with razão + filial', () => {
     const list = buildEstablishments(
-      [{ empresaId: 1, prefixo: '12.345.678' }],
       [
-        { localId: 10, empresaId: 1, sufixo: '0001-90' },
-        { localId: 11, empresaId: 1, sufixo: '0002-71' },
-        { localId: 99, empresaId: 1, sufixo: '0003-52' }, // no folha
+        {
+          empresaId: 1,
+          prefixo: '12.345.678',
+          razaoSocial: 'Empresa Exemplo Ltda',
+          ramoId: 10,
+        },
+      ],
+      [
+        {
+          localId: 10,
+          empresaId: 1,
+          sufixo: '0001-90',
+          nomeFilial: 'Filial Centro',
+        },
+        {
+          localId: 11,
+          empresaId: 1,
+          sufixo: '0002-71',
+          nomeFilial: 'Filial Norte',
+        },
+        { localId: 99, empresaId: 1, sufixo: '0003-52', nomeFilial: 'Sem Folha' },
       ],
       [
         { folhaId: 100, localId: 10 },
@@ -54,9 +93,15 @@ describe('buildEstablishments', () => {
       ],
     )
     assert.equal(list.length, 2)
-    assert.equal(list[0]!.label, '12.345.678/0001-90')
+    assert.equal(
+      list[0]!.label,
+      'Empresa Exemplo Ltda · Filial Centro · 12.345.678/0001-90',
+    )
+    assert.equal(list[0]!.razaoSocial, 'Empresa Exemplo Ltda')
+    assert.equal(list[0]!.nomeFilial, 'Filial Centro')
+    assert.equal(list[0]!.ramoId, 10)
     assert.deepEqual(list[0]!.folhaIds, [100, 101])
-    assert.equal(list[1]!.label, '12.345.678/0002-71')
+    assert.match(list[1]!.label, /Filial Norte/)
     const map = folhaToEstablishmentKey(list)
     assert.equal(map.get(100), '12345678000190')
     assert.equal(map.get(200), '12345678000271')

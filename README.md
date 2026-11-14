@@ -1,6 +1,6 @@
 # Projeto 6×1 — Simulador de impacto PEC
 
-MVP: wizard (setor → dados → resultados) + motor TypeScript puro + templates varejo/hospital + importação de folha (CSV) com impacto de salários, VR e VT.
+MVP: wizard (setor → dados → resultados) + motor TypeScript puro + templates varejo/hospital/construção/locação + importação de folha (CSV) com impacto de salários, VR e VT. Apdata→Simular: CNPJ com razão/filial + ramos de `RamosAtividadesEmpresas`.
 
 ## Stack
 
@@ -60,7 +60,7 @@ Não há secrets neste repositório. Credenciais de bases de clientes (se houver
 ```
 src/
   engine/       # simulate(), payroll CSV, schedule-policy/suggest, regras
-  templates/    # varejo + hospital
+  templates/    # varejo + hospital + construção + locação
   components/   # wizard + ApdataFlow + Ambientes + Mapeamento + ResultsView
   apdata/       # SELECT review texts + exportPayroll (join client-side)
   api/          # client HTTP → /api (ambientes + query)

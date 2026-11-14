@@ -38,7 +38,9 @@ export function InputsStep({
   onSubmit,
 }: InputsStepProps) {
   const template = form.sectorId
-    ? getTemplate(form.sectorId as 'varejo' | 'hospital')
+    ? getTemplate(
+        form.sectorId as 'varejo' | 'hospital' | 'construcao' | 'locacao',
+      )
     : undefined
 
   const selectedScenario = RULE_VERSIONS[form.scenarioId]
@@ -50,7 +52,11 @@ export function InputsStep({
     if (!form.sectorId) return null
     try {
       return simulate({
-        sector: form.sectorId as 'varejo' | 'hospital',
+        sector: form.sectorId as
+          | 'varejo'
+          | 'hospital'
+          | 'construcao'
+          | 'locacao',
         headcount: form.headcount,
         currentScale: form.currentScale,
         averageMonthlySalary: form.averageMonthlySalary,

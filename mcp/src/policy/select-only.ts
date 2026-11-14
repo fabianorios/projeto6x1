@@ -49,6 +49,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Folhas",
   "Locais",
   "Empresas",
+  /** Ramos de atividade (EMP_CdiRamoAtividadeEmpresa → RAE_*) */
+  "RamosAtividadesEmpresas",
   "HorariosTiposDiasAT",
   "TiposEscalas",
   "TiposEscalasTrabalhos",

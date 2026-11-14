@@ -130,7 +130,7 @@ describe("buildSelectRows", () => {
     );
   });
 
-  it("allowlists Locais and Empresas", () => {
+  it("allowlists Locais, Empresas and RamosAtividadesEmpresas", () => {
     assert.equal(
       buildSelectRows(
         { table: "Locais", columns: ["LOC_CdiLocal"], limit: 5 },
@@ -141,6 +141,17 @@ describe("buildSelectRows", () => {
     assert.equal(
       buildSelectRows(
         { table: "Empresas", columns: ["EMP_CdiEmpresa"], limit: 5 },
+        100,
+      ).ok,
+      true,
+    );
+    assert.equal(
+      buildSelectRows(
+        {
+          table: "RamosAtividadesEmpresas",
+          columns: ["RAE_CdiRamoAtividadeEmpresa", "RAE_D1sRamoAtividadeEmpresa"],
+          limit: 5,
+        },
         100,
       ).ok,
       true,

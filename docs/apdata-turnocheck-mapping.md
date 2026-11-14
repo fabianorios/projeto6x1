@@ -19,8 +19,9 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `Cargos` | 2 225 | `CAR_D1sCargo` → `cargo` |
 | `CentrosCustos` | 2 000 | `CCU_D1sCentroCusto` / `CCU_CosEstrutura` → `centro_custo` |
 | `Folhas` | 437 | Ponte `CON_CdiFolha` → local (filtro CNPJ) |
-| `Locais` | — | `LOC_CdiEmpresa` + `LOC_NusCNPJSufixo` (estabelecimento) |
-| `Empresas` | — | `EMP_NusCNPJPrefixo` (raiz CNPJ) |
+| `Locais` | — | `LOC_CdiEmpresa` + `LOC_NusCNPJSufixo` + `LOC_D1sLocal` (filial) |
+| `Empresas` | — | `EMP_NusCNPJPrefixo` + `EMP_DssEmpresa` (razão) + `EMP_CdiRamoAtividadeEmpresa` |
+| `RamosAtividadesEmpresas` | — | `RAE_D1sRamoAtividadeEmpresa` ← ramos de serviço |
 | `HorariosTiposDiasAT` | 1 072 | Dias de calendário elegíveis a auxílio-transporte |
 | `TiposEscalas` | 8 | Domínio eSocial / tipo de jornada |
 | `TiposDiasCalendarios` | 12 | Dom/Seg…/Feriado/`88`=2ª–6ª |
@@ -39,7 +40,9 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `CON_DtdRescisao IS NULL` | 3 289 | Inclui afastados / outros |
 | `CON_CdiSituacao = 2` (demitido meses ant.) | 63 798 | Excluído (junto com 0, 3, 99) |
 
-**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI Apdata→Simular permite multi-select de estabelecimentos (sem nomes de empresa/local).
+**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI: `EMP_DssEmpresa` · `LOC_D1sLocal` · CNPJ formatado (admin runtime OK; não hardcodar nomes em git).
+
+**Ramos de serviço:** `Empresas.EMP_CdiRamoAtividadeEmpresa` → `RamosAtividadesEmpresas.RAE_CdiRamoAtividadeEmpresa` (`RAE_D1sRamoAtividadeEmpresa`). Lista data-driven no fluxo Apdata→Simular; keywords mapeiam para `SectorId` (varejo / hospital / construção / locação) para atrito.
 
 Entre sit=1 (referência TEMP): 63 horários distintos, 121 CC, 232 cargos; HMV dominante **220h/44h** (613). Classificação de ciclo (sit=1): **5×2-like** 577 · **other** 194 · **6×1** 7.
 
@@ -315,8 +318,9 @@ Calibrar salário quando a TEMP/produção tiver `CON_VlnSalario` ≠ 0. Opciona
 
 ## UI Turnocheck
 
-- **Apdata → Simular** (`src/components/ApdataFlowPanel.tsx` + `src/apdata/`): revisão dos SELECTs B/C/D/E → progresso dos `/api/query/select` (incl. `ConATransportes`, `MeiosTransportesItens`, `HorariosTiposDiasAT`) → agregação `PayrollRow[]` → `ResultsView`. LGPD: sem `nome`; CC por `CCU_CosEstrutura`.
+- **Apdata → Simular** (`src/components/ApdataFlowPanel.tsx` + `src/apdata/`): revisão dos SELECTs B/C/D/E/F/G → progresso dos `/api/query/select` (incl. estabelecimentos com razão/filial, `RamosAtividadesEmpresas`, `ConATransportes`, …) → agregação `PayrollRow[]` → `ResultsView`. LGPD: sem `nome` de pessoa; CC por `CCU_CosEstrutura`; nomes de empresa/local só no filtro CNPJ em runtime.
 - **Mapeamento** (`src/components/MapeamentoPanel.tsx`): tabela CSV←Apdata e SELECTs de referência.
+- **Wizard setores:** varejo, hospital, construção, locação (`src/templates/`).
 
 ## Deploy (VPS, após merge)
 

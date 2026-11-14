@@ -63,7 +63,7 @@ Com import, o motor agrupa por `centro_custo` e aplica o mesmo fator de HC / enc
 |-------|---------------|------|
 | Varejo | 1,00 | Baseline |
 | Hospital | 1,06 | Operação contínua / cargos críticos |
-| Construção / locação | 1,04 / 1,03 | Placeholder até os templates |
+| Construção / locação | 1,04 / 1,03 | Templates + mapeamento a partir de `RamosAtividadesEmpresas` |
 
 ## O que o motor **não** faz
 

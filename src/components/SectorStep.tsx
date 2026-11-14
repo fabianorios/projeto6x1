@@ -18,8 +18,8 @@ export function SectorStep({
       <div>
         <h2 className="text-xl font-semibold">Escolha o segmento</h2>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Pilotos: varejo (rede de lojas) e hospital (plantão / cobertura
-          contínua). Construção e locação entram depois.
+          Segmentos: varejo, hospital, construção e locação. No fluxo Apdata,
+          ramos vêm de <code>RamosAtividadesEmpresas</code>.
         </p>
       </div>
 
