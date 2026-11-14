@@ -397,13 +397,15 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                     </label>
                     <label className="block text-sm sm:col-span-2">
                       <span className="text-[var(--color-muted)]">
-                        VT R$/dia (opcional — externo ao Apdata)
+                        VT R$/dia (override; vazio = ConATransportes ×
+                        MeiosTransportesItens, CAS_DtdFim NULL)
                       </span>
                       <input
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={vtValorDia}
                         onChange={(e) => setVtValorDia(e.target.value)}
                         inputMode="decimal"
+                        placeholder="vazio = cadastro AT"
                       />
                     </label>
                   </div>
@@ -429,6 +431,9 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                 <p className="text-sm text-[var(--color-muted)]">
                   {exported.stats.contratadosAtivos} ativos ·{' '}
                   {exported.stats.linhasAgregadas} linhas agregadas
+                  {exported.stats.comVtCadastro > 0 && (
+                    <> · {exported.stats.comVtCadastro} c/ VT cadastro</>
+                  )}
                   {exported.stats.salariosZerados > 0 && (
                     <> · {exported.stats.salariosZerados} salário(s) zerado(s)</>
                   )}
