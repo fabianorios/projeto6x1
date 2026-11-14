@@ -19,15 +19,16 @@ export class MssqlClient implements DbClient {
 
   async connect(): Promise<void> {
     if (this.pool?.connected) return;
-    if (!this.config.database || !this.config.user) {
+    if (!this.config.user) {
       throw new Error(
-        "MSSQL config incomplete: set MSSQL_DATABASE and MSSQL_USER (and password) in env",
+        "MSSQL config incomplete: set MSSQL_USER (and password) in env",
       );
     }
+    const database = this.config.database?.trim() || undefined;
     this.pool = await new sql.ConnectionPool({
       server: this.config.server,
       port: this.config.port,
-      database: this.config.database,
+      ...(database ? { database } : {}),
       user: this.config.user,
       password: this.config.password,
       options: {

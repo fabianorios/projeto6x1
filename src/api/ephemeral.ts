@@ -14,6 +14,7 @@ export type EphemeralSessionCreds = {
   engine: EphemeralEngine
   host: string
   port: number
+  /** MSSQL: optional (empty = login default). Oracle: Service Name / SID. */
   database: string
   user: string
   /** Held in React state for the panel session; cleared on unmount / mode switch. */

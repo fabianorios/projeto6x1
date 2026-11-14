@@ -8,7 +8,8 @@ export type DbDriver = "mssql" | "oracle";
 export type MssqlConfig = {
   server: string;
   port: number;
-  database: string;
+  /** Optional — when omitted/empty, driver uses the login's default database. */
+  database?: string;
   user: string;
   password: string;
   encrypt: boolean;

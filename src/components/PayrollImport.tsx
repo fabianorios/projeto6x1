@@ -244,7 +244,17 @@ export function PayrollImport({
       ) : null}
 
       {showAptools ? (
-        <AptoolsExtractModal onClose={() => setShowAptools(false)} />
+        <AptoolsExtractModal
+          onClose={() => setShowAptools(false)}
+          onImported={(importedRows, importedIssues) => {
+            setFileName('Aptools CSV')
+            setEncoding(null)
+            setLoadError(null)
+            setPaste('')
+            onParsed(importedRows, importedIssues)
+            setShowAptools(false)
+          }}
+        />
       ) : null}
     </fieldset>
   )
