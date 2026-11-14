@@ -15,15 +15,18 @@ export type ExtractorAggregateRow = {
   carga_semanal_atual: number;
   qtd_colaboradores: number;
   massa_salarial_base: number;
+  /** Legacy scalar; extractor emits 0 — prefer beneficios_agg. */
   vr_dia_medio: number;
   vt_dia_medio: number;
-  /** Debug / Aptools: average passes/day from ConATransportes. */
+  /** Debug / Aptools: average passes/day from ConATransportes (optional). */
   qtd_passes_dia_medio: number;
-  /** VA amount (dia or mês — interpreted via benefitParams.vaModoValor). */
+  /** Legacy VA scalar (optional; prefer beneficios_agg). */
   va_valor_medio: number;
   assist_medica_mes: number;
   assist_odonto_mes: number;
   dias_trabalho_mes_atual: number;
+  /** Dynamic TiposBeneficios: codigo|descricao|valor;… */
+  beneficios_agg: string;
 };
 
 function str(v: unknown, fallback = ""): string {
@@ -72,6 +75,7 @@ export function mapExtractorRows(
     assist_medica_mes: num(pick(row, "assist_medica_mes"), 0),
     assist_odonto_mes: num(pick(row, "assist_odonto_mes"), 0),
     dias_trabalho_mes_atual: num(pick(row, "dias_trabalho_mes_atual"), 22),
+    beneficios_agg: str(pick(row, "beneficios_agg")),
   }));
 }
 
