@@ -221,14 +221,14 @@ export function ResultsView({
               onClick={() => window.print()}
               className="min-h-11 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white"
             >
-              Imprimir / PDF
+              Imprimir PDF
             </button>
             <button
               type="button"
               onClick={() => downloadAhrHandoff(result)}
               className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
             >
-              Exportar para Gerador AHR (JSON)
+              Exportar Gerador AHR JSON
             </button>
             <button
               type="button"
@@ -262,50 +262,99 @@ export function ResultsView({
           </p>
         </div>
 
-        {/* (1) Δ hero above the fold */}
-        <div
-          className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-5 py-5"
-          aria-labelledby="folha-delta-hero"
-        >
-          <p
-            id="folha-delta-hero"
-            className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase"
+        {/* 4 top KPIs */}
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-4 py-4"
+            aria-labelledby="folha-delta-hero"
           >
-            Δ folha mensal (salários)
-          </p>
-          <p
-            className={`mt-2 text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl ${folhaToneClass}`}
-          >
-            <span aria-hidden="true" className="mr-2 text-3xl sm:text-4xl">
-              {folhaDir.arrow}
-            </span>
-            {signedBrl(cost.monthlyDelta)}
-            <span className="ml-2 text-base font-medium text-[var(--color-muted)]">
-              /mês
-            </span>
-          </p>
-          <p className="mt-2 text-sm text-[var(--color-ink)]">
-            <span className="font-medium">{folhaDir.label}</span>
-            <span className="text-[var(--color-muted)]">
-              {' '}
-              · anual {signedBrl(cost.annualDelta)} · HC{' '}
-              {coverage.currentHeadcount} → {coverage.requiredHeadcount} (+
-              {coverage.additionalHeadcount})
-            </span>
-          </p>
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            Baseline {brl(cost.baselineMonthlyPayroll)} → projetado{' '}
-            {brl(cost.projectedMonthlyPayroll)}
-          </p>
-        </div>
-
-        {/* Absorption + HE cap */}
-        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--color-muted)]">
-                Estratégia de absorção
+            <dt
+              id="folha-delta-hero"
+              className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase"
+            >
+              Δ folha / mês
+            </dt>
+            <dd
+              className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl ${folhaToneClass}`}
+            >
+              <span aria-hidden="true" className="mr-1">
+                {folhaDir.arrow}
               </span>
+              {signedBrl(cost.monthlyDelta)}
+            </dd>
+            <dd className="mt-1 text-xs text-[var(--color-muted)]">
+              {folhaDir.label} · anual {signedBrl(cost.annualDelta)}
+            </dd>
+          </div>
+          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+              Headcount
+            </dt>
+            <dd className="mt-2 text-2xl font-semibold tabular-nums">
+              {coverage.currentHeadcount} → {coverage.requiredHeadcount}
+            </dd>
+            <dd className="mt-1 text-xs text-[var(--color-muted)]">
+              +{coverage.additionalHeadcount} adicional
+            </dd>
+          </div>
+          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+              Δ VR / mês
+            </dt>
+            <dd className="mt-2 text-2xl font-semibold tabular-nums">
+              {vr ? signedBrl(vr.monthlyDelta) : '—'}
+            </dd>
+            <dd className="mt-1 text-xs text-[var(--color-muted)]">
+              {vr
+                ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
+                : 'Sem VR na folha'}
+            </dd>
+          </div>
+          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+              Δ VT / mês
+            </dt>
+            <dd className="mt-2 text-2xl font-semibold tabular-nums">
+              {vt ? signedBrl(vt.monthlyDelta) : '—'}
+            </dd>
+            <dd className="mt-1 text-xs text-[var(--color-muted)]">
+              {vt
+                ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
+                : 'Sem VT na folha'}
+            </dd>
+          </div>
+        </dl>
+
+        {/* Absorption strategy tabs */}
+        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Estratégia de absorção
+          </p>
+          <div className="flex flex-wrap gap-2" role="tablist">
+            {ABSORCAO_OPTIONS.map((o) => {
+              const selected = estrategiaAbsorcao === o.id
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => onEstrategiaChange(o.id)}
+                  className={[
+                    'border px-3 py-1.5 text-sm',
+                    selected
+                      ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                      : 'border-[var(--color-line)] text-[var(--color-muted)]',
+                  ].join(' ')}
+                >
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+            <label className="block text-sm sr-only">
+              Estratégia de absorção
               <select
                 value={estrategiaAbsorcao}
                 onChange={(e) =>

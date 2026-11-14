@@ -25,6 +25,7 @@ import { MapeamentoPanel } from './MapeamentoPanel'
 import { ResultsView } from './ResultsView'
 import { SectorStep } from './SectorStep'
 import { InputsStep } from './InputsStep'
+import { SqlStudioPanel } from './SqlStudioPanel'
 
 export type WizardStep = 'sector' | 'inputs' | 'results'
 
@@ -82,6 +83,7 @@ export function WizardShell() {
   const [ambientesOpen, setAmbientesOpen] = useState(false)
   const [mapeamentoOpen, setMapeamentoOpen] = useState(false)
   const [apdataFlowOpen, setApdataFlowOpen] = useState(false)
+  const [sqlStudioOpen, setSqlStudioOpen] = useState(false)
 
   function selectSector(sectorId: string) {
     const template = getTemplate(
@@ -171,7 +173,15 @@ export function WizardShell() {
               onClick={() => setApdataFlowOpen(true)}
               className="rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-teal)]/90 sm:px-3 sm:text-sm"
             >
-              Apdata → Simular
+              Fluxo 4 passos
+            </button>
+            <button
+              type="button"
+              onClick={() => setSqlStudioOpen(true)}
+              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
+              title="Studio SQL"
+            >
+              ⚙️ Studio SQL
             </button>
             <button
               type="button"
@@ -285,6 +295,14 @@ export function WizardShell() {
       <ApdataFlowPanel
         open={apdataFlowOpen}
         onClose={() => setApdataFlowOpen(false)}
+        onManualSheet={() => {
+          setApdataFlowOpen(false)
+          setStep('inputs')
+        }}
+      />
+      <SqlStudioPanel
+        open={sqlStudioOpen}
+        onClose={() => setSqlStudioOpen(false)}
       />
     </div>
   )
