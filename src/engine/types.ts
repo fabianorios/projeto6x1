@@ -13,7 +13,11 @@ import type {
   TaxRegime,
 } from '../types'
 
-export type SectorId = 'varejo' | 'hospital' | 'construcao' | 'locacao'
+/**
+ * Open sector id — market presets (varejo, hospital, …) or any string.
+ * Prefer catalog ids from `sectors.ts`; unknown → custom fallback.
+ */
+export type SectorId = string
 
 /**
  * Versioned normative scenarios (heuristic drafts — not legal text).
@@ -91,6 +95,16 @@ export interface SectorCalibration {
 
 export interface SimulationInput {
   sector: SectorId
+  /**
+   * Display name for diagnosis / PDF (Apdata ramo text or custom segment).
+   * When omitted, UI falls back to the catalog preset label.
+   */
+  sectorLabel?: string
+  /**
+   * Override buffer / absenteísmo % (0–100). When omitted, uses the
+   * catalog preset `defaultBufferPct` for `sector`.
+   */
+  sectorBufferPct?: number
   headcount: number
   /** Current scale label, e.g. "6x1". */
   currentScale: string

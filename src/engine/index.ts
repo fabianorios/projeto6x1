@@ -9,6 +9,20 @@ export {
   RULE_VERSIONS,
   SECTOR_CALIBRATION,
 } from './rules'
+export {
+  ALL_SECTOR_PRESETS,
+  CUSTOM_SECTOR_ID,
+  CUSTOM_SECTOR_PRESET,
+  MARKET_SECTOR_PRESETS,
+  bufferPctToFriction,
+  calibrationFromSector,
+  frictionToBufferPct,
+  getSectorDisplayLabel,
+  isKnownSectorPreset,
+  normalizeSectorId,
+  resolveSectorPreset,
+} from './sectors'
+export type { SectorPreset, SectorPresetId } from './sectors'
 export { parseScale } from './scale'
 export { simulate } from './simulate'
 export {

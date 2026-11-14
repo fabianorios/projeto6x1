@@ -7,6 +7,11 @@ import type {
   SectorId,
 } from './types'
 import { SALARY_DIVISOR_BASELINE } from '../types'
+import {
+  ALL_SECTOR_PRESETS,
+  calibrationFromSector,
+  normalizeSectorId,
+} from './sectors'
 
 /** Build a scale cycle and derive workRatio. */
 export function makeScale(workDays: number, restDays: number): ScaleCycle {
@@ -133,32 +138,13 @@ export const RULE_VERSIONS: Record<ScenarioId, RuleVersion> = {
 
 /**
  * Sector friction on staffing after the scale factor.
- * Hospital continuous ops get a small premium; varejo is baseline.
- * Construcao/locacao templates ship with modest friction.
- * Apdata ramos (RamosAtividadesEmpresas) map onto these SectorIds.
+ * Built from the open catalog (10 presets + custom). Legacy `locacao`
+ * normalizes to `locacao_facilities`. Unknown ids fall back to custom.
  */
-export const SECTOR_CALIBRATION: Record<SectorId, SectorCalibration> = {
-  varejo: {
-    sector: 'varejo',
-    staffingFriction: 1.0,
-    note: 'Rede de lojas: sem atrito extra além do buffer do cenário.',
-  },
-  hospital: {
-    sector: 'hospital',
-    staffingFriction: 1.06,
-    note: 'Operação contínua / cargos críticos: +6% atrito de escala (estimativa).',
-  },
-  construcao: {
-    sector: 'construcao',
-    staffingFriction: 1.04,
-    note: 'Obra / canteiro: +4% atrito de escala (estimativa).',
-  },
-  locacao: {
-    sector: 'locacao',
-    staffingFriction: 1.03,
-    note: 'Locação / frota + apoio: +3% atrito de escala (estimativa).',
-  },
-}
+export const SECTOR_CALIBRATION: Record<string, SectorCalibration> =
+  Object.fromEntries(
+    ALL_SECTOR_PRESETS.map((p) => [p.id, calibrationFromSector(p.id)]),
+  )
 
 export const DEFAULT_DISCLAIMER =
   'Este relatório é uma simulação estimativa para apoio a consultoria. ' +
@@ -173,8 +159,18 @@ export function getRuleVersion(scenarioId: ScenarioId | string): RuleVersion {
   return RULE_VERSIONS[id]
 }
 
-export function getSectorCalibration(sector: SectorId): SectorCalibration {
-  return SECTOR_CALIBRATION[sector]
+export function getSectorCalibration(
+  sector: SectorId,
+  bufferPctOverride?: number | null,
+): SectorCalibration {
+  const normalized = normalizeSectorId(sector)
+  if (
+    bufferPctOverride == null &&
+    Object.prototype.hasOwnProperty.call(SECTOR_CALIBRATION, normalized)
+  ) {
+    return SECTOR_CALIBRATION[normalized]!
+  }
+  return calibrationFromSector(sector, bufferPctOverride)
 }
 
 export function listScenarios(): RuleVersion[] {

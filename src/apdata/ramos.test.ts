@@ -5,16 +5,33 @@ import {
   buildRamos,
   mapRamoToSectorId,
   sectorFromSelectedRamos,
+  segmentLabelFromSelectedRamos,
+  suggestedBufferPctFromSelectedRamos,
 } from './ramos'
 
 describe('mapRamoToSectorId', () => {
-  it('maps generic ramo labels to sectors', () => {
+  it('maps generic ramo labels to nearest catalog presets', () => {
     assert.equal(mapRamoToSectorId('Comércio varejista'), 'varejo')
     assert.equal(mapRamoToSectorId('Serviços hospitalares'), 'hospital')
     assert.equal(mapRamoToSectorId('Construção civil'), 'construcao')
-    assert.equal(mapRamoToSectorId('Locação de equipamentos'), 'locacao')
-    assert.equal(mapRamoToSectorId('Consultoria administrativa'), 'varejo')
-    assert.equal(mapRamoToSectorId(''), 'varejo')
+    assert.equal(
+      mapRamoToSectorId('Locação de equipamentos'),
+      'locacao_facilities',
+    )
+    assert.equal(mapRamoToSectorId('Indústria metalúrgica'), 'industria')
+    assert.equal(mapRamoToSectorId('Logística e transporte'), 'logistica')
+    assert.equal(mapRamoToSectorId('Contact center e SAC'), 'contact_center')
+    assert.equal(
+      mapRamoToSectorId('Hotelaria e restaurantes'),
+      'alimentacao_hotelaria',
+    )
+    assert.equal(mapRamoToSectorId('Agronegócio e pecuária'), 'agronegocio')
+    assert.equal(
+      mapRamoToSectorId('Consultoria administrativa'),
+      'tecnologia_admin',
+    )
+    assert.equal(mapRamoToSectorId('Serviços educacionais'), 'custom')
+    assert.equal(mapRamoToSectorId(''), 'custom')
   })
 })
 
@@ -32,17 +49,24 @@ describe('buildRamos', () => {
     assert.equal(list.find((r) => r.id === 2)?.sectorId, 'hospital')
     assert.equal(list.find((r) => r.id === 3)?.desativado, true)
     assert.equal(list.find((r) => r.id === 4)?.label, 'REF-GEN')
+    // REF-GEN has no keyword → custom
+    assert.equal(list.find((r) => r.id === 4)?.sectorId, 'custom')
     assert.equal(activeRamos(list).length, 3)
   })
 })
 
 describe('sectorFromSelectedRamos', () => {
-  it('uses first selected ramo mapping', () => {
+  it('uses first selected ramo mapping and keeps DB label', () => {
     const ramos = buildRamos([
       { id: 1, label: 'Comércio varejista' },
       { id: 2, label: 'Serviços hospitalares' },
     ])
     assert.equal(sectorFromSelectedRamos(ramos, [2, 1]), 'hospital')
-    assert.equal(sectorFromSelectedRamos(ramos, []), 'varejo')
+    assert.equal(
+      segmentLabelFromSelectedRamos(ramos, [2, 1]),
+      'Serviços hospitalares',
+    )
+    assert.equal(suggestedBufferPctFromSelectedRamos(ramos, [2, 1]), 6)
+    assert.equal(sectorFromSelectedRamos(ramos, []), 'custom')
   })
 })

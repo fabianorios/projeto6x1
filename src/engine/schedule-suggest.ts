@@ -88,6 +88,8 @@ export interface CostCenterDemand {
 
 export interface SuggestSchedulesInput {
   sector: SectorId
+  /** Override catalog buffer/absenteísmo % when set. */
+  sectorBufferPct?: number
   scenarioId: ScenarioId
   currentScale: string
   /** Wizard / org-level coverage. */
@@ -246,7 +248,7 @@ function suggestForCenter(
   demand: CostCenterDemand,
   input: SuggestSchedulesInput,
 ): ScheduleSuggestion[] {
-  const sector = getSectorCalibration(input.sector)
+  const sector = getSectorCalibration(input.sector, input.sectorBufferPct)
   const currentScale = parseScale(input.currentScale)
   const codes = listSuggestableCodes(input.scenarioId, input.currentScale)
 
@@ -395,6 +397,7 @@ export function suggestSchedulesFromSimulation(
 ): ScheduleSuggestionResult {
   return suggestSchedules({
     sector: input.sector,
+    sectorBufferPct: input.sectorBufferPct,
     scenarioId: input.scenarioId,
     currentScale: input.currentScale,
     headcount: input.headcount,

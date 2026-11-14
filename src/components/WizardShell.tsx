@@ -6,6 +6,7 @@ import {
   DEFAULT_TAX_REGIME,
   clearScenarioBasket,
   loadScenarioBasket,
+  resolveSectorPreset,
   simulate,
   upsertSimulationInBasket,
   type EstrategiaAbsorcao,
@@ -31,6 +32,10 @@ export type WizardStep = 'sector' | 'inputs' | 'results'
 
 export interface WizardFormState {
   sectorId: string | null
+  /** Display name (preset label, Apdata ramo text, or custom). */
+  sectorLabel: string
+  /** Buffer / absenteísmo % (0–100). */
+  sectorBufferPct: number
   headcount: number
   currentScale: string
   averageMonthlySalary: number
@@ -49,6 +54,8 @@ export interface WizardFormState {
 
 const initialForm: WizardFormState = {
   sectorId: null,
+  sectorLabel: '',
+  sectorBufferPct: 5,
   headcount: 24,
   currentScale: '6x1',
   averageMonthlySalary: 2200,
@@ -86,13 +93,17 @@ export function WizardShell() {
   const [sqlStudioOpen, setSqlStudioOpen] = useState(false)
 
   function selectSector(sectorId: string) {
-    const template = getTemplate(
-      sectorId as 'varejo' | 'hospital' | 'construcao' | 'locacao',
-    )
-    if (!template) return
+    const template = getTemplate(sectorId)
+    const preset = resolveSectorPreset(sectorId)
     setForm((prev) => ({
       ...prev,
       sectorId,
+      sectorLabel:
+        sectorId === 'custom'
+          ? prev.sectorLabel
+          : template.label,
+      sectorBufferPct: preset.defaultBufferPct,
+      defaultRegimeFuncionamento: preset.defaultRegime,
       ...template.defaults,
     }))
   }
@@ -100,11 +111,9 @@ export function WizardShell() {
   function buildSimInput(state: WizardFormState) {
     if (!state.sectorId) return null
     return {
-      sector: state.sectorId as
-        | 'varejo'
-        | 'hospital'
-        | 'construcao'
-        | 'locacao',
+      sector: state.sectorId,
+      sectorLabel: state.sectorLabel.trim() || undefined,
+      sectorBufferPct: state.sectorBufferPct,
       headcount: state.headcount,
       currentScale: state.currentScale,
       averageMonthlySalary: state.averageMonthlySalary,
@@ -248,7 +257,12 @@ export function WizardShell() {
             <SectorStep
               templates={PILOT_TEMPLATES}
               selectedId={form.sectorId}
+              sectorLabel={form.sectorLabel}
+              sectorBufferPct={form.sectorBufferPct}
               onSelect={selectSector}
+              onSectorMetaChange={(meta) =>
+                setForm((prev) => ({ ...prev, ...meta }))
+              }
               onNext={() => form.sectorId && setStep('inputs')}
             />
           )}

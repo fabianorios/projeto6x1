@@ -1,6 +1,7 @@
 import {
   REGIME_FUNCIONAMENTO_LABELS,
   formatShiftRange,
+  getSectorDisplayLabel,
   summarizeOperatingHours,
   type ResultLineItem,
   type ScenarioBasket,
@@ -73,6 +74,10 @@ export function PrintableReport({
     distribuicaoTurmas,
     charges,
   } = result
+  const sectorDisplay = getSectorDisplayLabel(
+    input.sector,
+    input.sectorLabel,
+  )
 
   const bestLabel =
     basket?.bestScenarioId != null
@@ -129,7 +134,7 @@ export function PrintableReport({
             </h1>
             <p className="mt-2 text-sm text-neutral-700">
               Segmento:{' '}
-              <strong>{template?.label ?? input.sector}</strong>
+              <strong>{sectorDisplay}</strong>
               {' · '}
               Cenário ativo: <strong>{ruleVersion.label}</strong>
               {bestLabel ? (
@@ -384,9 +389,7 @@ export function PrintableReport({
             </div>
             <div className="flex justify-between gap-4 border-b border-neutral-100 py-1">
               <dt className="text-neutral-600">Segmento</dt>
-              <dd className="font-medium">
-                {template?.label ?? input.sector}
-              </dd>
+              <dd className="font-medium">{sectorDisplay}</dd>
             </div>
           </dl>
           {template?.resultBlurb ? (
