@@ -3,7 +3,19 @@
  * Shown for logic review before the live /api/query/select steps run.
  * Runtime uses single-table allowlisted SELECTs + client-side join (exportPayroll).
  * ConCalculoATransportes is intentionally absent.
+ *
+ * CNPJ join (estabelecimento):
+ *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
+ *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
+ *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
+ *   CNPJ = EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo
+ *
+ * Situação: CON_CdiSituacao NOT IN (0, 2, 3, 99) — ativos + afastados etc.
  */
+
+import { EXCLUDED_SITUACOES } from './cnpj'
+
+const SIT_EXCL = EXCLUDED_SITUACOES.join(', ')
 
 export type ReviewSelect = {
   id: string
@@ -46,9 +58,9 @@ GROUP BY hj.HRI_CdiHorario`,
   },
   {
     id: 'C',
-    title: 'C) Export agregado → colunas CSV (sem PII)',
+    title: 'C) Export agregado → CSV + filtro CNPJ (sem PII)',
     purpose:
-      'Agrega sit=1 por cargo × CC (código) × HMV × escala. vt_dias via AT∩trabalho; vt_valor_dia via ConATransportes (não ConCalculo).',
+      `Agrega vínculos com CON_CdiSituacao NOT IN (${SIT_EXCL}) por cargo × CC × HMV × escala, filtráveis por estabelecimento (EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo via Folhas→Locais→Empresas). Sem nomes de empresa/local/pessoa.`,
     sql: `;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
@@ -121,6 +133,8 @@ vt_cad AS (
   GROUP BY a.CAS_CdiContratado
 )
 SELECT
+  emp.EMP_NusCNPJPrefixo                   AS cnpj_prefixo,
+  loc.LOC_NusCNPJSufixo                    AS cnpj_sufixo,
   car.CAR_D1sCargo                         AS cargo,
   AVG(NULLIF(con.CON_VlnSalario, 0))       AS salario,
   hmv.HMV_QtnQuantidadeHoraMes             AS carga_horaria_mensal,
@@ -141,6 +155,9 @@ SELECT
   END                                      AS vt_dias_mes_atual,
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
+JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -149,8 +166,11 @@ LEFT JOIN dbo.Horarios hor ON hor.HOR_CdiHorario = con.CON_CdiHorario
 LEFT JOIN class cl ON cl.HRI_CdiHorario = con.CON_CdiHorario
 LEFT JOIN ciclo_vt cv ON cv.HRI_CdiHorario = con.CON_CdiHorario
 LEFT JOIN vt_cad vt ON vt.CAS_CdiContratado = con.CON_CdiContratado
-WHERE con.CON_CdiSituacao = 1
+WHERE con.CON_CdiSituacao NOT IN (${SIT_EXCL})
+  /* AND estabelecimento IN (@cnpjKeys) — runtime: filtro no cliente */
 GROUP BY
+  emp.EMP_NusCNPJPrefixo,
+  loc.LOC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,
@@ -161,6 +181,21 @@ GROUP BY
   cl.work_days,
   cv.cycle_len,
   cv.at_work_days`,
+  },
+  {
+    id: 'F',
+    title: 'F) Estabelecimentos (CNPJ prefixo + sufixo)',
+    purpose:
+      'Lista estabelecimentos alcançáveis via Folhas→Locais→Empresas. Só IDs + CNPJ — sem EMP_DssEmpresa / LOC_D1sLocal.',
+    sql: `SELECT emp.EMP_CdiEmpresa,
+       emp.EMP_NusCNPJPrefixo,
+       loc.LOC_CdiLocal,
+       loc.LOC_NusCNPJSufixo,
+       fol.FOL_CdiFolha
+FROM dbo.Folhas fol
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
+ORDER BY emp.EMP_NusCNPJPrefixo, loc.LOC_NusCNPJSufixo, fol.FOL_CdiFolha`,
   },
   {
     id: 'D',
@@ -248,7 +283,7 @@ SELECT c.CAS_CdiContratado,
 FROM vt_cad c
 JOIN dbo.Contratados con ON con.CON_CdiContratado = c.CAS_CdiContratado
 LEFT JOIN ciclo_vt v ON v.HRI_CdiHorario = con.CON_CdiHorario
-WHERE con.CON_CdiSituacao = 1`,
+WHERE con.CON_CdiSituacao NOT IN (${SIT_EXCL})`,
   },
 ]
 
@@ -259,6 +294,7 @@ export const LIVE_SELECT_STEPS: {
   table: string
   columns: string[]
   where?: Record<string, string | number | boolean | null>
+  whereNotIn?: Record<string, Array<string | number>>
   note: string
 }[] = [
   {
@@ -300,11 +336,33 @@ export const LIVE_SELECT_STEPS: {
     note: 'Tipos de calendário elegíveis a auxílio-transporte.',
   },
   {
+    id: 'empresas',
+    label: 'Empresas (CNPJ prefixo)',
+    table: 'Empresas',
+    columns: ['EMP_CdiEmpresa', 'EMP_NusCNPJPrefixo'],
+    note: 'Só ID + EMP_NusCNPJPrefixo — sem EMP_DssEmpresa.',
+  },
+  {
+    id: 'locais',
+    label: 'Locais (CNPJ sufixo)',
+    table: 'Locais',
+    columns: ['LOC_CdiLocal', 'LOC_CdiEmpresa', 'LOC_NusCNPJSufixo'],
+    note: 'Estabelecimento: LOC_NusCNPJSufixo. Sem LOC_D1sLocal.',
+  },
+  {
+    id: 'folhas',
+    label: 'Folhas (ponte contratado → local)',
+    table: 'Folhas',
+    columns: ['FOL_CdiFolha', 'FOL_CdiLocal'],
+    note: 'CON_CdiFolha → FOL_CdiFolha → FOL_CdiLocal.',
+  },
+  {
     id: 'contratados',
-    label: 'Contratados ativos (sit=1)',
+    label: `Contratados (sit NOT IN ${SIT_EXCL})`,
     table: 'Contratados',
     columns: [
       'CON_CdiContratado',
+      'CON_CdiFolha',
       'CON_CdiCargo',
       'CON_CdiCentroCusto',
       'CON_CdiQuantidadeHoraMes',
@@ -313,8 +371,8 @@ export const LIVE_SELECT_STEPS: {
       'CON_VlnSalarioIntegral',
       'CON_CdiSituacao',
     ],
-    where: { CON_CdiSituacao: 1 },
-    note: 'Sem CON_DssNome / CPF — só IDs e valores.',
+    whereNotIn: { CON_CdiSituacao: [...EXCLUDED_SITUACOES] },
+    note: 'Exclui sit 0/2/3/99. Inclui ativos + afastados. Sem nome/CPF.',
   },
   {
     id: 'cargos',

@@ -12,6 +12,7 @@ export type SelectQueryInput = {
   table: string
   columns?: string[]
   where?: Record<string, string | number | boolean | null>
+  whereNotIn?: Record<string, Array<string | number>>
   orderBy?: string
   orderDir?: 'ASC' | 'DESC'
   limit?: number

@@ -12,11 +12,18 @@ export type SelectRowsInput = {
   columns?: string[];
   /** Equality filters only; values bound as parameters. */
   where?: Record<string, string | number | boolean | null>;
+  /**
+   * NOT IN filters; values bound as parameters.
+   * Max 32 values per column (defense in depth).
+   */
+  whereNotIn?: Record<string, Array<string | number>>;
   orderBy?: string;
   /** ASC (default) or DESC when orderBy is set. */
   orderDir?: "ASC" | "DESC";
   limit?: number;
 };
+
+const MAX_NOT_IN_VALUES = 32;
 
 export type BuiltSelect =
   | {
@@ -54,19 +61,55 @@ export function buildSelectRows(
   }
 
   const whereParts: string[] = [];
+  let whereIdx = 0;
   if (input.where) {
-    let i = 0;
     for (const [col, value] of Object.entries(input.where)) {
       const id = assertSafeIdentifier(col, "where column");
       if (!id.ok) return id;
-      const key = `w${i}`;
-      i += 1;
+      const key = `w${whereIdx}`;
+      whereIdx += 1;
       if (value === null) {
         whereParts.push(`${col.trim()} IS NULL`);
       } else {
         whereParts.push(`${col.trim()} = @${key}`);
         params[key] = value;
       }
+    }
+  }
+
+  if (input.whereNotIn) {
+    for (const [col, values] of Object.entries(input.whereNotIn)) {
+      const id = assertSafeIdentifier(col, "whereNotIn column");
+      if (!id.ok) return id;
+      if (!Array.isArray(values) || values.length === 0) {
+        return { ok: false, reason: `whereNotIn.${col.trim()}: empty list` };
+      }
+      if (values.length > MAX_NOT_IN_VALUES) {
+        return {
+          ok: false,
+          reason: `whereNotIn.${col.trim()}: max ${MAX_NOT_IN_VALUES} values`,
+        };
+      }
+      const placeholders: string[] = [];
+      for (const value of values) {
+        if (typeof value !== "string" && typeof value !== "number") {
+          return {
+            ok: false,
+            reason: `whereNotIn.${col.trim()}: values must be string or number`,
+          };
+        }
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          return {
+            ok: false,
+            reason: `whereNotIn.${col.trim()}: invalid number`,
+          };
+        }
+        const key = `w${whereIdx}`;
+        whereIdx += 1;
+        placeholders.push(`@${key}`);
+        params[key] = value;
+      }
+      whereParts.push(`${col.trim()} NOT IN (${placeholders.join(", ")})`);
     }
   }
 

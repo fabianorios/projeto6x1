@@ -47,6 +47,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Cargos",
   "QuantidadesHorasMes",
   "Folhas",
+  "Locais",
+  "Empresas",
   "HorariosTiposDiasAT",
   "TiposEscalas",
   "TiposEscalasTrabalhos",

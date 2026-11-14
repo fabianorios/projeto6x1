@@ -18,6 +18,12 @@ import {
   type CycleStats,
   type EscalaCode,
 } from './classify'
+import {
+  buildEstablishments,
+  folhaToEstablishmentKey,
+  isIncludedSituacao,
+  type Establishment,
+} from './cnpj'
 import { LIVE_SELECT_STEPS } from './selects'
 
 export type ExportProgressStep = {
@@ -37,6 +43,11 @@ export type ExportOverrides = {
   environmentId?: string
   /** Max rows per select (server clamps to SQL_MAX_ROWS). */
   limit?: number
+  /**
+   * Establishment keys (digits) to include.
+   * Empty / undefined → all establishments reachable via Folhas→Locais→Empresas.
+   */
+  selectedCnpjKeys?: string[]
 }
 
 export type ExportStats = {
@@ -44,6 +55,7 @@ export type ExportStats = {
   linhasAgregadas: number
   salariosZerados: number
   comVtCadastro: number
+  estabelecimentosFiltrados: number
   escalaCounts: Record<string, number>
   /** LGPD-safe preview: cargo / CC code / escala / qty only — no names. */
   sample: {
@@ -107,6 +119,50 @@ function patchStep(
 }
 
 /**
+ * List establishments (CNPJ prefix+suffix) reachable via Folhas→Locais→Empresas.
+ * LGPD: no company/local names — only IDs + CNPJ digits.
+ */
+export async function loadEstablishmentsFromApdata(opts: {
+  environmentId?: string
+  limit?: number
+} = {}): Promise<Establishment[]> {
+  const limit = opts.limit ?? 5000
+  const envOpts = { environmentId: opts.environmentId, limit }
+  const [empresasRes, locaisRes, folhasRes] = await Promise.all([
+    selectRows({
+      ...envOpts,
+      table: 'Empresas',
+      columns: ['EMP_CdiEmpresa', 'EMP_NusCNPJPrefixo'],
+    }),
+    selectRows({
+      ...envOpts,
+      table: 'Locais',
+      columns: ['LOC_CdiLocal', 'LOC_CdiEmpresa', 'LOC_NusCNPJSufixo'],
+    }),
+    selectRows({
+      ...envOpts,
+      table: 'Folhas',
+      columns: ['FOL_CdiFolha', 'FOL_CdiLocal'],
+    }),
+  ])
+  return buildEstablishments(
+    empresasRes.rows.map((r) => ({
+      empresaId: num(r.EMP_CdiEmpresa) ?? 0,
+      prefixo: str(r.EMP_NusCNPJPrefixo),
+    })),
+    locaisRes.rows.map((r) => ({
+      localId: num(r.LOC_CdiLocal) ?? 0,
+      empresaId: num(r.LOC_CdiEmpresa) ?? 0,
+      sufixo: str(r.LOC_NusCNPJSufixo),
+    })),
+    folhasRes.rows.map((r) => ({
+      folhaId: num(r.FOL_CdiFolha) ?? 0,
+      localId: num(r.FOL_CdiLocal) ?? 0,
+    })),
+  )
+}
+
+/**
  * Run the Apdata export against the active Ambientes connection.
  */
 export async function exportPayrollFromApdata(
@@ -135,6 +191,7 @@ export async function exportPayrollFromApdata(
       table: def.table,
       columns: def.columns,
       where: def.where,
+      whereNotIn: def.whereNotIn,
     })
     steps = patchStep(
       steps,
@@ -154,12 +211,38 @@ export async function exportPayrollFromApdata(
     const jornadasRes = await runStep('jornadas')
     const horariosRes = await runStep('horarios')
     const atMaskRes = await runStep('at-mask')
+    const empresasRes = await runStep('empresas')
+    const locaisRes = await runStep('locais')
+    const folhasRes = await runStep('folhas')
     const contratadosRes = await runStep('contratados')
     const cargosRes = await runStep('cargos')
     const centrosRes = await runStep('centros')
     const hmvRes = await runStep('hmv')
     const conAtRes = await runStep('con-at')
     const meiosRes = await runStep('meios-itens')
+
+    const establishments = buildEstablishments(
+      empresasRes.rows.map((r) => ({
+        empresaId: num(r.EMP_CdiEmpresa) ?? 0,
+        prefixo: str(r.EMP_NusCNPJPrefixo),
+      })),
+      locaisRes.rows.map((r) => ({
+        localId: num(r.LOC_CdiLocal) ?? 0,
+        empresaId: num(r.LOC_CdiEmpresa) ?? 0,
+        sufixo: str(r.LOC_NusCNPJSufixo),
+      })),
+      folhasRes.rows.map((r) => ({
+        folhaId: num(r.FOL_CdiFolha) ?? 0,
+        localId: num(r.FOL_CdiLocal) ?? 0,
+      })),
+    )
+    const folhaCnpj = folhaToEstablishmentKey(establishments)
+    const selectedKeys = new Set(
+      (overrides.selectedCnpjKeys ?? [])
+        .map((k) => k.trim())
+        .filter(Boolean),
+    )
+    const filterByCnpj = selectedKeys.size > 0
 
     steps = patchStep(
       steps,
@@ -287,6 +370,7 @@ export async function exportPayrollFromApdata(
     let salariosZerados = 0
     let contratadosAtivos = 0
     let comVtCadastro = 0
+    const usedEstKeys = new Set<string>()
 
     const vtOverride =
       overrides.vtValorDia !== undefined &&
@@ -296,7 +380,13 @@ export async function exportPayrollFromApdata(
         : null
 
     for (const r of contratadosRes.rows) {
-      if (num(r.CON_CdiSituacao) !== 1) continue
+      if (!isIncludedSituacao(num(r.CON_CdiSituacao))) continue
+
+      const folhaId = num(r.CON_CdiFolha)
+      const estKey = folhaId !== null ? folhaCnpj.get(folhaId) : undefined
+      if (!estKey) continue
+      if (filterByCnpj && !selectedKeys.has(estKey)) continue
+      usedEstKeys.add(estKey)
       contratadosAtivos += 1
 
       const contratadoId = num(r.CON_CdiContratado)
@@ -447,7 +537,7 @@ export async function exportPayrollFromApdata(
       issues.push({
         line: 0,
         message:
-          'Nenhuma linha agregada. Verifique ambiente ativo e Contratados sit=1.',
+          'Nenhuma linha agregada. Verifique ambiente, filtro CNPJ e situações (exclui 0/2/3/99).',
       })
     }
     if (salariosZerados > 0 && defaultSal <= 0) {
@@ -470,7 +560,7 @@ export async function exportPayrollFromApdata(
       'aggregate',
       {
         status: 'done',
-        detail: `${rows.length} linha(s) · ${contratadosAtivos} ativo(s) · ${comVtCadastro} c/ VT`,
+        detail: `${rows.length} linha(s) · ${contratadosAtivos} vínculo(s) · ${usedEstKeys.size} CNPJ · ${comVtCadastro} c/ VT`,
       },
       onProgress,
     )
@@ -483,6 +573,7 @@ export async function exportPayrollFromApdata(
         linhasAgregadas: rows.length,
         salariosZerados,
         comVtCadastro,
+        estabelecimentosFiltrados: usedEstKeys.size,
         escalaCounts,
         sample,
       },
