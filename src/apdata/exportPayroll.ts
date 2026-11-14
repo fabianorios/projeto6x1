@@ -2,7 +2,7 @@
  * Apdata → PayrollRow[] via /api/query/select (single-table) + client join.
  * LGPD: never selects CON_DssNome; centro_custo uses CCU_CosEstrutura.
  * VT: ConATransportes (CAS_DtdFim IS NULL) × MeiosTransportesItens;
- *     days = HorariosTiposDiasAT ∩ TIP_OplTrabalho=1. No ConCalculoATransportes.
+ *     days = HorariosTiposDiasAT ∩ TDP_OplTrabalho=1. No ConCalculoATransportes.
  */
 
 import { selectRows } from '../api/query'
@@ -135,7 +135,7 @@ function patchStep(
 
 /**
  * List establishments reachable via Folhas→Locais→Empresas.
- * Labels: EMP_DssEmpresa · LOC_D1sLocal · CNPJ (admin runtime OK).
+ * Labels: EMP_DssEmpresa · LPC_D1sLocal · CNPJ (admin runtime OK).
  * UI counts: colaboradores grouped by CON_CdiVinculo → VIN_D1sVinculo
  * (CON_CdiSituacao NOT IN (0,2,3,99)).
  */
@@ -161,10 +161,10 @@ export async function loadEstablishmentsFromApdata(opts: {
         ...envOpts,
         table: 'Locais',
         columns: [
-          'LOC_CdiLocal',
-          'LOC_CdiEmpresa',
-          'LOC_D1sLocal',
-          'LOC_NusCNPJSufixo',
+          'LPC_CdiLocal',
+          'LPC_CdiEmpresa',
+          'LPC_D1sLocal',
+          'LPC_NusCNPJSufixo',
         ],
       }),
       selectRows({
@@ -192,10 +192,10 @@ export async function loadEstablishmentsFromApdata(opts: {
       ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
     })),
     locaisRes.rows.map((r) => ({
-      localId: num(r.LOC_CdiLocal) ?? 0,
-      empresaId: num(r.LOC_CdiEmpresa) ?? 0,
-      sufixo: str(r.LOC_NusCNPJSufixo),
-      nomeFilial: str(r.LOC_D1sLocal),
+      localId: num(r.LPC_CdiLocal) ?? 0,
+      empresaId: num(r.LPC_CdiEmpresa) ?? 0,
+      sufixo: str(r.LPC_NusCNPJSufixo),
+      nomeFilial: str(r.LPC_D1sLocal),
     })),
     folhasRes.rows.map((r) => ({
       folhaId: num(r.FOL_CdiFolha) ?? 0,
@@ -312,10 +312,10 @@ export async function exportPayrollFromApdata(
         ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
       })),
       locaisRes.rows.map((r) => ({
-        localId: num(r.LOC_CdiLocal) ?? 0,
-        empresaId: num(r.LOC_CdiEmpresa) ?? 0,
-        sufixo: str(r.LOC_NusCNPJSufixo),
-        nomeFilial: str(r.LOC_D1sLocal),
+        localId: num(r.LPC_CdiLocal) ?? 0,
+        empresaId: num(r.LPC_CdiEmpresa) ?? 0,
+        sufixo: str(r.LPC_NusCNPJSufixo),
+        nomeFilial: str(r.LPC_D1sLocal),
       })),
       folhasRes.rows.map((r) => ({
         folhaId: num(r.FOL_CdiFolha) ?? 0,
@@ -349,8 +349,8 @@ export async function exportPayrollFromApdata(
     )
 
     const tipos = tiposRes.rows.map((r) => ({
-      id: num(r.TIP_CdiTipoDiaPonto) ?? 0,
-      trabalho: num(r.TIP_OplTrabalho) ?? 0,
+      id: num(r.TDP_CdiTipoDiaPonto) ?? 0,
+      trabalho: num(r.TDP_OplTrabalho) ?? 0,
     }))
     const jornadas = jornadasRes.rows.map((r) => ({
       horarioId: num(r.HRI_CdiHorario) ?? 0,

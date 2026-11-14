@@ -31,15 +31,17 @@ describe("extractor SQL", () => {
     assert.equal(Object.keys(params).length, 1);
   });
 
-  it("Aptools script includes isolation preamble", () => {
-    assert.match(
-      getAptoolsExtractorScript("mssql"),
-      /SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED/i,
-    );
-    assert.match(
-      getAptoolsExtractorScript("oracle"),
-      /SET TRANSACTION READ ONLY/i,
-    );
+  it("Aptools script is SELECT-only without SET TRANSACTION", () => {
+    const mssql = getAptoolsExtractorScript("mssql");
+    const oracle = getAptoolsExtractorScript("oracle");
+    assert.match(mssql, /FROM\s+Contratados\b/i);
+    assert.match(mssql, /LPC_CdiLocal/);
+    assert.match(mssql, /CAS_CdiContratado/);
+    assert.match(mssql, /TDP_OplTrabalho/);
+    assert.ok(!/SET\s+TRANSACTION/i.test(mssql));
+    assert.ok(!/SET\s+TRANSACTION/i.test(oracle));
+    assert.ok(!/\bContratos\b/i.test(mssql));
+    assert.ok(!/\bLOC_/i.test(mssql));
   });
 });
 

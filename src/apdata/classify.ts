@@ -49,7 +49,7 @@ export function calendarMatchesAtMask(
 }
 
 /**
- * VT days/month: AT-eligible calendar types ∩ jornada work days (TIP_OplTrabalho=1).
+ * VT days/month: AT-eligible calendar types ∩ jornada work days (TDP_OplTrabalho=1).
  * Returns null when the horário has no AT mask or zero intersecting work days.
  */
 export function estimateVtDaysFromAtAndCycle(

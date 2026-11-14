@@ -99,7 +99,7 @@ describe("allowlist", () => {
       "HorariosTiposDiasAT",
       "ConATransportes",
       "MeiosTransportesItens",
-      "Contratos",
+      "TiposDiasPonto",
       "PlanosBeneficiosValores",
     ]) {
       assert.equal(isAllowlistedTable(t), true, t);

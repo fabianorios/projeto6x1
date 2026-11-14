@@ -133,7 +133,7 @@ describe("buildSelectRows", () => {
   it("allowlists Locais, Empresas, Vinculos and RamosAtividadesEmpresas", () => {
     assert.equal(
       buildSelectRows(
-        { table: "Locais", columns: ["LOC_CdiLocal"], limit: 5 },
+        { table: "Locais", columns: ["LPC_CdiLocal"], limit: 5 },
         100,
       ).ok,
       true,

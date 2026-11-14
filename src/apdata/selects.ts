@@ -6,10 +6,10 @@
  *
  * CNPJ join (estabelecimento):
  *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
- *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
- *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
- *   CNPJ = EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo
- *   Labels: EMP_DssEmpresa (razão) · LOC_D1sLocal (filial) · CNPJ
+ *   Folhas.FOL_CdiLocal → Locais.LPC_CdiLocal
+ *   Locais.LPC_CdiEmpresa → Empresas.EMP_CdiEmpresa
+ *   CNPJ = EMP_NusCNPJPrefixo + LPC_NusCNPJSufixo
+ *   Labels: EMP_DssEmpresa (razão) · LPC_D1sLocal (filial) · CNPJ
  *   UI count: vínculos (COUNT contratados sit NOT IN 0/2/3/99), not folhas
  *
  * Ramos de serviço:
@@ -40,26 +40,26 @@ export const REVIEW_SELECTS: ReviewSelect[] = [
       'Deriva escala_atual (6x1 / 5x2 / 4x3 / other) a partir de HorariosJornadas × TiposDiasPonto.',
     sql: `SELECT hj.HRI_CdiHorario,
        COUNT(*) AS cycle_len,
-       SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-       SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
+       SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+       SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
        CASE
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
            THEN '6x1'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
            THEN '5x2'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
-          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
+          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
            THEN '4x3'
          ELSE 'other'
        END AS escala_atual
 FROM dbo.HorariosJornadas hj
 JOIN dbo.TiposDiasPonto td
-  ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
 WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
 GROUP BY hj.HRI_CdiHorario`,
   },
@@ -67,14 +67,14 @@ GROUP BY hj.HRI_CdiHorario`,
     id: 'C',
     title: 'C) Export agregado → CSV + filtro CNPJ (sem PII)',
     purpose:
-      `Agrega vínculos com CON_CdiSituacao NOT IN (${SIT_EXCL}) por cargo × CC × HMV × escala, filtráveis por estabelecimento (EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo via Folhas→Locais→Empresas). Sem nomes de empresa/local/pessoa.`,
+      `Agrega vínculos com CON_CdiSituacao NOT IN (${SIT_EXCL}) por cargo × CC × HMV × escala, filtráveis por estabelecimento (EMP_NusCNPJPrefixo + LPC_NusCNPJSufixo via Folhas→Locais→Empresas). Sem nomes de empresa/local/pessoa.`,
     sql: `;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
-         SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-         SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
+         SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+         SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -97,7 +97,7 @@ ciclo_vt AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
          SUM(CASE
-               WHEN td.TIP_OplTrabalho = 1
+               WHEN td.TDP_OplTrabalho = 1
                 AND (
                   EXISTS (
                     SELECT 1 FROM at_mask m
@@ -116,7 +116,7 @@ ciclo_vt AS (
                THEN 1 ELSE 0
              END) AS at_work_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -141,7 +141,7 @@ vt_cad AS (
 )
 SELECT
   emp.EMP_NusCNPJPrefixo                   AS cnpj_prefixo,
-  loc.LOC_NusCNPJSufixo                    AS cnpj_sufixo,
+  loc.LPC_NusCNPJSufixo                    AS cnpj_sufixo,
   car.CAR_D1sCargo                         AS cargo,
   AVG(NULLIF(con.CON_VlnSalario, 0))       AS salario,
   hmv.HMV_QtnQuantidadeHoraMes             AS carga_horaria_mensal,
@@ -163,8 +163,8 @@ SELECT
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
-JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -177,7 +177,7 @@ WHERE con.CON_CdiSituacao NOT IN (${SIT_EXCL})
   /* AND estabelecimento IN (@cnpjKeys) — runtime: filtro no cliente */
 GROUP BY
   emp.EMP_NusCNPJPrefixo,
-  loc.LOC_NusCNPJSufixo,
+  loc.LPC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,
@@ -193,20 +193,20 @@ GROUP BY
     id: 'F',
     title: 'F) Estabelecimentos (razão · filial · CNPJ + totais por vínculo)',
     purpose:
-      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LOC_D1sLocal · CNPJ + COUNT colaboradores agrupados por CON_CdiVinculo → Vinculos.VIN_D1sVinculo (sit NOT IN 0/2/3/99). Não é TiposContratos — Contratados não tem CON_CdiTipoContrato. Admin runtime OK; não hardcodar nomes em git.',
+      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LPC_D1sLocal · CNPJ + COUNT colaboradores agrupados por CON_CdiVinculo → Vinculos.VIN_D1sVinculo (sit NOT IN 0/2/3/99). Não é TiposContratos — Contratados não tem CON_CdiTipoContrato. Admin runtime OK; não hardcodar nomes em git.',
     sql: `SELECT emp.EMP_CdiEmpresa,
        emp.EMP_DssEmpresa,
        emp.EMP_NusCNPJPrefixo,
        emp.EMP_CdiRamoAtividadeEmpresa,
-       loc.LOC_CdiLocal,
-       loc.LOC_D1sLocal,
-       loc.LOC_NusCNPJSufixo,
+       loc.LPC_CdiLocal,
+       loc.LPC_D1sLocal,
+       loc.LPC_NusCNPJSufixo,
        con.CON_CdiVinculo,
        vin.VIN_D1sVinculo,
        COUNT(con.CON_CdiContratado) AS n_colaboradores
 FROM dbo.Folhas fol
-JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
 LEFT JOIN dbo.Contratados con
   ON con.CON_CdiFolha = fol.FOL_CdiFolha
  AND con.CON_CdiSituacao NOT IN (${SIT_EXCL})
@@ -215,12 +215,12 @@ GROUP BY emp.EMP_CdiEmpresa,
          emp.EMP_DssEmpresa,
          emp.EMP_NusCNPJPrefixo,
          emp.EMP_CdiRamoAtividadeEmpresa,
-         loc.LOC_CdiLocal,
-         loc.LOC_D1sLocal,
-         loc.LOC_NusCNPJSufixo,
+         loc.LPC_CdiLocal,
+         loc.LPC_D1sLocal,
+         loc.LPC_NusCNPJSufixo,
          con.CON_CdiVinculo,
          vin.VIN_D1sVinculo
-ORDER BY emp.EMP_DssEmpresa, loc.LOC_D1sLocal, n_colaboradores DESC`,
+ORDER BY emp.EMP_DssEmpresa, loc.LPC_D1sLocal, n_colaboradores DESC`,
   },
   {
     id: 'G',
@@ -266,7 +266,7 @@ GROUP BY pb.PLB_CdiPlanoBeneficio`,
     id: 'E',
     title: 'E) VT valor/dia + dias (ConATransportes × AT ∩ trabalho)',
     purpose:
-      'vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario) com CAS_DtdFim IS NULL. Dias = HorariosTiposDiasAT ∩ TIP_OplTrabalho=1. Sem ConCalculoATransportes.',
+      'vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario) com CAS_DtdFim IS NULL. Dias = HorariosTiposDiasAT ∩ TDP_OplTrabalho=1. Sem ConCalculoATransportes.',
     sql: `;WITH preco AS (
   SELECT MRI_CdiMeioTransporte, MRI_VlnUnitario,
          ROW_NUMBER() OVER (
@@ -295,7 +295,7 @@ ciclo_vt AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
          SUM(CASE
-               WHEN td.TIP_OplTrabalho = 1
+               WHEN td.TDP_OplTrabalho = 1
                 AND (
                   EXISTS (
                     SELECT 1 FROM at_mask m
@@ -315,7 +315,7 @@ ciclo_vt AS (
              END) AS at_work_days
   FROM dbo.HorariosJornadas hj
   JOIN dbo.TiposDiasPonto td
-    ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 )
@@ -346,7 +346,7 @@ export const LIVE_SELECT_STEPS: {
     id: 'tipos-dia',
     label: 'TiposDiasPonto (trabalho vs folga)',
     table: 'TiposDiasPonto',
-    columns: ['TIP_CdiTipoDiaPonto', 'TIP_OplTrabalho'],
+    columns: ['TDP_CdiTipoDiaPonto', 'TDP_OplTrabalho'],
     note: 'Flags T/F — sem descrições de cliente.',
   },
   {
@@ -397,12 +397,12 @@ export const LIVE_SELECT_STEPS: {
     label: 'Locais (filial + CNPJ sufixo)',
     table: 'Locais',
     columns: [
-      'LOC_CdiLocal',
-      'LOC_CdiEmpresa',
-      'LOC_D1sLocal',
-      'LOC_NusCNPJSufixo',
+      'LPC_CdiLocal',
+      'LPC_CdiEmpresa',
+      'LPC_D1sLocal',
+      'LPC_NusCNPJSufixo',
     ],
-    note: 'LOC_D1sLocal = nome da filial; LOC_NusCNPJSufixo = sufixo CNPJ.',
+    note: 'LPC_D1sLocal = nome da filial; LPC_NusCNPJSufixo = sufixo CNPJ.',
   },
   {
     id: 'ramos',

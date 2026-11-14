@@ -44,8 +44,6 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Jornadas",
   "TiposDiasPonto",
   "Contratados",
-  /** Canonical extractor uses Contratos (Apdata folha) */
-  "Contratos",
   "CentrosCustos",
   "Cargos",
   "QuantidadesHorasMes",
