@@ -62,6 +62,20 @@ export {
 } from './crew-distribution'
 export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
 export {
+  COVERAGE_WEEKDAYS,
+  COVERAGE_WEEKDAY_LABELS,
+  coberturaPropostaFromCrews,
+  coberturaPropostaFromDistribution,
+  compareCoverageDay,
+  deriveCoberturaAtualPorDia,
+  emptyCoberturaPorDia,
+} from './coverage-days'
+export type {
+  CoberturaPorDia,
+  CoverageCompareTone,
+  CoverageWeekday,
+} from './coverage-days'
+export {
   cascadeHeOnDivisor,
   planAbsorption,
 } from './absorption'

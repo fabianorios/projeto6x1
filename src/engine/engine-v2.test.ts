@@ -207,4 +207,26 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.distribuicaoTurmas.regime, 'CONTINUO_7D')
     assert.equal(r.distribuicaoTurmas.crewCount, 7)
   })
+
+  it('attaches coberturaAtualPorDia per cost center from payroll', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_horario_atual',
+      'Operador;2200;220;44;Loja-01;14;6x1;42',
+    ].join('\n')
+    const { rows } = parsePayrollCsv(csv)
+    const r = simulate(
+      baseInput({
+        payrollRows: rows,
+        defaultRegimeFuncionamento: 'SEG_SAB',
+      }),
+    )
+    assert.equal(r.byCostCenter.length, 1)
+    const cc = r.byCostCenter[0]
+    assert.equal(cc.codHorarioAtual, '42')
+    assert.equal(cc.escalaAtual, '6x1')
+    assert.equal(cc.cargaSemanalAtual, 44)
+    assert.ok(cc.coberturaAtualPorDia)
+    assert.equal(cc.coberturaAtualPorDia!.seg, 14)
+    assert.equal(cc.coberturaAtualPorDia!.dom, 0)
+  })
 })

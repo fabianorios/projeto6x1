@@ -7,6 +7,7 @@ import {
   distributeCrews,
   resolveRegime,
 } from './crew-distribution'
+import { deriveCoberturaAtualPorDia } from './coverage-days'
 import {
   aggregateByCostCenter,
   estimateWorkDaysPerMonth,
@@ -696,6 +697,13 @@ function buildCostCenterResults(
         input.defaultRegimeFuncionamento,
     )
     const distribuicaoTurmas = distributeCrews(regime, effectiveRequired)
+    const escalaLabel = agg.escalaAtual ?? input.currentScale
+    const escalaCycle = parseScale(escalaLabel)
+    const coberturaAtualPorDia = deriveCoberturaAtualPorDia(
+      agg.headcount,
+      escalaCycle,
+      regime,
+    )
 
     return {
       centroCusto: agg.centroCusto,
@@ -712,6 +720,10 @@ function buildCostCenterResults(
       assistOdontoMonthly: assistOdontoProposed,
       regimeFuncionamento: regime,
       distribuicaoTurmas,
+      codHorarioAtual: agg.codHorarioAtual,
+      escalaAtual: escalaLabel,
+      cargaSemanalAtual: agg.cargaSemanalAtual,
+      coberturaAtualPorDia,
     }
   })
 
