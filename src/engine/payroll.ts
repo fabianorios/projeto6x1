@@ -184,8 +184,11 @@ function splitCsvLine(line: string, separator: string): string[] {
   return out.map((c) => c.trim())
 }
 
-function detectSeparator(headerLine: string): ';' | ',' {
-  // Prefer `;` when present (canonical); else comma.
+/** Detect delimiter from header: prefer TAB, then `;`, else `,`. */
+export function detectPayrollDelimiter(
+  headerLine: string,
+): '\t' | ';' | ',' {
+  let tabs = 0
   let semis = 0
   let commas = 0
   let inQuotes = false
@@ -196,10 +199,17 @@ function detectSeparator(headerLine: string): ';' | ',' {
       continue
     }
     if (inQuotes) continue
-    if (ch === ';') semis++
-    if (ch === ',') commas++
+    if (ch === '\t') tabs++
+    else if (ch === ';') semis++
+    else if (ch === ',') commas++
   }
+  // Apdata Aptools default .txt export is TAB-separated.
+  if (tabs > 0) return '\t'
   return semis >= commas ? ';' : ','
+}
+
+function detectSeparator(headerLine: string): '\t' | ';' | ',' {
+  return detectPayrollDelimiter(headerLine)
 }
 
 function normalizeHeader(h: string): string {
@@ -211,7 +221,7 @@ function normalizeHeader(h: string): string {
 }
 
 /**
- * Parse payroll CSV/paste text (`;` or `,` separator, UTF-8 header row).
+ * Parse payroll CSV/TXT/paste text (TAB, `;`, or `,` separator).
  * Accepts legacy layout and native extractor columns (safe defaults).
  * Invalid lines are collected; ≥1 valid row is enough to proceed.
  */

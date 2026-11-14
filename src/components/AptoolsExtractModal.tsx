@@ -14,7 +14,7 @@ interface AptoolsExtractModalProps {
 }
 
 /**
- * Modal: Extrair via Aptools — 3 passos (banco → colar/exportar → CSV).
+ * Modal: Extrair via Aptools — 3 passos (banco → colar/exportar → TXT/CSV).
  */
 export function AptoolsExtractModal({
   onClose,
@@ -57,7 +57,7 @@ export function AptoolsExtractModal({
       if (rows.length === 0) {
         setImportError(
           issues[0]?.message ??
-            'Nenhuma linha válida no CSV. Verifique o export do Aptools.',
+            'Nenhuma linha válida no arquivo. Verifique o export do Aptools (TXT TAB ou CSV).',
         )
         return
       }
@@ -66,7 +66,7 @@ export function AptoolsExtractModal({
         `Importadas ${rows.length} linha(s)${issues.length ? ` · ${issues.length} aviso(s)` : ''}.`,
       )
     } catch {
-      setImportError('Não foi possível ler o arquivo CSV.')
+      setImportError('Não foi possível ler o arquivo TXT/CSV.')
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -177,25 +177,25 @@ export function AptoolsExtractModal({
           <li>
             <p className="text-sm font-semibold text-[var(--color-ink)]">
               <span className="mr-2 text-[var(--color-accent)]">2.</span>
-              Cole no Aptools, execute e exporte o resultado em CSV
+              Cole no Aptools, execute e exporte o resultado
             </p>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              No Aptools: cole o comando, rode a consulta e exporte/salve o
-              resultado como CSV (sem PII — só agregados).
+              Exporte o resultado no Aptools em formato TXT (separado por TAB) ou
+              CSV e arraste o arquivo aqui (sem PII — só agregados).
             </p>
           </li>
 
           <li className="space-y-2">
             <p className="text-sm font-semibold text-[var(--color-ink)]">
               <span className="mr-2 text-[var(--color-accent)]">3.</span>
-              Importe o CSV aqui
+              Importe o TXT ou CSV aqui
             </p>
             {onImported ? (
               <>
                 <div
                   role="button"
                   tabIndex={0}
-                  aria-label="Arraste o CSV ou escolha um arquivo"
+                  aria-label="Arraste o TXT ou CSV ou escolha um arquivo"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
@@ -229,7 +229,7 @@ export function AptoolsExtractModal({
                   <p className="text-sm text-[var(--color-ink)]">
                     {busy
                       ? 'Importando…'
-                      : 'Arraste o CSV aqui ou clique para escolher o arquivo'}
+                      : 'Exporte o resultado no Aptools em formato TXT (separado por TAB) ou CSV e arraste o arquivo aqui'}
                   </p>
                   <p className="mt-1 text-xs text-[var(--color-muted)]">
                     A importação atualiza o wizard sem fechar o fluxo Aptools.
@@ -239,7 +239,7 @@ export function AptoolsExtractModal({
                   ref={fileRef}
                   id={fileId}
                   type="file"
-                  accept=".csv,text/csv,text/plain"
+                  accept=".csv,.txt,text/plain,text/csv"
                   className="sr-only"
                   disabled={busy}
                   onChange={(e) =>
@@ -255,7 +255,7 @@ export function AptoolsExtractModal({
               </>
             ) : (
               <p className="text-sm text-[var(--color-muted)]">
-                Exporte o CSV e importe na etapa de folha do wizard.
+                Exporte o TXT/CSV e importe na etapa de folha do wizard.
               </p>
             )}
           </li>

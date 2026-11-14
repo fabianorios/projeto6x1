@@ -42,6 +42,8 @@ describe("extractor SQL", () => {
     assert.ok(!/SET\s+TRANSACTION/i.test(oracle));
     assert.ok(!/\bContratos\b/i.test(mssql));
     assert.ok(!/\bLOC_/i.test(mssql));
+    assert.match(mssql, /CHAR\(9\)/);
+    assert.match(oracle, /CHR\(9\)/);
   });
 });
 

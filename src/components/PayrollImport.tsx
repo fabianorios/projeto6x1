@@ -12,8 +12,8 @@ interface PayrollImportProps {
 }
 
 /**
- * CSV file + paste import — tolerant `;`/`,`, UTF-8/Windows-1252, BR numbers,
- * native extractor columns. Includes Aptools query modal.
+ * CSV/TXT file + paste import — tolerant TAB/`;`/`,`, UTF-8/Windows-1252,
+ * BR numbers, native extractor columns. Includes Aptools query modal.
  */
 export function PayrollImport({
   rows,
@@ -49,7 +49,7 @@ export function PayrollImport({
       const { text, encoding: enc } = await readCsvFileText(file)
       applyText(text, file.name, enc)
     } catch {
-      setLoadError('Não foi possível ler o arquivo CSV.')
+      setLoadError('Não foi possível ler o arquivo TXT/CSV.')
     }
   }
 
@@ -65,7 +65,7 @@ export function PayrollImport({
       applyText(text, 'sample-folha.csv (validação)', 'utf-8')
     } catch {
       setLoadError(
-        'Não foi possível carregar sample-folha.csv. Cole o CSV ou escolha um arquivo.',
+        'Não foi possível carregar sample-folha.csv. Cole o texto ou escolha um arquivo TXT/CSV.',
       )
     } finally {
       setLoadingSample(false)
@@ -78,12 +78,13 @@ export function PayrollImport({
   return (
     <fieldset className="space-y-3">
       <legend className="text-sm font-medium text-[var(--color-ink)]">
-        Importar folha (CSV / colar)
+        Importar folha (TXT / CSV / colar)
       </legend>
       <p className="text-xs text-[var(--color-muted)]">
-        Aceita <strong>;</strong> ou <strong>,</strong>; UTF-8 ou
-        Windows-1252; números BR (<code className="text-[11px]">1.234,56</code>
-        ). Layout legado ou colunas do extrator Aptools (
+        Aceita <strong>.txt</strong> (TAB) ou <strong>.csv</strong> (
+        <strong>;</strong> / <strong>,</strong>); UTF-8 ou Windows-1252;
+        números BR (<code className="text-[11px]">1.234,56</code>). Layout
+        legado ou colunas do extrator Aptools (
         <code className="text-[11px]">desc_cargo</code>,{' '}
         <code className="text-[11px]">massa_salarial_base</code>, …).
       </p>
@@ -101,12 +102,12 @@ export function PayrollImport({
           htmlFor={fileId}
           className="cursor-pointer border border-[var(--color-line)] bg-white px-3 py-2 text-sm hover:border-[var(--color-accent)]"
         >
-          Escolher CSV
+          Escolher TXT/CSV
         </label>
         <input
           id={fileId}
           type="file"
-          accept=".csv,text/csv,text/plain"
+          accept=".csv,.txt,text/plain,text/csv"
           className="sr-only"
           onChange={(e) => void onFileChange(e.target.files?.[0] ?? null)}
         />
@@ -137,14 +138,14 @@ export function PayrollImport({
 
       <label className="block text-sm" htmlFor={pasteId}>
         <span className="mb-1 block text-[var(--color-muted)]">
-          Ou cole o CSV aqui
+          Ou cole o TXT/CSV aqui
         </span>
         <textarea
           id={pasteId}
           rows={5}
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          placeholder="cargo;salario;… ou colunas do extrator Aptools"
+          placeholder="cargo;salario;… ou TXT TAB do Aptools"
           className="w-full border border-[var(--color-line)] bg-white px-3 py-2 font-mono text-xs"
         />
       </label>

@@ -17,6 +17,13 @@ describe('extractor SQL (SPA)', () => {
     assert.ok(!/SET\s+TRANSACTION/i.test(oracle))
     assert.match(getExtractorSelectBody('mssql'), /^WITH\b/i)
     assert.ok(!getExtractorSelectBody('mssql').includes(';'))
+    // Strip TAB/newlines from text cols so Aptools .txt export stays aligned.
+    assert.match(mssql, /CHAR\(9\)/)
+    assert.match(mssql, /CHAR\(10\)/)
+    assert.match(mssql, /CHAR\(13\)/)
+    assert.match(oracle, /CHR\(9\)/)
+    assert.match(oracle, /CHR\(10\)/)
+    assert.match(oracle, /CHR\(13\)/)
   })
 })
 

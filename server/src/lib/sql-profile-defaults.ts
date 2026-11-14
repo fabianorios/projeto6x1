@@ -11,8 +11,8 @@ const ESTABELECIMENTOS_MSSQL = `
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    REPLACE(ISNULL(e.EMP_DssEmpresa, ''), CHAR(59), ' ') AS razao_social,
-    REPLACE(ISNULL(l.LPC_D1sLocal, ''), CHAR(59), ' ') AS nome_filial,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_DssEmpresa, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS razao_social,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(l.LPC_D1sLocal, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS nome_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
     COUNT(c.CON_CdiContratado) AS qtd_ativos
 FROM Contratados c
@@ -33,8 +33,8 @@ const ESTABELECIMENTOS_ORACLE = `
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    REPLACE(NVL(e.EMP_DssEmpresa, ''), CHR(59), ' ') AS razao_social,
-    REPLACE(NVL(l.LPC_D1sLocal, ''), CHR(59), ' ') AS nome_filial,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(e.EMP_DssEmpresa, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS razao_social,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(l.LPC_D1sLocal, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS nome_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
     COUNT(c.CON_CdiContratado) AS qtd_ativos
 FROM Contratados c
@@ -66,9 +66,9 @@ SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20)) AS cod_cargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' ') AS desc_cargo,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20)) AS cod_vinculo,
     CAST(ISNULL(c.CON_CdiHorario, 0) AS VARCHAR(20)) AS cod_horario_atual,
     CASE
@@ -101,9 +101,9 @@ GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''),
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
     c.CON_CdiCargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
     c.CON_CdiVinculo,
     c.CON_CdiHorario,
     cic.cycle_len,
@@ -127,9 +127,9 @@ SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0)) AS cod_cargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' ') AS desc_cargo,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0)) AS cod_vinculo,
     TO_CHAR(NVL(c.CON_CdiHorario, 0)) AS cod_horario_atual,
     CASE
@@ -162,9 +162,9 @@ GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''),
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
     c.CON_CdiCargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
     c.CON_CdiVinculo,
     c.CON_CdiHorario,
     cic.cycle_len,
@@ -196,7 +196,7 @@ CTE_VR AS (
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(AVG(ISNULL(vr.valor_dia, 0)) AS DECIMAL(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR(20)) AS modo_dias,
     CAST(ROUND(AVG(
@@ -217,7 +217,7 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')
 `.trim();
 
 const REGRA_VR_ORACLE = `
@@ -243,7 +243,7 @@ CTE_VR AS (
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     CAST(AVG(NVL(vr.valor_dia, 0)) AS NUMBER(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR2(20)) AS modo_dias,
     CAST(ROUND(AVG(
@@ -264,7 +264,7 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')
 `.trim();
 
 const REGRA_VT_MSSQL = `
@@ -292,7 +292,7 @@ CTE_VT AS (
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(AVG(ISNULL(vt.valor_dia, 0)) AS DECIMAL(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR(20)) AS modo_dias,
     CAST(ROUND(AVG(
@@ -313,7 +313,7 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')
 `.trim();
 
 const REGRA_VT_ORACLE = `
@@ -341,7 +341,7 @@ CTE_VT AS (
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ') AS cod_cc,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     CAST(AVG(NVL(vt.valor_dia, 0)) AS NUMBER(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR2(20)) AS modo_dias,
     CAST(ROUND(AVG(
@@ -362,7 +362,7 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
     l.LPC_CdiLocal,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')
 `.trim();
 
 /** Proxy encargos — consultants customize; factory seeds Lucro Presumido-like %. */
