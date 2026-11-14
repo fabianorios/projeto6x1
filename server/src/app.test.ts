@@ -98,6 +98,7 @@ describe("API routes", () => {
     assert.ok(body.tables.includes("Contratados"));
     assert.ok(body.tables.includes("Locais"));
     assert.ok(body.tables.includes("Empresas"));
+    assert.ok(body.tables.includes("Vinculos"));
     assert.ok(body.tables.includes("RamosAtividadesEmpresas"));
   });
 

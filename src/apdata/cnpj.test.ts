@@ -9,6 +9,7 @@ import {
   formatEstablishmentLabel,
   folhaToEstablishmentKey,
   isIncludedSituacao,
+  vinculoDescricao,
 } from './cnpj'
 
 describe('situação exclusion', () => {
@@ -60,8 +61,18 @@ describe('CNPJ formatting', () => {
   })
 })
 
+describe('vinculoDescricao', () => {
+  it('uses catalog label and fallbacks', () => {
+    const cat = new Map([[1, 'CLT'], [2, '  Estagiário  ']])
+    assert.equal(vinculoDescricao(1, cat), 'CLT')
+    assert.equal(vinculoDescricao(2, cat), 'Estagiário')
+    assert.equal(vinculoDescricao(0, cat), '(sem vínculo)')
+    assert.equal(vinculoDescricao(99, cat), 'Vínculo 99')
+  })
+})
+
 describe('buildEstablishments', () => {
-  it('joins Folhas→Locais→Empresas with razão + filial and vínculo headcount', () => {
+  it('joins Folhas→Locais→Empresas and groups headcount by vínculo', () => {
     const list = buildEstablishments(
       [
         {
@@ -92,14 +103,18 @@ describe('buildEstablishments', () => {
         { folhaId: 200, localId: 11 },
       ],
       [
-        { folhaId: 100, situacao: 1 },
-        { folhaId: 100, situacao: 1 },
-        { folhaId: 100, situacao: 4 },
-        { folhaId: 101, situacao: 1 },
-        { folhaId: 101, situacao: 2 }, // excluded
-        { folhaId: 101, situacao: 99 }, // excluded
-        { folhaId: 200, situacao: 1 },
-        { folhaId: 200, situacao: 0 }, // excluded
+        { folhaId: 100, situacao: 1, vinculoId: 1 },
+        { folhaId: 100, situacao: 1, vinculoId: 1 },
+        { folhaId: 100, situacao: 4, vinculoId: 2 },
+        { folhaId: 101, situacao: 1, vinculoId: 1 },
+        { folhaId: 101, situacao: 2, vinculoId: 1 }, // excluded
+        { folhaId: 101, situacao: 99, vinculoId: 2 }, // excluded
+        { folhaId: 200, situacao: 1, vinculoId: 1 },
+        { folhaId: 200, situacao: 0, vinculoId: 2 }, // excluded
+      ],
+      [
+        { vinculoId: 1, descricao: 'Empregado' },
+        { vinculoId: 2, descricao: 'Estagiário' },
       ],
     )
     assert.equal(list.length, 2)
@@ -111,16 +126,23 @@ describe('buildEstablishments', () => {
     assert.equal(list[0]!.nomeFilial, 'Filial Centro')
     assert.equal(list[0]!.ramoId, 10)
     assert.deepEqual(list[0]!.folhaIds, [100, 101])
-    // 3 on folha 100 + 1 on folha 101 (sit 2/99 excluded) = 4 vínculos
+    // 3 Empregado (2 on 100 + 1 on 101) + 1 Estagiário on 100 = 4
     assert.equal(list[0]!.colaboradores, 4)
+    assert.deepEqual(list[0]!.porVinculo, [
+      { vinculoId: 1, descricao: 'Empregado', total: 3 },
+      { vinculoId: 2, descricao: 'Estagiário', total: 1 },
+    ])
     assert.match(list[1]!.label, /Filial Norte/)
     assert.equal(list[1]!.colaboradores, 1)
+    assert.deepEqual(list[1]!.porVinculo, [
+      { vinculoId: 1, descricao: 'Empregado', total: 1 },
+    ])
     const map = folhaToEstablishmentKey(list)
     assert.equal(map.get(100), '12345678000190')
     assert.equal(map.get(200), '12345678000271')
   })
 
-  it('defaults colaboradores to 0 when contratados omitted', () => {
+  it('defaults colaboradores/porVinculo when contratados omitted', () => {
     const list = buildEstablishments(
       [{ empresaId: 1, prefixo: '12.345.678', razaoSocial: 'Ex', ramoId: 1 }],
       [{ localId: 10, empresaId: 1, sufixo: '0001-90', nomeFilial: 'A' }],
@@ -128,6 +150,7 @@ describe('buildEstablishments', () => {
     )
     assert.equal(list.length, 1)
     assert.equal(list[0]!.colaboradores, 0)
+    assert.deepEqual(list[0]!.porVinculo, [])
     assert.equal(list[0]!.folhaIds.length, 1)
   })
 })

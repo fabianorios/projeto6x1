@@ -132,7 +132,8 @@ function patchStep(
 /**
  * List establishments reachable via Folhas→Locais→Empresas.
  * Labels: EMP_DssEmpresa · LOC_D1sLocal · CNPJ (admin runtime OK).
- * UI count: colaboradores (vínculos) with CON_CdiSituacao NOT IN (0,2,3,99).
+ * UI counts: colaboradores grouped by CON_CdiVinculo → VIN_D1sVinculo
+ * (CON_CdiSituacao NOT IN (0,2,3,99)).
  */
 export async function loadEstablishmentsFromApdata(opts: {
   environmentId?: string
@@ -140,7 +141,7 @@ export async function loadEstablishmentsFromApdata(opts: {
 } = {}): Promise<Establishment[]> {
   const limit = opts.limit ?? 5000
   const envOpts = { environmentId: opts.environmentId, limit }
-  const [empresasRes, locaisRes, folhasRes, contratadosRes] =
+  const [empresasRes, locaisRes, folhasRes, contratadosRes, vinculosRes] =
     await Promise.all([
       selectRows({
         ...envOpts,
@@ -170,8 +171,13 @@ export async function loadEstablishmentsFromApdata(opts: {
       selectRows({
         ...envOpts,
         table: 'Contratados',
-        columns: ['CON_CdiFolha', 'CON_CdiSituacao'],
+        columns: ['CON_CdiFolha', 'CON_CdiSituacao', 'CON_CdiVinculo'],
         whereNotIn: { CON_CdiSituacao: [...EXCLUDED_SITUACOES] },
+      }),
+      selectRows({
+        ...envOpts,
+        table: 'Vinculos',
+        columns: ['VIN_CdiVinculo', 'VIN_D1sVinculo'],
       }),
     ])
   return buildEstablishments(
@@ -194,6 +200,11 @@ export async function loadEstablishmentsFromApdata(opts: {
     contratadosRes.rows.map((r) => ({
       folhaId: num(r.CON_CdiFolha) ?? 0,
       situacao: num(r.CON_CdiSituacao),
+      vinculoId: num(r.CON_CdiVinculo),
+    })),
+    vinculosRes.rows.map((r) => ({
+      vinculoId: num(r.VIN_CdiVinculo) ?? 0,
+      descricao: str(r.VIN_D1sVinculo),
     })),
   )
 }

@@ -191,9 +191,9 @@ GROUP BY
   },
   {
     id: 'F',
-    title: 'F) Estabelecimentos (razão · filial · CNPJ + vínculos)',
+    title: 'F) Estabelecimentos (razão · filial · CNPJ + totais por vínculo)',
     purpose:
-      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LOC_D1sLocal · CNPJ + COUNT vínculos (CON_CdiSituacao NOT IN 0/2/3/99). Admin runtime OK; não hardcodar nomes em git.',
+      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LOC_D1sLocal · CNPJ + COUNT colaboradores agrupados por CON_CdiVinculo → Vinculos.VIN_D1sVinculo (sit NOT IN 0/2/3/99). Não é TiposContratos — Contratados não tem CON_CdiTipoContrato. Admin runtime OK; não hardcodar nomes em git.',
     sql: `SELECT emp.EMP_CdiEmpresa,
        emp.EMP_DssEmpresa,
        emp.EMP_NusCNPJPrefixo,
@@ -201,21 +201,26 @@ GROUP BY
        loc.LOC_CdiLocal,
        loc.LOC_D1sLocal,
        loc.LOC_NusCNPJSufixo,
-       COUNT(con.CON_CdiContratado) AS n_vinculos
+       con.CON_CdiVinculo,
+       vin.VIN_D1sVinculo,
+       COUNT(con.CON_CdiContratado) AS n_colaboradores
 FROM dbo.Folhas fol
 JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
 JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 LEFT JOIN dbo.Contratados con
   ON con.CON_CdiFolha = fol.FOL_CdiFolha
  AND con.CON_CdiSituacao NOT IN (${SIT_EXCL})
+LEFT JOIN dbo.Vinculos vin ON vin.VIN_CdiVinculo = con.CON_CdiVinculo
 GROUP BY emp.EMP_CdiEmpresa,
          emp.EMP_DssEmpresa,
          emp.EMP_NusCNPJPrefixo,
          emp.EMP_CdiRamoAtividadeEmpresa,
          loc.LOC_CdiLocal,
          loc.LOC_D1sLocal,
-         loc.LOC_NusCNPJSufixo
-ORDER BY emp.EMP_DssEmpresa, loc.LOC_D1sLocal`,
+         loc.LOC_NusCNPJSufixo,
+         con.CON_CdiVinculo,
+         vin.VIN_D1sVinculo
+ORDER BY emp.EMP_DssEmpresa, loc.LOC_D1sLocal, n_colaboradores DESC`,
   },
   {
     id: 'G',

@@ -7,10 +7,16 @@
  *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
  *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LOC_NusCNPJSufixo
  *
+ * Tipo de vínculo (employment link type — not TiposContratos):
+ *   Contratados.CON_CdiVinculo → Vinculos.VIN_CdiVinculo
+ *   Descrição: Vinculos.VIN_D1sVinculo
+ *   (Dictionary has no CON_CdiTipoContrato on Contratados.)
+ *
  * UI labels (admin runtime OK — LGPD):
  *   Empresas.EMP_DssEmpresa  → razão social
  *   Locais.LOC_D1sLocal      → nome da filial
  *   Display: `Razão · Filial · CNPJ formatado`
+ *   Under each CNPJ: VIN_D1sVinculo + COUNT colaboradores
  *
  * Do not hardcode real client names in git / fixtures / docs.
  */
@@ -82,6 +88,15 @@ export function formatEstablishmentLabel(opts: {
   return parts.join(' · ')
 }
 
+/** One vínculo-type bucket under an establishment. */
+export type VinculoTipoTotal = {
+  vinculoId: number
+  /** Vinculos.VIN_D1sVinculo (or fallback). */
+  descricao: string
+  /** COUNT colaboradores in this vínculo type. */
+  total: number
+}
+
 export type Establishment = {
   /** Stable key for multi-select (digits). */
   key: string
@@ -92,10 +107,15 @@ export type Establishment = {
   /** Folha ids under this local (join bridge; not shown as UI count). */
   folhaIds: number[]
   /**
-   * Headcount of Contratados (vínculos) on this establishment's folhas,
-   * with CON_CdiSituacao NOT IN (0, 2, 3, 99).
+   * Headcount of Contratados on this establishment's folhas,
+   * with CON_CdiSituacao NOT IN (0, 2, 3, 99). Sum of porVinculo[].total.
    */
   colaboradores: number
+  /**
+   * Same headcount grouped by CON_CdiVinculo → VIN_D1sVinculo.
+   * Sorted by total desc, then descrição.
+   */
+  porVinculo: VinculoTipoTotal[]
   prefixo: string
   sufixo: string
   razaoSocial: string
@@ -123,22 +143,50 @@ export type FolhaRow = {
   localId: number
 }
 
-/** Minimal contratado row for per-establishment vínculo counts. */
+/** Minimal contratado row for per-establishment / per-vínculo counts. */
 export type ContratadoFolhaRow = {
   folhaId: number
   situacao: number | null
+  /** Contratados.CON_CdiVinculo */
+  vinculoId?: number | null
+}
+
+/** Catalog row from Vinculos. */
+export type VinculoRow = {
+  vinculoId: number
+  descricao: string
+}
+
+export function normalizeVinculoId(
+  vinculoId: number | null | undefined,
+): number {
+  if (vinculoId == null || !Number.isFinite(vinculoId)) return 0
+  return Number(vinculoId)
+}
+
+/** Resolve VIN_D1sVinculo with safe fallbacks (no PII). */
+export function vinculoDescricao(
+  vinculoId: number,
+  catalog: Map<number, string>,
+): string {
+  const fromCat = catalog.get(vinculoId)?.trim()
+  if (fromCat) return fromCat
+  if (vinculoId === 0) return '(sem vínculo)'
+  return `Vínculo ${vinculoId}`
 }
 
 /**
  * Build establishments present in Folhas (reachable via join).
  * One row per Local that has ≥1 Folha and a resolvable Empresa prefix.
- * `colaboradores` = COUNT of contratados matching situação rule per establishment.
+ * `colaboradores` = COUNT of contratados matching situação rule.
+ * `porVinculo` = same count grouped by CON_CdiVinculo / VIN_D1sVinculo.
  */
 export function buildEstablishments(
   empresas: EmpresaRow[],
   locais: LocalRow[],
   folhas: FolhaRow[],
   contratados: ContratadoFolhaRow[] = [],
+  vinculos: VinculoRow[] = [],
 ): Establishment[] {
   const empById = new Map<number, EmpresaRow>()
   for (const e of empresas) {
@@ -154,14 +202,25 @@ export function buildEstablishments(
     folhasByLocal.set(f.localId, list)
   }
 
-  const headcountByFolha = new Map<number, number>()
+  const descByVinculo = new Map<number, string>()
+  for (const v of vinculos) {
+    if (!Number.isFinite(v.vinculoId)) continue
+    const d = (v.descricao ?? '').trim()
+    if (d) descByVinculo.set(v.vinculoId, d)
+  }
+
+  /** folhaId → Map<vinculoId, count> */
+  const countsByFolha = new Map<number, Map<number, number>>()
   for (const c of contratados) {
     if (!Number.isFinite(c.folhaId)) continue
     if (!isIncludedSituacao(c.situacao)) continue
-    headcountByFolha.set(
-      c.folhaId,
-      (headcountByFolha.get(c.folhaId) ?? 0) + 1,
-    )
+    const vid = normalizeVinculoId(c.vinculoId)
+    let byVinculo = countsByFolha.get(c.folhaId)
+    if (!byVinculo) {
+      byVinculo = new Map()
+      countsByFolha.set(c.folhaId, byVinculo)
+    }
+    byVinculo.set(vid, (byVinculo.get(vid) ?? 0) + 1)
   }
 
   const out: Establishment[] = []
@@ -177,10 +236,29 @@ export function buildEstablishments(
     const nomeFilial = (loc.nomeFilial ?? '').trim()
     const ramoId =
       emp.ramoId != null && Number.isFinite(emp.ramoId) ? Number(emp.ramoId) : 0
-    const colaboradores = folhaIds.reduce(
-      (n, fid) => n + (headcountByFolha.get(fid) ?? 0),
-      0,
-    )
+
+    const merged = new Map<number, number>()
+    for (const fid of folhaIds) {
+      const byVinculo = countsByFolha.get(fid)
+      if (!byVinculo) continue
+      for (const [vid, n] of byVinculo) {
+        merged.set(vid, (merged.get(vid) ?? 0) + n)
+      }
+    }
+
+    const porVinculo: VinculoTipoTotal[] = [...merged.entries()]
+      .map(([vinculoId, total]) => ({
+        vinculoId,
+        descricao: vinculoDescricao(vinculoId, descByVinculo),
+        total,
+      }))
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total
+        return a.descricao.localeCompare(b.descricao, 'pt-BR')
+      })
+
+    const colaboradores = porVinculo.reduce((n, v) => n + v.total, 0)
+
     out.push({
       key,
       localId: loc.localId,
@@ -188,6 +266,7 @@ export function buildEstablishments(
       ramoId,
       folhaIds: [...folhaIds],
       colaboradores,
+      porVinculo,
       prefixo: emp.prefixo,
       sufixo: loc.sufixo,
       razaoSocial,
