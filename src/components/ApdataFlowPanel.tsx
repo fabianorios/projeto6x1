@@ -11,13 +11,18 @@ import {
   type EnvironmentPublic,
 } from '../api/environments'
 import { EXCLUDED_SITUACOES, type Establishment } from '../apdata/cnpj'
-import { REVIEW_SELECTS, LIVE_SELECT_STEPS } from '../apdata/selects'
 import {
   exportPayrollFromApdata,
   loadEstablishmentsFromApdata,
+  loadRamosFromApdata,
   type ExportProgressStep,
   type ExportResult,
 } from '../apdata/exportPayroll'
+import {
+  sectorFromSelectedRamos,
+  type RamoAtividade,
+} from '../apdata/ramos'
+import { REVIEW_SELECTS, LIVE_SELECT_STEPS } from '../apdata/selects'
 import {
   clearScenarioBasket,
   DEFAULT_OPERATING_HOURS,
@@ -28,8 +33,10 @@ import {
   type OperatingHours,
   type ScenarioBasket,
   type ScenarioId,
+  type SectorId,
   type SimulationResult,
 } from '../engine'
+import { PILOT_TEMPLATES } from '../templates'
 import { ResultsView } from './ResultsView'
 
 type Phase = 'review' | 'running' | 'ready' | 'results'
@@ -57,7 +64,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
     loadScenarioBasket(),
   )
 
-  const [sector, setSector] = useState<'varejo' | 'hospital'>('varejo')
+  const [sector, setSector] = useState<SectorId>('varejo')
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
     'pec_draft_conservative',
   )
@@ -67,6 +74,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [operatingHours] = useState<OperatingHours>(DEFAULT_OPERATING_HOURS)
   const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedCnpjKeys, setSelectedCnpjKeys] = useState<string[]>([])
+  const [ramos, setRamos] = useState<RamoAtividade[]>([])
+  const [selectedRamoIds, setSelectedRamoIds] = useState<number[]>([])
   const [cnpjLoading, setCnpjLoading] = useState(false)
   const [cnpjError, setCnpjError] = useState<string | null>(null)
 
@@ -80,6 +89,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
         setActiveEnv(null)
         setEstablishments([])
         setSelectedCnpjKeys([])
+        setRamos([])
+        setSelectedRamoIds([])
         setError(
           'API indisponível. Suba o server/ (porta 8787) ou o proxy /api na VPS.',
         )
@@ -90,6 +101,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       if (!environment) {
         setEstablishments([])
         setSelectedCnpjKeys([])
+        setRamos([])
+        setSelectedRamoIds([])
         setError(
           'Nenhum ambiente ativo. Abra Ambientes, cadastre a base e selecione ativo.',
         )
@@ -97,14 +110,25 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       }
       setCnpjLoading(true)
       try {
-        const list = await loadEstablishmentsFromApdata({
-          environmentId: environment.id,
-        })
+        const [list, ramoList] = await Promise.all([
+          loadEstablishmentsFromApdata({
+            environmentId: environment.id,
+          }),
+          loadRamosFromApdata({ environmentId: environment.id }),
+        ])
         setEstablishments(list)
         setSelectedCnpjKeys(list.map((e) => e.key))
+        setRamos(ramoList)
+        const ramoIds = ramoList.map((r) => r.id)
+        setSelectedRamoIds(ramoIds)
+        if (ramoIds.length > 0) {
+          setSector(sectorFromSelectedRamos(ramoList, ramoIds))
+        }
       } catch (err) {
         setEstablishments([])
         setSelectedCnpjKeys([])
+        setRamos([])
+        setSelectedRamoIds([])
         setCnpjError(err instanceof Error ? err.message : String(err))
       } finally {
         setCnpjLoading(false)
@@ -134,12 +158,28 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
     )
   }
 
+  function toggleRamo(id: number) {
+    setSelectedRamoIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id]
+      if (next.length > 0) {
+        setSector(sectorFromSelectedRamos(ramos, next))
+      }
+      return next
+    })
+  }
+
   async function handleRun() {
     setError(null)
     setExported(null)
     setResult(null)
     if (establishments.length > 0 && selectedCnpjKeys.length === 0) {
       setError('Selecione ao menos um CNPJ (estabelecimento).')
+      return
+    }
+    if (ramos.length > 0 && selectedRamoIds.length === 0) {
+      setError('Selecione ao menos um ramo de serviço.')
       return
     }
     setPhase('running')
@@ -159,6 +199,8 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           vtValorDia: vt !== null && Number.isFinite(vt) ? vt : null,
           selectedCnpjKeys:
             selectedCnpjKeys.length > 0 ? selectedCnpjKeys : undefined,
+          selectedRamoIds:
+            selectedRamoIds.length > 0 ? selectedRamoIds : undefined,
         },
         setSteps,
       )
@@ -334,23 +376,23 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
               <>
                 <section className="mt-5 space-y-2">
                   <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                    Estabelecimentos (CNPJ)
+                    Estabelecimentos (razão · filial · CNPJ)
                   </h3>
                   <p className="text-sm text-[var(--color-muted)]">
-                    Join Folhas → Locais → Empresas. Prefixo{' '}
-                    <code>EMP_NusCNPJPrefixo</code> + sufixo{' '}
-                    <code>LOC_NusCNPJSufixo</code>. Situação exclui{' '}
-                    <code>{EXCLUDED_SITUACOES.join(', ')}</code> (ativos +
-                    afastados entram no headcount). Sem nomes de cliente.
+                    Join Folhas → Locais → Empresas. Labels:{' '}
+                    <code>EMP_DssEmpresa</code> · <code>LOC_D1sLocal</code> ·
+                    CNPJ (<code>EMP_NusCNPJPrefixo</code> +{' '}
+                    <code>LOC_NusCNPJSufixo</code>). Situação exclui{' '}
+                    <code>{EXCLUDED_SITUACOES.join(', ')}</code>.
                   </p>
                   {cnpjLoading && (
                     <p className="text-sm text-[var(--color-muted)]">
-                      Carregando CNPJs do ambiente…
+                      Carregando estabelecimentos e ramos…
                     </p>
                   )}
                   {cnpjError && (
                     <p className="text-sm text-red-700" role="alert">
-                      CNPJ: {cnpjError}
+                      Apdata: {cnpjError}
                     </p>
                   )}
                   {!cnpjLoading &&
@@ -395,17 +437,92 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                               key={est.key}
                               className="border-b border-[var(--color-line)]/60 last:border-b-0"
                             >
+                              <label className="flex cursor-pointer items-start gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-accent-soft)]/30">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1"
+                                  checked={checked}
+                                  onChange={() => toggleCnpj(est.key)}
+                                />
+                                <span className="min-w-0 flex-1 text-[var(--color-ink)]">
+                                  {est.label}
+                                </span>
+                                <span className="shrink-0 text-xs text-[var(--color-muted)]">
+                                  {est.folhaIds.length} folha(s)
+                                </span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </section>
+
+                <section className="mt-5 space-y-2">
+                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+                    Ramos de serviço
+                  </h3>
+                  <p className="text-sm text-[var(--color-muted)]">
+                    Catálogo Apdata{' '}
+                    <code>RamosAtividadesEmpresas</code> via{' '}
+                    <code>EMP_CdiRamoAtividadeEmpresa</code>. Cada ramo mapeia
+                    para atrito setorial (varejo / hospital / construção /
+                    locação).
+                  </p>
+                  {!cnpjLoading &&
+                    !cnpjError &&
+                    ramos.length === 0 &&
+                    activeEnv && (
+                      <p className="text-sm text-[var(--color-muted)]">
+                        Nenhum ramo ativo na base — use o seletor de setor
+                        abaixo.
+                      </p>
+                    )}
+                  {ramos.length > 0 && (
+                    <>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <button
+                          type="button"
+                          className="border border-[var(--color-line)] px-2 py-1"
+                          onClick={() => {
+                            const ids = ramos.map((r) => r.id)
+                            setSelectedRamoIds(ids)
+                            setSector(sectorFromSelectedRamos(ramos, ids))
+                          }}
+                        >
+                          Todos ({ramos.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="border border-[var(--color-line)] px-2 py-1"
+                          onClick={() => setSelectedRamoIds([])}
+                        >
+                          Nenhum
+                        </button>
+                        <span className="self-center text-[var(--color-muted)]">
+                          {selectedRamoIds.length} selecionado(s)
+                        </span>
+                      </div>
+                      <ul className="max-h-40 overflow-y-auto border border-[var(--color-line)] bg-white/60">
+                        {ramos.map((ramo) => {
+                          const checked = selectedRamoIds.includes(ramo.id)
+                          return (
+                            <li
+                              key={ramo.id}
+                              className="border-b border-[var(--color-line)]/60 last:border-b-0"
+                            >
                               <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-accent-soft)]/30">
                                 <input
                                   type="checkbox"
                                   checked={checked}
-                                  onChange={() => toggleCnpj(est.key)}
+                                  onChange={() => toggleRamo(ramo.id)}
                                 />
-                                <span className="font-mono text-[var(--color-ink)]">
-                                  {est.label}
+                                <span className="min-w-0 flex-1 text-[var(--color-ink)]">
+                                  {ramo.label}
                                 </span>
-                                <span className="text-xs text-[var(--color-muted)]">
-                                  {est.folhaIds.length} folha(s)
+                                <span className="shrink-0 font-mono text-xs text-[var(--color-muted)]">
+                                  → {ramo.sectorId}
                                 </span>
                               </label>
                             </li>
@@ -466,16 +583,21 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                   </h3>
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">Setor</span>
+                      <span className="text-[var(--color-muted)]">
+                        Setor (atrito; pré-preenchido pelo ramo)
+                      </span>
                       <select
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={sector}
                         onChange={(e) =>
-                          setSector(e.target.value as 'varejo' | 'hospital')
+                          setSector(e.target.value as SectorId)
                         }
                       >
-                        <option value="varejo">Varejo</option>
-                        <option value="hospital">Hospital</option>
+                        {PILOT_TEMPLATES.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label className="block text-sm">

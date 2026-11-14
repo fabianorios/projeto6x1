@@ -1,12 +1,18 @@
 /**
  * CNPJ establishment helpers (Apdata Empresas × Locais).
- * LGPD: prefer digits / formatted CNPJ — never EMP_DssEmpresa / LOC_D*sLocal.
  *
  * Join path:
  *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
  *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
  *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
  *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LOC_NusCNPJSufixo
+ *
+ * UI labels (admin runtime OK — LGPD):
+ *   Empresas.EMP_DssEmpresa  → razão social
+ *   Locais.LOC_D1sLocal      → nome da filial
+ *   Display: `Razão · Filial · CNPJ formatado`
+ *
+ * Do not hardcode real client names in git / fixtures / docs.
  */
 
 /** Situações excluídas do headcount / export (user rule). */
@@ -56,27 +62,54 @@ export function formatCnpjDisplay(
   return rawP || rawS || '(sem CNPJ)'
 }
 
+/**
+ * Multi-select label: `Razão · Filial · CNPJ`.
+ * Omits empty name parts; always ends with formatted CNPJ when resolvable.
+ */
+export function formatEstablishmentLabel(opts: {
+  razaoSocial?: string | null
+  nomeFilial?: string | null
+  prefixo: string | null | undefined
+  sufixo: string | null | undefined
+}): string {
+  const cnpj = formatCnpjDisplay(opts.prefixo, opts.sufixo)
+  const parts: string[] = []
+  const razao = (opts.razaoSocial ?? '').trim()
+  const filial = (opts.nomeFilial ?? '').trim()
+  if (razao) parts.push(razao)
+  if (filial) parts.push(filial)
+  parts.push(cnpj)
+  return parts.join(' · ')
+}
+
 export type Establishment = {
   /** Stable key for multi-select (digits). */
   key: string
   localId: number
   empresaId: number
+  /** Empresas.EMP_CdiRamoAtividadeEmpresa (0 when unset). */
+  ramoId: number
   folhaIds: number[]
   prefixo: string
   sufixo: string
-  /** Formatted for UI — digits only composition, no client name. */
+  razaoSocial: string
+  nomeFilial: string
+  /** `Razão · Filial · CNPJ` for UI. */
   label: string
 }
 
 export type EmpresaRow = {
   empresaId: number
   prefixo: string
+  razaoSocial?: string | null
+  ramoId?: number | null
 }
 
 export type LocalRow = {
   localId: number
   empresaId: number
   sufixo: string
+  nomeFilial?: string | null
 }
 
 export type FolhaRow = {
@@ -116,14 +149,26 @@ export function buildEstablishments(
     if (!emp) continue
     const key = establishmentKey(emp.prefixo, loc.sufixo)
     if (!key) continue
+    const razaoSocial = (emp.razaoSocial ?? '').trim()
+    const nomeFilial = (loc.nomeFilial ?? '').trim()
+    const ramoId =
+      emp.ramoId != null && Number.isFinite(emp.ramoId) ? Number(emp.ramoId) : 0
     out.push({
       key,
       localId: loc.localId,
       empresaId: loc.empresaId,
+      ramoId,
       folhaIds: [...folhaIds],
       prefixo: emp.prefixo,
       sufixo: loc.sufixo,
-      label: formatCnpjDisplay(emp.prefixo, loc.sufixo),
+      razaoSocial,
+      nomeFilial,
+      label: formatEstablishmentLabel({
+        razaoSocial,
+        nomeFilial,
+        prefixo: emp.prefixo,
+        sufixo: loc.sufixo,
+      }),
     })
   }
 

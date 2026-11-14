@@ -84,7 +84,8 @@ export const RULE_VERSIONS: Record<ScenarioId, RuleVersion> = {
 /**
  * Sector friction on staffing after the scale factor.
  * Hospital continuous ops get a small premium; varejo is baseline.
- * Construcao/locacao are placeholders until those templates ship.
+ * Construcao/locacao templates ship with modest friction.
+ * Apdata ramos (RamosAtividadesEmpresas) map onto these SectorIds.
  */
 export const SECTOR_CALIBRATION: Record<SectorId, SectorCalibration> = {
   varejo: {
@@ -100,12 +101,12 @@ export const SECTOR_CALIBRATION: Record<SectorId, SectorCalibration> = {
   construcao: {
     sector: 'construcao',
     staffingFriction: 1.04,
-    note: 'Placeholder até template de construção — +4% atrito.',
+    note: 'Obra / canteiro: +4% atrito de escala (estimativa).',
   },
   locacao: {
     sector: 'locacao',
     staffingFriction: 1.03,
-    note: 'Placeholder até template de locação — +3% atrito.',
+    note: 'Locação / frota + apoio: +3% atrito de escala (estimativa).',
   },
 }
 

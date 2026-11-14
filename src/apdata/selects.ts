@@ -9,6 +9,12 @@
  *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
  *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
  *   CNPJ = EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo
+ *   Labels: EMP_DssEmpresa (razão) · LOC_D1sLocal (filial) · CNPJ
+ *
+ * Ramos de serviço:
+ *   Empresas.EMP_CdiRamoAtividadeEmpresa
+ *     → RamosAtividadesEmpresas.RAE_CdiRamoAtividadeEmpresa
+ *   Label: RAE_D1sRamoAtividadeEmpresa → map → SectorId (friction)
  *
  * Situação: CON_CdiSituacao NOT IN (0, 2, 3, 99) — ativos + afastados etc.
  */
@@ -184,18 +190,41 @@ GROUP BY
   },
   {
     id: 'F',
-    title: 'F) Estabelecimentos (CNPJ prefixo + sufixo)',
+    title: 'F) Estabelecimentos (razão · filial · CNPJ)',
     purpose:
-      'Lista estabelecimentos alcançáveis via Folhas→Locais→Empresas. Só IDs + CNPJ — sem EMP_DssEmpresa / LOC_D1sLocal.',
+      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LOC_D1sLocal · CNPJ. Admin runtime OK; não hardcodar nomes em git.',
     sql: `SELECT emp.EMP_CdiEmpresa,
+       emp.EMP_DssEmpresa,
        emp.EMP_NusCNPJPrefixo,
+       emp.EMP_CdiRamoAtividadeEmpresa,
        loc.LOC_CdiLocal,
+       loc.LOC_D1sLocal,
        loc.LOC_NusCNPJSufixo,
        fol.FOL_CdiFolha
 FROM dbo.Folhas fol
 JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
 JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
-ORDER BY emp.EMP_NusCNPJPrefixo, loc.LOC_NusCNPJSufixo, fol.FOL_CdiFolha`,
+ORDER BY emp.EMP_DssEmpresa, loc.LOC_D1sLocal, fol.FOL_CdiFolha`,
+  },
+  {
+    id: 'G',
+    title: 'G) Ramos de atividade (serviço)',
+    purpose:
+      'Catálogo data-driven: RamosAtividadesEmpresas. Join Empresas.EMP_CdiRamoAtividadeEmpresa → RAE_CdiRamoAtividadeEmpresa. Label RAE_D1sRamoAtividadeEmpresa mapeia para SectorId (varejo/hospital/construção/locação).',
+    sql: `SELECT rae.RAE_CdiRamoAtividadeEmpresa,
+       rae.RAE_D1sRamoAtividadeEmpresa,
+       rae.RAE_CosReferencia,
+       rae.RAE_OplDesativado,
+       COUNT(DISTINCT emp.EMP_CdiEmpresa) AS n_empresas
+FROM dbo.RamosAtividadesEmpresas rae
+LEFT JOIN dbo.Empresas emp
+  ON emp.EMP_CdiRamoAtividadeEmpresa = rae.RAE_CdiRamoAtividadeEmpresa
+WHERE ISNULL(rae.RAE_OplDesativado, 0) = 0
+GROUP BY rae.RAE_CdiRamoAtividadeEmpresa,
+         rae.RAE_D1sRamoAtividadeEmpresa,
+         rae.RAE_CosReferencia,
+         rae.RAE_OplDesativado
+ORDER BY rae.RAE_D1sRamoAtividadeEmpresa`,
   },
   {
     id: 'D',
@@ -337,17 +366,39 @@ export const LIVE_SELECT_STEPS: {
   },
   {
     id: 'empresas',
-    label: 'Empresas (CNPJ prefixo)',
+    label: 'Empresas (razão + CNPJ prefixo + ramo)',
     table: 'Empresas',
-    columns: ['EMP_CdiEmpresa', 'EMP_NusCNPJPrefixo'],
-    note: 'Só ID + EMP_NusCNPJPrefixo — sem EMP_DssEmpresa.',
+    columns: [
+      'EMP_CdiEmpresa',
+      'EMP_DssEmpresa',
+      'EMP_NusCNPJPrefixo',
+      'EMP_CdiRamoAtividadeEmpresa',
+    ],
+    note: 'EMP_DssEmpresa = razão social; EMP_CdiRamoAtividadeEmpresa → ramos.',
   },
   {
     id: 'locais',
-    label: 'Locais (CNPJ sufixo)',
+    label: 'Locais (filial + CNPJ sufixo)',
     table: 'Locais',
-    columns: ['LOC_CdiLocal', 'LOC_CdiEmpresa', 'LOC_NusCNPJSufixo'],
-    note: 'Estabelecimento: LOC_NusCNPJSufixo. Sem LOC_D1sLocal.',
+    columns: [
+      'LOC_CdiLocal',
+      'LOC_CdiEmpresa',
+      'LOC_D1sLocal',
+      'LOC_NusCNPJSufixo',
+    ],
+    note: 'LOC_D1sLocal = nome da filial; LOC_NusCNPJSufixo = sufixo CNPJ.',
+  },
+  {
+    id: 'ramos',
+    label: 'RamosAtividadesEmpresas (ramos de serviço)',
+    table: 'RamosAtividadesEmpresas',
+    columns: [
+      'RAE_CdiRamoAtividadeEmpresa',
+      'RAE_D1sRamoAtividadeEmpresa',
+      'RAE_CosReferencia',
+      'RAE_OplDesativado',
+    ],
+    note: 'Catálogo de ramos; mapear RAE_D1s → SectorId no cliente.',
   },
   {
     id: 'folhas',

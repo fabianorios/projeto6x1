@@ -68,7 +68,9 @@ export function WizardShell() {
   const [apdataFlowOpen, setApdataFlowOpen] = useState(false)
 
   function selectSector(sectorId: string) {
-    const template = getTemplate(sectorId as 'varejo' | 'hospital')
+    const template = getTemplate(
+      sectorId as 'varejo' | 'hospital' | 'construcao' | 'locacao',
+    )
     if (!template) return
     setForm((prev) => ({
       ...prev,
@@ -80,7 +82,11 @@ export function WizardShell() {
   function runSimulation() {
     if (!form.sectorId) return
     const next = simulate({
-      sector: form.sectorId as 'varejo' | 'hospital',
+      sector: form.sectorId as
+        | 'varejo'
+        | 'hospital'
+        | 'construcao'
+        | 'locacao',
       headcount: form.headcount,
       currentScale: form.currentScale,
       averageMonthlySalary: form.averageMonthlySalary,
