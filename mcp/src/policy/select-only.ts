@@ -49,6 +49,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Folhas",
   "Locais",
   "Empresas",
+  /** Tipo de vínculo CLT etc. (CON_CdiVinculo → VIN_*) */
+  "Vinculos",
   /** Ramos de atividade (EMP_CdiRamoAtividadeEmpresa → RAE_*) */
   "RamosAtividadesEmpresas",
   "HorariosTiposDiasAT",

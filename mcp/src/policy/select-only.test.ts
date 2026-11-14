@@ -81,6 +81,7 @@ describe("allowlist", () => {
       "Folhas",
       "Locais",
       "Empresas",
+      "Vinculos",
       "RamosAtividadesEmpresas",
       "HorariosTiposDiasAT",
       "ConATransportes",

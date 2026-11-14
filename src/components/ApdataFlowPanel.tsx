@@ -382,8 +382,9 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                     Join Folhas → Locais → Empresas. Labels:{' '}
                     <code>EMP_DssEmpresa</code> · <code>LOC_D1sLocal</code> ·
                     CNPJ (<code>EMP_NusCNPJPrefixo</code> +{' '}
-                    <code>LOC_NusCNPJSufixo</code>). Contagem = vínculos
-                    (contratados) com situação fora de{' '}
+                    <code>LOC_NusCNPJSufixo</code>). Totais de colaboradores
+                    agrupados por <code>CON_CdiVinculo</code> →{' '}
+                    <code>VIN_D1sVinculo</code>, situação fora de{' '}
                     <code>{EXCLUDED_SITUACOES.join(', ')}</code>.
                   </p>
                   {cnpjLoading && (
@@ -430,7 +431,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                           {selectedCnpjKeys.length} selecionado(s)
                         </span>
                       </div>
-                      <ul className="max-h-48 overflow-y-auto border border-[var(--color-line)] bg-white/60">
+                      <ul className="max-h-72 overflow-y-auto border border-[var(--color-line)] bg-white/60">
                         {establishments.map((est) => {
                           const checked = selectedCnpjKeys.includes(est.key)
                           return (
@@ -445,11 +446,30 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                                   checked={checked}
                                   onChange={() => toggleCnpj(est.key)}
                                 />
-                                <span className="min-w-0 flex-1 text-[var(--color-ink)]">
-                                  {est.label}
-                                </span>
-                                <span className="shrink-0 text-xs text-[var(--color-muted)]">
-                                  {est.colaboradores} vínculo(s)
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-[var(--color-ink)]">
+                                    {est.label}
+                                  </span>
+                                  <span className="mt-0.5 block text-xs text-[var(--color-muted)]">
+                                    {est.colaboradores} colaborador(es)
+                                  </span>
+                                  {est.porVinculo.length > 0 && (
+                                    <ul className="mt-1 space-y-0.5 border-l border-[var(--color-line)] pl-2 text-xs text-[var(--color-muted)]">
+                                      {est.porVinculo.map((v) => (
+                                        <li
+                                          key={v.vinculoId}
+                                          className="flex justify-between gap-3"
+                                        >
+                                          <span className="min-w-0 truncate text-[var(--color-ink)]/80">
+                                            {v.descricao}
+                                          </span>
+                                          <span className="shrink-0 tabular-nums">
+                                            {v.total}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </span>
                               </label>
                             </li>
