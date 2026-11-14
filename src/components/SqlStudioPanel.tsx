@@ -25,6 +25,8 @@ import {
   SQL_SLOT_EXAMPLES,
   SQL_SLOT_IDS,
   SQL_SLOT_LABELS,
+  defaultBenefitParams,
+  type BenefitParams,
   type SqlDialect,
   type SqlProfile,
   type SqlSlotId,
@@ -63,6 +65,10 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
   const [ephemeralForm, setEphemeralForm] = useState<EphemeralCredsFormValue>(
     DEFAULT_EPHEMERAL_CREDS_FORM,
   )
+  const [draftBenefits, setDraftBenefits] = useState<BenefitParams>(
+    defaultBenefitParams(),
+  )
+  const [copiedSql, setCopiedSql] = useState(false)
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
   const readonly = Boolean(selected?.readonly)
@@ -103,7 +109,8 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
   useEffect(() => {
     if (!selected) return
     setDraftName(selected.name)
-    setDraftSql(selected.slots[slot][dialect])
+    setDraftSql(selected.slots[slot]?.[dialect] ?? '')
+    setDraftBenefits(selected.benefitParams ?? defaultBenefitParams())
     setTestResult(null)
   }, [selected, slot, dialect])
 
@@ -159,15 +166,45 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
       const { profile } = await updateSqlProfile(selected.id, {
         name: draftName.trim() || selected.name,
         slots: nextSlots,
+        benefitParams: draftBenefits,
       })
       setProfiles((prev) =>
         prev.map((p) => (p.id === profile.id ? profile : p)),
       )
+      setDraftBenefits(profile.benefitParams)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
+  }
+
+  async function copyDraftSql() {
+    try {
+      await navigator.clipboard.writeText(draftSql)
+      setCopiedSql(true)
+      window.setTimeout(() => setCopiedSql(false), 2000)
+    } catch {
+      setError('Não foi possível copiar o SQL — selecione e use Ctrl+C.')
+    }
+  }
+
+  function setTipo(
+    key:
+      | 'vrTipoBeneficio'
+      | 'vaTipoBeneficio'
+      | 'assistenciaMedicaTipo'
+      | 'assistenciaOdontologicaTipo',
+    raw: string,
+  ) {
+    const trimmed = raw.trim()
+    if (trimmed === '') {
+      setDraftBenefits((b) => ({ ...b, [key]: null }))
+      return
+    }
+    const n = Number.parseInt(trimmed, 10)
+    if (!Number.isFinite(n) || n < 0) return
+    setDraftBenefits((b) => ({ ...b, [key]: n }))
   }
 
   async function handleActivate() {
@@ -240,7 +277,22 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
   }
 
   const contract = SQL_SLOT_CONTRACT[slot]
-  const showModoDias = slot === 'REGRA_VR' || slot === 'REGRA_VT'
+  const showModoDias =
+    slot === 'REGRA_VR' || slot === 'REGRA_VA' || slot === 'REGRA_VT'
+  const skippedNotes = [
+    draftBenefits.vrTipoBeneficio == null
+      ? 'VR: tipo não cadastrado — benefício ignorado.'
+      : null,
+    draftBenefits.vaTipoBeneficio == null
+      ? 'VA: tipo não cadastrado — benefício ignorado.'
+      : null,
+    draftBenefits.assistenciaMedicaTipo == null
+      ? 'Assistência médica: tipo não cadastrado — ignorada no HC.'
+      : null,
+    draftBenefits.assistenciaOdontologicaTipo == null
+      ? 'Assistência odontológica: tipo não cadastrado — ignorada no HC.'
+      : null,
+  ].filter(Boolean) as string[]
 
   return (
     <div
@@ -262,8 +314,9 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
               ⚙️ Studio SQL
             </h2>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Perfis com 5 blocos independentes (MSSQL / Oracle). O padrão de
-              fábrica é somente leitura — duplique para editar.
+              Perfis com blocos SQL independentes (MSSQL / Oracle) e tipos de
+              benefício por cliente. O padrão de fábrica é somente leitura —
+              duplique para editar.
             </p>
           </div>
           <button
@@ -356,6 +409,75 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
                 />
               </label>
 
+              <fieldset className="border border-[var(--color-line)] bg-white/70 px-3 py-3">
+                <legend className="px-1 text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                  Tipos de benefício (cliente)
+                </legend>
+                <p className="mb-3 text-xs text-[var(--color-muted)]">
+                  Códigos Apdata variam por cliente; usados pelas queries de
+                  benefício (@tipo / @tipoMedica / @tipoOdonto). Vazio = benefício
+                  ignorado no motor.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ['vrTipoBeneficio', 'VR / refeição'],
+                      ['vaTipoBeneficio', 'VA / alimentação'],
+                      ['assistenciaMedicaTipo', 'Médico titular'],
+                      ['assistenciaOdontologicaTipo', 'Odontológica'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="block text-sm">
+                      <span className="mb-1 block text-[var(--color-muted)]">
+                        {label}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className="w-full border border-[var(--color-line)] bg-white px-3 py-2 disabled:bg-white/50"
+                        value={draftBenefits[key] ?? ''}
+                        disabled={readonly}
+                        placeholder="—"
+                        onChange={(e) => setTipo(key, e.target.value)}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label className="mt-3 block text-sm">
+                  <span className="mb-1 block text-[var(--color-muted)]">
+                    VA — modo do valor
+                  </span>
+                  <select
+                    className="w-full border border-[var(--color-line)] bg-white px-3 py-2 disabled:bg-white/50"
+                    value={draftBenefits.vaModoValor}
+                    disabled={readonly}
+                    onChange={(e) =>
+                      setDraftBenefits((b) => ({
+                        ...b,
+                        vaModoValor: e.target.value === 'DIA' ? 'DIA' : 'MES',
+                      }))
+                    }
+                  >
+                    <option value="MES">Mensal (custo fixo × HC)</option>
+                    <option value="DIA">Por dia (× dias da escala)</option>
+                  </select>
+                </label>
+                {readonly && (
+                  <p className="mt-2 text-xs text-[var(--color-muted)]">
+                    Perfil de fábrica: defaults históricos (VR=53, VA=52). Duplique
+                    para alterar.
+                  </p>
+                )}
+                {skippedNotes.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-amber-900">
+                    {skippedNotes.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </fieldset>
+
               <div
                 className="flex flex-wrap gap-1"
                 role="tablist"
@@ -400,6 +522,18 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
                 ))}
               </div>
 
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyDraftSql()}
+                  className="border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm"
+                >
+                  {copiedSql ? 'Copiado!' : 'Copiar'}
+                </button>
+                <span className="text-xs text-[var(--color-muted)]">
+                  SQL do bloco acima da área de texto
+                </span>
+              </div>
               <textarea
                 className="min-h-[18rem] w-full border border-[var(--color-line)] bg-white p-3 font-mono text-xs leading-relaxed disabled:bg-white/50"
                 value={draftSql}

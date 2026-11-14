@@ -15,6 +15,11 @@ import {
 } from "../lib/ephemeral-db.js";
 import type { EnvironmentStore } from "../lib/store.js";
 import {
+  bindParamsForSlot,
+  normalizeBenefitParams,
+  skippedBenefitNotes,
+} from "../lib/benefit-params.js";
+import {
   FACTORY_PROFILE_ID,
 } from "../lib/sql-profile-defaults.js";
 import {
@@ -42,18 +47,40 @@ const slotsSchema = z.object({
   ESTABELECIMENTOS: slotQueriesSchema,
   FOLHA_E_ESCALAS: slotQueriesSchema,
   REGRA_VR: slotQueriesSchema,
+  REGRA_VA: slotQueriesSchema,
   REGRA_VT: slotQueriesSchema,
+  REGRA_FIXOS: slotQueriesSchema,
   INDICES_ENCARGOS: slotQueriesSchema,
 });
+
+const benefitParamsSchema = z
+  .object({
+    vrTipoBeneficio: z.number().int().nonnegative().nullable(),
+    vaTipoBeneficio: z.number().int().nonnegative().nullable(),
+    assistenciaMedicaTipo: z.number().int().nonnegative().nullable(),
+    assistenciaOdontologicaTipo: z.number().int().nonnegative().nullable(),
+    vaModoValor: z.enum(["DIA", "MES"]).optional(),
+    labels: z
+      .object({
+        vr: z.string().optional(),
+        va: z.string().optional(),
+        medica: z.string().optional(),
+        odontologica: z.string().optional(),
+      })
+      .optional(),
+  })
+  .optional();
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   slots: slotsSchema.optional(),
+  benefitParams: benefitParamsSchema,
 });
 
 const updateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   slots: slotsSchema.optional(),
+  benefitParams: benefitParamsSchema,
 });
 
 const duplicateSchema = z.object({
@@ -154,6 +181,9 @@ export function createSqlProfileRoutes(deps: SqlProfileRoutesDeps) {
       const created = await profiles.create({
         name: parsed.data.name,
         slots,
+        benefitParams: parsed.data.benefitParams
+          ? normalizeBenefitParams(parsed.data.benefitParams)
+          : undefined,
       });
       return c.json({ profile: created }, 201);
     } catch (err) {
@@ -212,6 +242,9 @@ export function createSqlProfileRoutes(deps: SqlProfileRoutesDeps) {
         slots: parsed.data.slots as
           | Record<SqlSlotId, SqlSlotQueries>
           | undefined,
+        benefitParams: parsed.data.benefitParams
+          ? normalizeBenefitParams(parsed.data.benefitParams)
+          : undefined,
       });
       return c.json({ profile: updated });
     } catch (err) {
@@ -275,23 +308,15 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
 
     let dialect: "mssql" | "oracle" = args.dialect ?? "mssql";
     let sql = args.sql?.trim() ?? "";
+    const profileId =
+      args.profileId ??
+      (await profiles.getActive())?.id ??
+      FACTORY_PROFILE_ID;
+    let profile = await profiles.get(profileId);
+    if (!profile) return c.json({ error: "profile not found" }, 404);
 
     if (!sql) {
-      const profileId =
-        args.profileId ??
-        (await profiles.getActive())?.id ??
-        FACTORY_PROFILE_ID;
-      try {
-        const profile = await profiles.get(profileId);
-        if (!profile) return c.json({ error: "profile not found" }, 404);
-        // Prefer dialect from connection/env when available
-        sql = profile.slots[slot][dialect];
-      } catch (err) {
-        return c.json(
-          { error: err instanceof Error ? err.message : String(err) },
-          400,
-        );
-      }
+      sql = profile.slots[slot][dialect];
     }
 
     const guard = guardSlotSql(sql);
@@ -310,12 +335,6 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
           args.connection.engine === "oracle" ? 1521 : 1433;
         dialect = args.connection.engine;
         if (!args.sql) {
-          const profileId =
-            args.profileId ??
-            (await profiles.getActive())?.id ??
-            FACTORY_PROFILE_ID;
-          const profile = await profiles.get(profileId);
-          if (!profile) return c.json({ error: "profile not found" }, 404);
           sql = profile.slots[slot][dialect];
           const g2 = guardSlotSql(sql);
           if (!g2.ok) {
@@ -349,12 +368,6 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
         if (!record) return c.json({ error: "environment not found" }, 404);
         dialect = record.engine;
         if (!args.sql) {
-          const profileId =
-            args.profileId ??
-            (await profiles.getActive())?.id ??
-            FACTORY_PROFILE_ID;
-          const profile = await profiles.get(profileId);
-          if (!profile) return c.json({ error: "profile not found" }, 404);
           sql = profile.slots[slot][dialect];
           const g2 = guardSlotSql(sql);
           if (!g2.ok) {
@@ -368,10 +381,42 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
         );
       }
 
+      const benefitParams = normalizeBenefitParams(profile.benefitParams);
+      const bound = bindParamsForSlot(slot, dialect, benefitParams);
+      // REGRA_FIXOS may run with one of two tipos; warn but still bind what exists.
+      if (
+        (slot === "REGRA_VR" || slot === "REGRA_VA") &&
+        bound.missing.length > 0
+      ) {
+        return c.json(
+          {
+            error: `Tipo de benefício não cadastrado no perfil (${bound.missing.join(", ")}). Cadastre em Tipos de benefício (cliente) ou deixe o slot sem uso.`,
+            skipped: skippedBenefitNotes(benefitParams),
+          },
+          400,
+        );
+      }
+      if (slot === "REGRA_FIXOS" && bound.missing.length === 2) {
+        return c.json(
+          {
+            error:
+              "Assistência médica e odontológica sem tipo no perfil — benefícios fixos ignorados.",
+            skipped: skippedBenefitNotes(benefitParams),
+          },
+          400,
+        );
+      }
+      // Bind missing FIXOS tipos as sentinel -1 (no rows for that CTE).
+      const queryParams: Record<string, number> = { ...bound.params };
+      if (slot === "REGRA_FIXOS") {
+        if (queryParams.tipoMedica === undefined) queryParams.tipoMedica = -1;
+        if (queryParams.tipoOdonto === undefined) queryParams.tipoOdonto = -1;
+      }
+
       const limited = limitSql(sql, dialect, TEST_SLOT_MAX_ROWS);
       await applyReadIsolation(client);
       const result = await Promise.race([
-        client.query(limited, {}),
+        client.query(limited, queryParams),
         new Promise<never>((_, reject) => {
           setTimeout(
             () =>
@@ -397,6 +442,8 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
         rowCount: rows.length,
         columns: result.columns,
         rows,
+        boundParams: queryParams,
+        skippedBenefits: skippedBenefitNotes(benefitParams),
         contract: {
           required: SQL_SLOT_CONTRACT[slot],
           ok: contract.ok,

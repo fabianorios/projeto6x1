@@ -65,6 +65,9 @@ export interface AhrHandoffPayload {
   benefits: {
     vr: SimulationResult['vr']
     vt: SimulationResult['vt']
+    va: SimulationResult['va']
+    assistMedicaMonthly: SimulationResult['assistMedicaMonthly']
+    assistOdontoMonthly: SimulationResult['assistOdontoMonthly']
   }
   disclaimer: string
 }
@@ -140,6 +143,9 @@ export function buildAhrHandoff(result: SimulationResult): AhrHandoffPayload {
     benefits: {
       vr: result.vr,
       vt: result.vt,
+      va: result.va,
+      assistMedicaMonthly: result.assistMedicaMonthly,
+      assistOdontoMonthly: result.assistOdontoMonthly,
     },
     disclaimer: result.disclaimer,
   }

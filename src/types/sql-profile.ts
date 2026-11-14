@@ -1,5 +1,5 @@
 /**
- * SqlProfile contract — 5 independent query slots (MSSQL + Oracle).
+ * SqlProfile contract — modular query slots (MSSQL + Oracle).
  * Persisted server-side under DATA_DIR/sql-profiles.json (never in Git).
  */
 
@@ -21,18 +21,57 @@ export function isModoDias(value: string): value is ModoDias {
   )
 }
 
+export type VaModoValor = 'DIA' | 'MES'
+
+/** Per-client Apdata TiposBeneficios codes for parameterized benefit SQL. */
+export type BenefitParams = {
+  vrTipoBeneficio: number | null
+  vaTipoBeneficio: number | null
+  assistenciaMedicaTipo: number | null
+  assistenciaOdontologicaTipo: number | null
+  vaModoValor: VaModoValor
+  labels?: {
+    vr?: string
+    va?: string
+    medica?: string
+    odontologica?: string
+  }
+}
+
+export const FACTORY_BENEFIT_PARAMS: BenefitParams = {
+  vrTipoBeneficio: 53,
+  vaTipoBeneficio: 52,
+  assistenciaMedicaTipo: null,
+  assistenciaOdontologicaTipo: null,
+  vaModoValor: 'MES',
+  labels: {
+    vr: 'Vale-Refeição',
+    va: 'Vale-Alimentação',
+    medica: 'Assistência médica titular',
+    odontologica: 'Assistência odontológica',
+  },
+}
+
+export function defaultBenefitParams(): BenefitParams {
+  return structuredClone(FACTORY_BENEFIT_PARAMS)
+}
+
 export type SqlSlotId =
   | 'ESTABELECIMENTOS'
   | 'FOLHA_E_ESCALAS'
   | 'REGRA_VR'
+  | 'REGRA_VA'
   | 'REGRA_VT'
+  | 'REGRA_FIXOS'
   | 'INDICES_ENCARGOS'
 
 export const SQL_SLOT_IDS: readonly SqlSlotId[] = [
   'ESTABELECIMENTOS',
   'FOLHA_E_ESCALAS',
   'REGRA_VR',
+  'REGRA_VA',
   'REGRA_VT',
+  'REGRA_FIXOS',
   'INDICES_ENCARGOS',
 ] as const
 
@@ -40,7 +79,9 @@ export const SQL_SLOT_LABELS: Record<SqlSlotId, string> = {
   ESTABELECIMENTOS: 'Estabelecimentos',
   FOLHA_E_ESCALAS: 'Folha e Escalas',
   REGRA_VR: 'Regra VR',
+  REGRA_VA: 'Regra VA',
   REGRA_VT: 'Regra VT',
+  REGRA_FIXOS: 'Benefícios fixos',
   INDICES_ENCARGOS: 'Índices de Encargos',
 }
 
@@ -77,6 +118,14 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     'modo_dias',
     'dias_base_mes',
   ],
+  REGRA_VA: [
+    'cod_empresa',
+    'cod_filial',
+    'cod_cc',
+    'valor_dia',
+    'modo_dias',
+    'dias_base_mes',
+  ],
   REGRA_VT: [
     'cod_empresa',
     'cod_filial',
@@ -84,6 +133,13 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     'valor_dia',
     'modo_dias',
     'dias_base_mes',
+  ],
+  REGRA_FIXOS: [
+    'cod_empresa',
+    'cod_filial',
+    'cod_cc',
+    'valor_mes_medica',
+    'valor_mes_odonto',
   ],
   INDICES_ENCARGOS: [
     'cod_empresa',
@@ -108,6 +164,7 @@ export type SqlProfile = {
   createdAt: string
   updatedAt: string
   slots: Record<SqlSlotId, SqlSlotQueries>
+  benefitParams: BenefitParams
 }
 
 export type SqlProfileStoreFile = {
@@ -119,6 +176,7 @@ export type SqlProfileStoreFile = {
 export type SqlProfileInput = {
   name: string
   slots: Record<SqlSlotId, SqlSlotQueries>
+  benefitParams?: BenefitParams
 }
 
 /** Human hints for Studio side panel. */
@@ -126,11 +184,15 @@ export const SQL_SLOT_EXAMPLES: Record<SqlSlotId, string> = {
   ESTABELECIMENTOS:
     'Lista CNPJs com razão social, filial e headcount ativo (sit NOT IN 0,2,3,99).',
   FOLHA_E_ESCALAS:
-    'Agrega folha por CC/cargo/escala — sem PII. VR/VT ficam nos slots REGRA_*.',
+    'Agrega folha por CC/cargo/escala — sem PII. VR/VT/VA ficam nos slots REGRA_*.',
   REGRA_VR:
-    "VR Plano 53. modo_dias: 'ESCALA' (proporcional à escala-alvo) | 'FIXO_MES' | 'CALENDARIO_LOCAL' (mantém dias_base_mes).",
+    "VR via ConBeneficios × PlanosBeneficiosValores (PBV_DtdInicio DESC). @tipo = benefitParams.vrTipoBeneficio. modo_dias: 'ESCALA' | 'FIXO_MES' | 'CALENDARIO_LOCAL'.",
+  REGRA_VA:
+    "VA — mesmo caminho de VR; @tipo = vaTipoBeneficio. Interpretação dia/mês via benefitParams.vaModoValor.",
   REGRA_VT:
-    "VT via ConATransportes × MeiosTransportesItens. Mesmo contrato de modo_dias que VR.",
+    'VT via ConATransportes × MeiosTransportesItens (MRI_DtdInicioVigencia DESC). Mesmo contrato de modo_dias que VR.',
+  REGRA_FIXOS:
+    'Médico/odonto titular: valor_mês médio por CC. @tipoMedica / @tipoOdonto do perfil. Impacta HC adicional.',
   INDICES_ENCARGOS:
     'Percentuais patronais por empresa/filial (INSS, RAT/FAP, terceiros, FGTS). Editáveis no Passo Premissas.',
 }

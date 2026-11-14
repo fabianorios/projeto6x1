@@ -37,6 +37,12 @@ export const PAYROLL_CSV_HEADERS = [
   'modo_dias_vt',
   'dias_base_mes_vr',
   'dias_base_mes_vt',
+  'va_valor_dia',
+  'va_valor_mes',
+  'va_valor_medio',
+  'va_modo_valor',
+  'assist_medica_mes',
+  'assist_odonto_mes',
   'regime_funcionamento',
   'he_media_mensal_horas',
 ] as const
@@ -89,6 +95,15 @@ export interface PayrollRow {
   modoDiasVt: ModoDias | null
   diasBaseMesVr: number | null
   diasBaseMesVt: number | null
+  /** VA R$/day when vaModoValor === 'DIA'. */
+  vaValorDia: number | null
+  /** VA R$/month when vaModoValor === 'MES'. */
+  vaValorMes: number | null
+  vaModoValor: 'DIA' | 'MES' | null
+  /** Assistência médica titular — fixed R$/month (HC cost). */
+  assistMedicaMes: number | null
+  /** Assistência odontológica — fixed R$/month (HC cost). */
+  assistOdontoMes: number | null
 }
 
 export interface PayrollParseIssue {
@@ -119,6 +134,11 @@ export function emptyPayrollExtras(): Pick<
   | 'modoDiasVt'
   | 'diasBaseMesVr'
   | 'diasBaseMesVt'
+  | 'vaValorDia'
+  | 'vaValorMes'
+  | 'vaModoValor'
+  | 'assistMedicaMes'
+  | 'assistOdontoMes'
 > {
   return {
     codEmpresa: null,
@@ -136,6 +156,11 @@ export function emptyPayrollExtras(): Pick<
     modoDiasVt: null,
     diasBaseMesVr: null,
     diasBaseMesVt: null,
+    vaValorDia: null,
+    vaValorMes: null,
+    vaModoValor: null,
+    assistMedicaMes: null,
+    assistOdontoMes: null,
   }
 }
 
@@ -477,6 +502,45 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       continue
     }
 
+    const vaValorDia = parseOptionalNonNeg(cell(cols, 'va_valor_dia'))
+    const vaValorMes = parseOptionalNonNeg(
+      cell(cols, 'va_valor_mes') || cell(cols, 'va_valor_medio'),
+    )
+    const assistMedicaMes = parseOptionalNonNeg(
+      cell(cols, 'assist_medica_mes'),
+    )
+    const assistOdontoMes = parseOptionalNonNeg(
+      cell(cols, 'assist_odonto_mes'),
+    )
+    if (vaValorDia === 'invalid') {
+      issues.push({ line: lineNo, message: 'va_valor_dia inválido' })
+      continue
+    }
+    if (vaValorMes === 'invalid') {
+      issues.push({ line: lineNo, message: 'va_valor_mes inválido' })
+      continue
+    }
+    if (assistMedicaMes === 'invalid') {
+      issues.push({ line: lineNo, message: 'assist_medica_mes inválido' })
+      continue
+    }
+    if (assistOdontoMes === 'invalid') {
+      issues.push({ line: lineNo, message: 'assist_odonto_mes inválido' })
+      continue
+    }
+    const vaModoRaw = cell(cols, 'va_modo_valor').trim().toUpperCase()
+    let vaModoValor: 'DIA' | 'MES' | null = null
+    if (vaModoRaw === 'DIA' || vaModoRaw === 'MES') {
+      vaModoValor = vaModoRaw
+    } else if (vaModoRaw) {
+      issues.push({ line: lineNo, message: 'va_modo_valor inválido' })
+      continue
+    } else if (vaValorMes !== null) {
+      vaModoValor = 'MES'
+    } else if (vaValorDia !== null) {
+      vaModoValor = 'DIA'
+    }
+
     rows.push({
       cargo,
       salario,
@@ -506,6 +570,11 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       modoDiasVt,
       diasBaseMesVr: diasBaseVr,
       diasBaseMesVt: diasBaseVt,
+      vaValorDia: vaValorDia as number | null,
+      vaValorMes: vaValorMes as number | null,
+      vaModoValor,
+      assistMedicaMes: assistMedicaMes as number | null,
+      assistOdontoMes: assistOdontoMes as number | null,
     })
   }
 
@@ -540,11 +609,19 @@ export interface CostCenterTotals {
   salaryMass: number
   vr: BenefitLineTotals
   vt: BenefitLineTotals
+  va: BenefitLineTotals
   /** Avg VR R$/day across people with VR. */
   avgVrValorDia: number
   avgVtValorDia: number
+  avgVaValorDia: number
+  avgVaValorMes: number
+  avgAssistMedicaMes: number
+  avgAssistOdontoMes: number
   peopleWithVr: number
   peopleWithVt: number
+  peopleWithVa: number
+  peopleWithAssistMedica: number
+  peopleWithAssistOdonto: number
   /** Weighted HE hours/month. */
   heMediaMensalHoras: number
   regimeFuncionamento: RegimeFuncionamento | null
@@ -598,6 +675,10 @@ export function aggregateByCostCenter(
     CostCenterTotals & {
       vrDiaSum: number
       vtDiaSum: number
+      vaDiaSum: number
+      vaMesSum: number
+      medSum: number
+      odontoSum: number
       heSum: number
     }
   >()
@@ -623,15 +704,32 @@ export function aggregateByCostCenter(
           currentPersonDays: 0,
           proposedPersonDays: 0,
         },
+        va: {
+          currentMonthly: 0,
+          proposedMonthly: 0,
+          currentPersonDays: 0,
+          proposedPersonDays: 0,
+        },
         avgVrValorDia: 0,
         avgVtValorDia: 0,
+        avgVaValorDia: 0,
+        avgVaValorMes: 0,
+        avgAssistMedicaMes: 0,
+        avgAssistOdontoMes: 0,
         peopleWithVr: 0,
         peopleWithVt: 0,
+        peopleWithVa: 0,
+        peopleWithAssistMedica: 0,
+        peopleWithAssistOdonto: 0,
         heMediaMensalHoras: 0,
         regimeFuncionamento: row.regimeFuncionamento,
         cnpjCompleto: row.cnpjCompleto,
         vrDiaSum: 0,
         vtDiaSum: 0,
+        vaDiaSum: 0,
+        vaMesSum: 0,
+        medSum: 0,
+        odontoSum: 0,
         heSum: 0,
       }
       map.set(key, agg)
@@ -681,14 +779,66 @@ export function aggregateByCostCenter(
       agg.vtDiaSum += row.vtValorDia * qty
       agg.peopleWithVt += qty
     }
+
+    const vaModo = row.vaModoValor ?? (row.vaValorMes != null ? 'MES' : 'DIA')
+    if (vaModo === 'MES' && row.vaValorMes != null && row.vaValorMes > 0) {
+      agg.va.currentMonthly += row.vaValorMes * qty
+      agg.va.proposedMonthly += row.vaValorMes * qty
+      agg.vaMesSum += row.vaValorMes * qty
+      agg.peopleWithVa += qty
+    } else if (vaModo === 'DIA' && row.vaValorDia != null && row.vaValorDia > 0) {
+      const { currentDays, proposedDays } = resolveBenefitDays(
+        row.vrDiasMesAtual,
+        scale,
+        targetScale,
+        row.modoDiasVr,
+        row.diasBaseMesVr,
+      )
+      agg.va.currentMonthly += row.vaValorDia * currentDays * qty
+      agg.va.proposedMonthly += row.vaValorDia * proposedDays * qty
+      agg.va.currentPersonDays += currentDays * qty
+      agg.va.proposedPersonDays += proposedDays * qty
+      agg.vaDiaSum += row.vaValorDia * qty
+      agg.peopleWithVa += qty
+    }
+
+    if (row.assistMedicaMes != null && row.assistMedicaMes > 0) {
+      agg.medSum += row.assistMedicaMes * qty
+      agg.peopleWithAssistMedica += qty
+    }
+    if (row.assistOdontoMes != null && row.assistOdontoMes > 0) {
+      agg.odontoSum += row.assistOdontoMes * qty
+      agg.peopleWithAssistOdonto += qty
+    }
   }
 
   return [...map.values()]
-    .map(({ vrDiaSum, vtDiaSum, heSum, ...rest }) => ({
-      ...rest,
-      avgVrValorDia: rest.peopleWithVr > 0 ? vrDiaSum / rest.peopleWithVr : 0,
-      avgVtValorDia: rest.peopleWithVt > 0 ? vtDiaSum / rest.peopleWithVt : 0,
-      heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
-    }))
+    .map(
+      ({
+        vrDiaSum,
+        vtDiaSum,
+        vaDiaSum,
+        vaMesSum,
+        medSum,
+        odontoSum,
+        heSum,
+        ...rest
+      }) => ({
+        ...rest,
+        avgVrValorDia: rest.peopleWithVr > 0 ? vrDiaSum / rest.peopleWithVr : 0,
+        avgVtValorDia: rest.peopleWithVt > 0 ? vtDiaSum / rest.peopleWithVt : 0,
+        avgVaValorDia: rest.peopleWithVa > 0 ? vaDiaSum / rest.peopleWithVa : 0,
+        avgVaValorMes: rest.peopleWithVa > 0 ? vaMesSum / rest.peopleWithVa : 0,
+        avgAssistMedicaMes:
+          rest.peopleWithAssistMedica > 0
+            ? medSum / rest.peopleWithAssistMedica
+            : 0,
+        avgAssistOdontoMes:
+          rest.peopleWithAssistOdonto > 0
+            ? odontoSum / rest.peopleWithAssistOdonto
+            : 0,
+        heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
+      }),
+    )
     .sort((a, b) => a.centroCusto.localeCompare(b.centroCusto, 'pt-BR'))
 }

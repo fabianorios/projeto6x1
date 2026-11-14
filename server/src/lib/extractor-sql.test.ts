@@ -28,7 +28,29 @@ describe("extractor SQL", () => {
     assert.ok(sql.includes("@cnpj0"));
     assert.equal(params.cnpj0, "12345678000190");
     // invalid short "digits" from 'drop table' filtered out
-    assert.equal(Object.keys(params).length, 1);
+    assert.equal(params.tipoVr, 53);
+    assert.ok(sql.includes("@tipoVr"));
+    assert.ok(sql.includes("PBV_DtdInicio"));
+    assert.ok(sql.includes("MRI_DtdInicioVigencia"));
+    assert.ok(!sql.includes("= 53"));
+  });
+
+  it("binds benefit tipos from profile (parameterized)", () => {
+    const { sql, params } = buildExtractorQuery("mssql", {
+      benefitParams: {
+        vrTipoBeneficio: 99,
+        vaTipoBeneficio: null,
+        assistenciaMedicaTipo: 12,
+        assistenciaOdontologicaTipo: null,
+        vaModoValor: "MES",
+      },
+    });
+    assert.equal(params.tipoVr, 99);
+    assert.equal(params.tipoVa, -1);
+    assert.equal(params.tipoMedica, 12);
+    assert.equal(params.tipoOdonto, -1);
+    assert.ok(sql.includes("ConBeneficios"));
+    assert.ok(sql.includes("TiposBeneficiosEntsBens"));
   });
 
   it("Aptools script is SELECT-only without SET TRANSACTION", () => {
