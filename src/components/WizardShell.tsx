@@ -14,6 +14,7 @@ import {
 } from '../engine'
 import { getTemplate, PILOT_TEMPLATES } from '../templates'
 import { AmbientesPanel } from './AmbientesPanel'
+import { ApdataFlowPanel } from './ApdataFlowPanel'
 import { MapeamentoPanel } from './MapeamentoPanel'
 import { ResultsView } from './ResultsView'
 import { SectorStep } from './SectorStep'
@@ -64,6 +65,7 @@ export function WizardShell() {
   )
   const [ambientesOpen, setAmbientesOpen] = useState(false)
   const [mapeamentoOpen, setMapeamentoOpen] = useState(false)
+  const [apdataFlowOpen, setApdataFlowOpen] = useState(false)
 
   function selectSector(sectorId: string) {
     const template = getTemplate(sectorId as 'varejo' | 'hospital')
@@ -110,6 +112,13 @@ export function WizardShell() {
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setApdataFlowOpen(true)}
+              className="bg-[var(--color-accent)] px-3 py-1.5 text-sm text-white hover:opacity-95"
+            >
+              Apdata → Simular
+            </button>
             <button
               type="button"
               onClick={() => setMapeamentoOpen(true)}
@@ -206,6 +215,10 @@ export function WizardShell() {
       <MapeamentoPanel
         open={mapeamentoOpen}
         onClose={() => setMapeamentoOpen(false)}
+      />
+      <ApdataFlowPanel
+        open={apdataFlowOpen}
+        onClose={() => setApdataFlowOpen(false)}
       />
     </div>
   )

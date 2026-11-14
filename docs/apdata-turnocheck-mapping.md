@@ -297,11 +297,12 @@ Ambiente Turnocheck (**Ambientes**): host `127.0.0.1`, porta `1433`, database `a
 
 ## Próximo passo técnico
 
-Implementar `export_payroll_rows` (MCP ou service) com as queries B+C+D, flag `anon=true` default, e teste de diff: N linhas agregadas vs import manual no wizard. Calibrar salário quando a TEMP/produção tiver `CON_VlnSalario` ≠ 0.
+Calibrar salário quando a TEMP/produção tiver `CON_VlnSalario` ≠ 0. Opcional: expandir allowlist para planos VR (query D) em vez do override no fluxo.
 
 ## UI Turnocheck
 
-O painel **Mapeamento** (header, ao lado de Ambientes) mostra a tabela CSV←Apdata, regras de `escala_atual` e os SELECTs B/C/D in-app (`src/components/MapeamentoPanel.tsx`).
+- **Apdata → Simular** (`src/components/ApdataFlowPanel.tsx` + `src/apdata/`): revisão dos SELECTs B/C/D → progresso dos `/api/query/select` no ambiente ativo → agregação `PayrollRow[]` → `ResultsView`. LGPD: sem `nome`; CC por `CCU_CosEstrutura`.
+- **Mapeamento** (`src/components/MapeamentoPanel.tsx`): tabela CSV←Apdata e SELECTs de referência.
 
 ## Deploy (VPS, após merge)
 

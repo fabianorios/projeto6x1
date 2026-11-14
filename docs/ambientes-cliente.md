@@ -4,7 +4,9 @@ Turnocheck pode conectar a **várias bases** Apdata (MSSQL ou Oracle stub). Cred
 
 ## UI
 
-No app, botão **Ambientes** (header do wizard):
+No app, botão **Apdata → Simular** (header): revisa os SELECTs do mapeamento, executa export agregado via `/api/query/select` no ambiente ativo, mostra progresso e abre o `ResultsView` do motor.
+
+Botão **Ambientes** (header do wizard):
 
 | Ação | Comportamento |
 |------|----------------|
