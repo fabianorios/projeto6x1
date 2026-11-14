@@ -34,6 +34,12 @@ describe("SqlProfilesStore", () => {
     assert.equal(list[0]!.id, FACTORY_PROFILE_ID);
     assert.equal(list[0]!.readonly, true);
     assert.equal(list[0]!.name, "Padrão Apdata SaaS");
+    assert.equal(list[0]!.benefitParams.vrTipoBeneficio, 53);
+    assert.ok(list[0]!.slots.REGRA_VA);
+    assert.ok(list[0]!.slots.REGRA_FIXOS);
+    assert.match(list[0]!.slots.REGRA_VR.mssql, /@tipo\b/);
+    assert.match(list[0]!.slots.REGRA_VR.mssql, /PBV_DtdInicio/);
+    assert.match(list[0]!.slots.REGRA_VT.mssql, /MRI_DtdInicioVigencia/);
   });
 
   it("factory SQL passes SELECT-only for every slot/dialect", () => {

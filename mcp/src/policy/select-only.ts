@@ -60,8 +60,12 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   /** VT cadastro (passe/dia) — never ConCalculoATransportes */
   "ConATransportes",
   "MeiosTransportesItens",
-  /** VR plano tipo 53 (extractor canônico) */
+  /** Benefícios: ConBeneficios → PlanosBeneficios → Valores → TiposBeneficiosEntsBens */
+  "ConBeneficios",
+  "PlanosBeneficios",
   "PlanosBeneficiosValores",
+  "TiposBeneficiosEntsBens",
+  "TiposBeneficios",
 ] as const;
 
 export type AllowlistedTable = (typeof DEFAULT_TABLE_ALLOWLIST)[number];

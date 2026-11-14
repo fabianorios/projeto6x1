@@ -22,7 +22,13 @@ export type ExtractorAggregate = {
   massa_salarial_base?: number
   vr_dia_medio?: number
   vt_dia_medio?: number
+  qtd_passes_dia_medio?: number
+  va_valor_medio?: number
+  assist_medica_mes?: number
+  assist_odonto_mes?: number
   dias_trabalho_mes_atual?: number
+  /** From SqlProfile.benefitParams.vaModoValor when mapping after extract. */
+  va_modo_valor?: 'DIA' | 'MES'
 }
 
 function num(v: unknown, fallback = 0): number {
@@ -43,6 +49,10 @@ export function mapExtractorAggregatesToPayroll(
     const dias = num(r.dias_trabalho_mes_atual, 22)
     const vr = num(r.vr_dia_medio, 0)
     const vt = num(r.vt_dia_medio, 0)
+    const va = num(r.va_valor_medio, 0)
+    const med = num(r.assist_medica_mes, 0)
+    const odonto = num(r.assist_odonto_mes, 0)
+    const vaModo = r.va_modo_valor === 'DIA' ? 'DIA' : 'MES'
     const cargo = (r.desc_cargo || 'NAO_INFORMADO').trim()
     const centro = (r.cod_cc || 'SEM_CC').trim()
 
@@ -70,6 +80,11 @@ export function mapExtractorAggregatesToPayroll(
       codVinculo: r.cod_vinculo || null,
       codHorarioAtual: r.cod_horario_atual || null,
       massaSalarialBase: massa,
+      vaModoValor: va > 0 ? vaModo : null,
+      vaValorDia: va > 0 && vaModo === 'DIA' ? va : null,
+      vaValorMes: va > 0 && vaModo === 'MES' ? va : null,
+      assistMedicaMes: med > 0 ? med : null,
+      assistOdontoMes: odonto > 0 ? odonto : null,
     }
   })
 }

@@ -7,6 +7,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  defaultBenefitParams,
+  normalizeBenefitParams,
+  type BenefitParams,
+} from "./benefit-params.js";
+import {
   FACTORY_PROFILE_ID,
   FACTORY_PROFILE_NAME,
   factoryDefaultSlots,
@@ -30,6 +35,7 @@ function factoryProfile(now = new Date().toISOString()): SqlProfile {
     createdAt: now,
     updatedAt: now,
     slots: factoryDefaultSlots(),
+    benefitParams: defaultBenefitParams(),
   };
 }
 
@@ -42,10 +48,39 @@ function emptyStore(): SqlProfileStoreFile {
   };
 }
 
+/** Backfill missing slots / benefitParams on custom profiles loaded from disk. */
+function normalizeProfile(raw: SqlProfile): SqlProfile {
+  const factorySlots = factoryDefaultSlots();
+  const slots = {} as Record<SqlSlotId, SqlSlotQueries>;
+  for (const id of SQL_SLOT_IDS) {
+    const q = raw.slots?.[id];
+    if (q && typeof q.mssql === "string" && typeof q.oracle === "string") {
+      slots[id] = { mssql: q.mssql, oracle: q.oracle };
+    } else {
+      slots[id] = {
+        mssql: factorySlots[id].mssql,
+        oracle: factorySlots[id].oracle,
+      };
+    }
+  }
+  return {
+    ...raw,
+    slots,
+    benefitParams: normalizeBenefitParams(
+      (raw as SqlProfile & { benefitParams?: unknown }).benefitParams,
+    ),
+  };
+}
+
 function ensureFactory(data: SqlProfileStoreFile): SqlProfileStoreFile {
+  data.profiles = data.profiles.map((p) =>
+    p.id === FACTORY_PROFILE_ID
+      ? p
+      : normalizeProfile(p as SqlProfile),
+  );
+
   const hasFactory = data.profiles.some((p) => p.id === FACTORY_PROFILE_ID);
   if (hasFactory) {
-    // Keep factory slots/name immutable even if file was tampered.
     data.profiles = data.profiles.map((p) =>
       p.id === FACTORY_PROFILE_ID
         ? {
@@ -53,6 +88,7 @@ function ensureFactory(data: SqlProfileStoreFile): SqlProfileStoreFile {
             name: FACTORY_PROFILE_NAME,
             readonly: true,
             slots: factoryDefaultSlots(),
+            benefitParams: defaultBenefitParams(),
           }
         : p,
     );
@@ -168,6 +204,9 @@ export class SqlProfilesStore {
       createdAt: now,
       updatedAt: now,
       slots: cloneSlots(input.slots),
+      benefitParams: normalizeBenefitParams(
+        input.benefitParams ?? defaultBenefitParams(),
+      ),
     };
     data.profiles.push(profile);
     await this.persist(data);
@@ -189,6 +228,7 @@ export class SqlProfilesStore {
       createdAt: now,
       updatedAt: now,
       slots: cloneSlots(source.slots),
+      benefitParams: normalizeBenefitParams(source.benefitParams),
     };
     data.profiles.push(profile);
     data.activeId = profile.id;
@@ -219,10 +259,16 @@ export class SqlProfilesStore {
       nextSlots = cloneSlots(input.slots);
     }
 
+    let nextBenefit: BenefitParams = current.benefitParams;
+    if (input.benefitParams !== undefined) {
+      nextBenefit = normalizeBenefitParams(input.benefitParams);
+    }
+
     const updated: SqlProfile = {
       ...current,
       name: nextName,
       slots: nextSlots,
+      benefitParams: nextBenefit,
       updatedAt: new Date().toISOString(),
       readonly: false,
     };

@@ -190,6 +190,9 @@ export function simulate(input: SimulationInput): SimulationResult {
   let byCostCenter: CostCenterResult[] = []
   let vr: BenefitDelta | null = null
   let vt: BenefitDelta | null = null
+  let va: BenefitDelta | null = null
+  let assistMedicaMonthly: number | null = null
+  let assistOdontoMonthly: number | null = null
 
   if (payrollRows) {
     const resolved = buildCostCenterResults(
@@ -207,6 +210,9 @@ export function simulate(input: SimulationInput): SimulationResult {
     byCostCenter = resolved.centers
     vr = resolved.vr
     vt = resolved.vt
+    va = resolved.va
+    assistMedicaMonthly = resolved.assistMedicaMonthly
+    assistOdontoMonthly = resolved.assistOdontoMonthly
   }
 
   const lineItems: ResultLineItem[] = [
@@ -394,6 +400,59 @@ export function simulate(input: SimulationInput): SimulationResult {
     )
   }
 
+  if (va && (va.currentMonthly > 0 || va.proposedMonthly > 0)) {
+    lineItems.push(
+      {
+        id: 'va-current',
+        category: 'benefits',
+        label: 'VA mensal atual',
+        amount: va.currentMonthly,
+        unit: 'BRL_month',
+        detail:
+          'VA por dia (× dias) ou mensal conforme va_modo_valor do perfil/CSV.',
+      },
+      {
+        id: 'va-proposed',
+        category: 'benefits',
+        label: 'VA mensal proposto',
+        amount: va.proposedMonthly,
+        unit: 'BRL_month',
+        detail: 'Inclui HC adicional × média VA do centro (dia ou mês).',
+      },
+      {
+        id: 'va-delta-month',
+        category: 'benefits',
+        label: 'Delta mensal VA',
+        amount: va.monthlyDelta,
+        unit: 'BRL_month',
+        detail: 'Proposto − atual.',
+      },
+    )
+  }
+
+  if (assistMedicaMonthly != null && assistMedicaMonthly > 0) {
+    lineItems.push({
+      id: 'assist-medica',
+      category: 'benefits',
+      label: 'Assistência médica (titular) mensal',
+      amount: assistMedicaMonthly,
+      unit: 'BRL_month',
+      detail:
+        'Custo fixo/mês × HC proposto. Sem tipo no perfil → benefício ignorado.',
+    })
+  }
+  if (assistOdontoMonthly != null && assistOdontoMonthly > 0) {
+    lineItems.push({
+      id: 'assist-odonto',
+      category: 'benefits',
+      label: 'Assistência odontológica mensal',
+      amount: assistOdontoMonthly,
+      unit: 'BRL_month',
+      detail:
+        'Custo fixo/mês × HC proposto. Sem tipo no perfil → benefício ignorado.',
+    })
+  }
+
   lineItems.push(
     {
       id: 'coverage-hours',
@@ -495,6 +554,9 @@ export function simulate(input: SimulationInput): SimulationResult {
     },
     vr,
     vt,
+    va,
+    assistMedicaMonthly,
+    assistOdontoMonthly,
     byCostCenter,
     usedPayrollImport,
     scheduleSuggestions: schedule.suggestions,
@@ -544,6 +606,9 @@ function buildCostCenterResults(
   centers: CostCenterResult[]
   vr: BenefitDelta
   vt: BenefitDelta
+  va: BenefitDelta
+  assistMedicaMonthly: number
+  assistOdontoMonthly: number
 } {
   const aggs = aggregateByCostCenter(rows, resolveScale, targetScale)
 
@@ -605,6 +670,26 @@ function buildCostCenterResults(
     const vtProposed = roundMoney(vtProposedExisting + vtAdditional)
     const vtCurrent = roundMoney(agg.vt.currentMonthly)
 
+    const vaCurrent = roundMoney(agg.va.currentMonthly)
+    const vaAdditionalDia =
+      additional > 0 && agg.avgVaValorDia > 0
+        ? additional * agg.avgVaValorDia * proposedDaysPerMonth
+        : 0
+    const vaAdditionalMes =
+      additional > 0 && agg.avgVaValorMes > 0
+        ? additional * agg.avgVaValorMes
+        : 0
+    const vaProposed = roundMoney(
+      agg.va.proposedMonthly + vaAdditionalDia + vaAdditionalMes,
+    )
+
+    const assistMedicaProposed = roundMoney(
+      agg.avgAssistMedicaMes * effectiveRequired,
+    )
+    const assistOdontoProposed = roundMoney(
+      agg.avgAssistOdontoMes * effectiveRequired,
+    )
+
     const regime = resolveRegime(
       input.regimeFuncionamentoByCc?.[agg.centroCusto] ??
         agg.regimeFuncionamento ??
@@ -622,6 +707,9 @@ function buildCostCenterResults(
       payrollMonthlyDelta: roundMoney(projectedPayroll - baselinePayroll),
       vr: makeBenefitDelta(vrCurrent, vrProposed, proposedDaysPerMonth),
       vt: makeBenefitDelta(vtCurrent, vtProposed, proposedDaysPerMonth),
+      va: makeBenefitDelta(vaCurrent, vaProposed, proposedDaysPerMonth),
+      assistMedicaMonthly: assistMedicaProposed,
+      assistOdontoMonthly: assistOdontoProposed,
       regimeFuncionamento: regime,
       distribuicaoTurmas,
     }
@@ -635,8 +723,25 @@ function buildCostCenterResults(
     centers.map((c) => c.vt),
     proposedDaysPerMonth,
   )
+  const va = sumBenefits(
+    centers.map((c) => c.va),
+    proposedDaysPerMonth,
+  )
+  const assistMedicaMonthly = roundMoney(
+    centers.reduce((s, c) => s + c.assistMedicaMonthly, 0),
+  )
+  const assistOdontoMonthly = roundMoney(
+    centers.reduce((s, c) => s + c.assistOdontoMonthly, 0),
+  )
 
-  return { centers, vr, vt }
+  return {
+    centers,
+    vr,
+    vt,
+    va,
+    assistMedicaMonthly,
+    assistOdontoMonthly,
+  }
 }
 
 function resolveCcTaxRegime(

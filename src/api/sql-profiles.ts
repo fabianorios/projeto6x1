@@ -3,6 +3,7 @@
  */
 
 import type {
+  BenefitParams,
   SqlDialect,
   SqlProfile,
   SqlSlotId,
@@ -76,6 +77,7 @@ export function getSqlProfile(
 export function createSqlProfile(input: {
   name: string
   slots?: Record<SqlSlotId, SqlSlotQueries>
+  benefitParams?: BenefitParams
 }): Promise<{ profile: SqlProfile }> {
   return request('/api/sql-profiles', {
     method: 'POST',
@@ -95,7 +97,11 @@ export function duplicateSqlProfile(
 
 export function updateSqlProfile(
   id: string,
-  input: { name?: string; slots?: Record<SqlSlotId, SqlSlotQueries> },
+  input: {
+    name?: string
+    slots?: Record<SqlSlotId, SqlSlotQueries>
+    benefitParams?: BenefitParams
+  },
 ): Promise<{ profile: SqlProfile }> {
   return request(`/api/sql-profiles/${id}`, {
     method: 'PUT',

@@ -2,6 +2,10 @@
  * Server-side SqlProfile contract (mirrors src/types/sql-profile.ts).
  */
 
+import type { BenefitParams } from "./benefit-params.js";
+
+export type { BenefitParams, VaModoValor } from "./benefit-params.js";
+
 export type SqlDialect = "mssql" | "oracle";
 
 export type ModoDias = "ESCALA" | "FIXO_MES" | "CALENDARIO_LOCAL";
@@ -10,14 +14,18 @@ export type SqlSlotId =
   | "ESTABELECIMENTOS"
   | "FOLHA_E_ESCALAS"
   | "REGRA_VR"
+  | "REGRA_VA"
   | "REGRA_VT"
+  | "REGRA_FIXOS"
   | "INDICES_ENCARGOS";
 
 export const SQL_SLOT_IDS: readonly SqlSlotId[] = [
   "ESTABELECIMENTOS",
   "FOLHA_E_ESCALAS",
   "REGRA_VR",
+  "REGRA_VA",
   "REGRA_VT",
+  "REGRA_FIXOS",
   "INDICES_ENCARGOS",
 ] as const;
 
@@ -53,6 +61,14 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     "modo_dias",
     "dias_base_mes",
   ],
+  REGRA_VA: [
+    "cod_empresa",
+    "cod_filial",
+    "cod_cc",
+    "valor_dia",
+    "modo_dias",
+    "dias_base_mes",
+  ],
   REGRA_VT: [
     "cod_empresa",
     "cod_filial",
@@ -60,6 +76,13 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     "valor_dia",
     "modo_dias",
     "dias_base_mes",
+  ],
+  REGRA_FIXOS: [
+    "cod_empresa",
+    "cod_filial",
+    "cod_cc",
+    "valor_mes_medica",
+    "valor_mes_odonto",
   ],
   INDICES_ENCARGOS: [
     "cod_empresa",
@@ -83,6 +106,8 @@ export type SqlProfile = {
   createdAt: string;
   updatedAt: string;
   slots: Record<SqlSlotId, SqlSlotQueries>;
+  /** Per-client TiposBeneficios codes for parameterized benefit SQL. */
+  benefitParams: BenefitParams;
 };
 
 export type SqlProfileStoreFile = {
@@ -94,6 +119,7 @@ export type SqlProfileStoreFile = {
 export type SqlProfileInput = {
   name: string;
   slots: Record<SqlSlotId, SqlSlotQueries>;
+  benefitParams?: BenefitParams;
 };
 
 export function isSqlSlotId(value: string): value is SqlSlotId {

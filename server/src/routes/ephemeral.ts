@@ -23,6 +23,10 @@ import {
   type EphemeralCreds,
 } from "../lib/ephemeral-db.js";
 import {
+  normalizeBenefitParams,
+  skippedBenefitNotes,
+} from "../lib/benefit-params.js";
+import {
   buildExtractorQuery,
   getAptoolsExtractorScript,
 } from "../lib/extractor-sql.js";
@@ -31,6 +35,16 @@ import {
   mapExtractorRows,
 } from "../lib/extractor-map.js";
 import type { ServerConfig } from "../config.js";
+
+const benefitParamsBodySchema = z
+  .object({
+    vrTipoBeneficio: z.number().int().nullable().optional(),
+    vaTipoBeneficio: z.number().int().nullable().optional(),
+    assistenciaMedicaTipo: z.number().int().nullable().optional(),
+    assistenciaOdontologicaTipo: z.number().int().nullable().optional(),
+    vaModoValor: z.enum(["DIA", "MES"]).optional(),
+  })
+  .optional();
 
 const ephemeralSchema = z
   .object({
@@ -49,6 +63,8 @@ const ephemeralSchema = z
         cnpjs: z.array(z.string()).max(32).optional(),
       })
       .optional(),
+    /** SqlProfile.benefitParams — binds @tipoVr / @tipoVa / … */
+    benefitParams: benefitParamsBodySchema,
   })
   .superRefine((data, ctx) => {
     if (data.engine === "oracle" && !data.database?.trim()) {
@@ -123,7 +139,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
     return c.json({
       engine: dialect,
       sql: getAptoolsExtractorScript(dialect),
-      note: "Official Apdata extractor (LGPD-safe aggregates). Copy into Aptools.",
+      note: "Official Apdata extractor (LGPD-safe aggregates). Benefit tipos inlined from factory defaults (VR=53, VA=52); customize via SqlProfile.benefitParams.",
     });
   });
 
@@ -226,10 +242,11 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         });
       }
 
-      const { sql, params } = buildExtractorQuery(
-        data.engine,
-        data.filters ?? {},
-      );
+      const benefitParams = normalizeBenefitParams(data.benefitParams);
+      const { sql, params } = buildExtractorQuery(data.engine, {
+        ...(data.filters ?? {}),
+        benefitParams,
+      });
       const policy = assertSelectOnly(sql);
       if (!policy.ok) {
         scrubCreds(creds);
@@ -261,6 +278,13 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         timeoutMs: EPHEMERAL_TIMEOUT_MS,
         latencyMs: Date.now() - started,
         rowCount: rows.length,
+        boundBenefitParams: {
+          tipoVr: params.tipoVr,
+          tipoVa: params.tipoVa,
+          tipoMedica: params.tipoMedica,
+          tipoOdonto: params.tipoOdonto,
+        },
+        skippedBenefits: skippedBenefitNotes(benefitParams),
         columns: [
           "cod_empresa",
           "cod_filial",
@@ -276,10 +300,14 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
           "massa_salarial_base",
           "vr_dia_medio",
           "vt_dia_medio",
+          "qtd_passes_dia_medio",
+          "va_valor_medio",
+          "assist_medica_mes",
+          "assist_odonto_mes",
           "dias_trabalho_mes_atual",
         ],
         rows,
-        note: "Ephemeral connection destroyed after response. Credentials were not persisted.",
+        note: "Ephemeral connection destroyed after response. Credentials were not persisted. Benefit @tipo* bound from benefitParams (sentinel -1 = skip).",
       });
     } catch (err) {
       // Connection/login/network → 422 JSON (never Nginx/Cloudflare 502 HTML).

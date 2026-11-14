@@ -5,8 +5,10 @@
    REGRAS APLICADAS:
    1. Zero PII: Nenhum nome, CPF, PIS ou matrícula individual é extraído.
    2. Situação: Apenas vínculos ativos -> CON_CdiSituacao NOT IN (0, 2, 3, 99).
-   3. VR: Plano de Benefício tipo 53 (PlanosBeneficiosValores).
-   4. VT: Soma ativa (CAS_DtdFim IS NULL) em ConATransportes x MeiosTransportesItens.
+   3. VR/VA/fixos: ConBeneficios → PlanosBeneficios → PlanosBeneficiosValores
+      (ROW_NUMBER por PBV_DtdInicio DESC) → TiposBeneficiosEntsBens
+      WHERE EBT_CdiTipoBeneficio = @tipo* (SqlProfile.benefitParams; fábrica VR=53).
+   4. VT: ConATransportes × MeiosTransportesItens (MRI_DtdInicioVigencia DESC).
           (Ignora ConCalculoATransportes conforme regra canônica).
    5. Sanitização: Remove ';' de textos para não quebrar CSV exportado pelo Aptools.
    6. Prefixos Aptools: Contratados=CON, Locais=LPC, HorariosJornadas=HRI,

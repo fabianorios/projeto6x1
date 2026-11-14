@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   getAptoolsExtractorScript,
   type ExtractorDialect,
@@ -6,6 +6,11 @@ import {
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import { readCsvFileText } from '../utils/csvEncoding'
 import { parsePayrollTolerant } from '../utils/parsePayrollTolerant'
+
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
+  /\/$/,
+  '',
+) ?? ''
 
 interface AptoolsExtractModalProps {
   onClose: () => void
@@ -30,8 +35,27 @@ export function AptoolsExtractModal({
   const [importOk, setImportOk] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [sql, setSql] = useState(() => getAptoolsExtractorScript(dialect))
 
-  const sql = getAptoolsExtractorScript(dialect)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/query/extractor-sql?engine=${dialect}`,
+        )
+        if (!res.ok) throw new Error('api')
+        const body = (await res.json()) as { sql?: string }
+        if (!cancelled && body.sql) setSql(body.sql)
+      } catch {
+        if (!cancelled) setSql(getAptoolsExtractorScript(dialect))
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [dialect])
 
   async function copySql() {
     setCopyError(null)
@@ -152,11 +176,12 @@ export function AptoolsExtractModal({
                 onClick={() => void copySql()}
                 className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white"
               >
-                {copied ? 'Copiado!' : 'Copiar Comando SQL'}
+                {copied ? 'Copiado!' : 'Copiar'}
               </button>
               <span className="text-xs text-[var(--color-muted)]">
                 Fonte:{' '}
                 <code className="text-[11px]">docs/apdata-extractor.sql</code>
+                {' · '}tipos fábrica VR=53 / VA=52 (editáveis no Studio)
               </span>
             </div>
             {copyError ? (

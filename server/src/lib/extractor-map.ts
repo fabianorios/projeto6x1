@@ -17,6 +17,12 @@ export type ExtractorAggregateRow = {
   massa_salarial_base: number;
   vr_dia_medio: number;
   vt_dia_medio: number;
+  /** Debug / Aptools: average passes/day from ConATransportes. */
+  qtd_passes_dia_medio: number;
+  /** VA amount (dia or mês — interpreted via benefitParams.vaModoValor). */
+  va_valor_medio: number;
+  assist_medica_mes: number;
+  assist_odonto_mes: number;
   dias_trabalho_mes_atual: number;
 };
 
@@ -61,6 +67,10 @@ export function mapExtractorRows(
     massa_salarial_base: num(pick(row, "massa_salarial_base"), 0),
     vr_dia_medio: num(pick(row, "vr_dia_medio"), 0),
     vt_dia_medio: num(pick(row, "vt_dia_medio"), 0),
+    qtd_passes_dia_medio: num(pick(row, "qtd_passes_dia_medio"), 0),
+    va_valor_medio: num(pick(row, "va_valor_medio"), 0),
+    assist_medica_mes: num(pick(row, "assist_medica_mes"), 0),
+    assist_odonto_mes: num(pick(row, "assist_odonto_mes"), 0),
     dias_trabalho_mes_atual: num(pick(row, "dias_trabalho_mes_atual"), 22),
   }));
 }

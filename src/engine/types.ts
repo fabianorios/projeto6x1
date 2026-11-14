@@ -156,6 +156,10 @@ export interface CostCenterResult {
   payrollMonthlyDelta: number
   vr: BenefitDelta
   vt: BenefitDelta
+  va: BenefitDelta
+  /** Fixed medical monthly (current roster + HC additional). */
+  assistMedicaMonthly: number
+  assistOdontoMonthly: number
   regimeFuncionamento?: RegimeFuncionamento
   distribuicaoTurmas?: TurmaDistribution
 }
@@ -206,6 +210,11 @@ export interface SimulationResult {
   /** Present when payrollRows were imported. */
   vr: BenefitDelta | null
   vt: BenefitDelta | null
+  va: BenefitDelta | null
+  /** Σ assistência médica mensal (titular) no quadro proposto. */
+  assistMedicaMonthly: number | null
+  /** Σ assistência odontológica mensal no quadro proposto. */
+  assistOdontoMonthly: number | null
   /** Breakdown by centro_custo (empty if no import). */
   byCostCenter: CostCenterResult[]
   /** True when payroll CSV/paste drove salary + benefits. */
