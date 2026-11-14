@@ -218,7 +218,7 @@ function estimateCosts(args: {
 function preferredCodeForScenario(
   scenarioId: ScenarioId,
 ): AllowedScheduleCode {
-  if (scenarioId === 'pec_draft_aggressive') return '4x3'
+  if (scenarioId === 'stress_test_4x3') return '4x3'
   return '5x2'
 }
 

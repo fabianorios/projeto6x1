@@ -1,4 +1,13 @@
 import {
+  cascadeHeOnDivisor,
+  planAbsorption,
+} from './absorption'
+import { computeChargeBreakdown } from './charges'
+import {
+  distributeCrews,
+  resolveRegime,
+} from './crew-distribution'
+import {
   aggregateByCostCenter,
   estimateWorkDaysPerMonth,
   type PayrollRow,
@@ -7,6 +16,7 @@ import {
   DEFAULT_DISCLAIMER,
   getRuleVersion,
   getSectorCalibration,
+  normalizeScenarioId,
 } from './rules'
 import {
   type CostCenterDemand,
@@ -21,6 +31,11 @@ import type {
   SimulationInput,
   SimulationResult,
 } from './types'
+import {
+  DEFAULT_ESTRATEGIA_ABSORCAO,
+  DEFAULT_TAX_REGIME,
+  type TaxRegime,
+} from '../types'
 
 /**
  * Core simulation: map wizard inputs (+ optional payroll import) →
@@ -28,24 +43,17 @@ import type {
  *
  * Model (heuristic — see docs/engine-assumptions.md + docs/import-layout.md):
  *
- * 1. Parse current scale → workRatio_current = work / (work + rest)
+ * 1. Parse current scale → workRatio_current
  * 2. Resolve target scale from scenario (or preserve current for status quo)
- * 3. To keep the same person-days of coverage:
- *      headcountFactor = workRatio_current / workRatio_target
- * 4. requiredHC = ceil( HC × factor × (1 + buffer) × sectorFriction )
- * 5. Folha:
- *    - Sem import: baseline = HC × salário médio
- *    - Com import: baseline = Σ(salario × quantidade); HC = Σ quantidade
- *    - Projetada = requiredHC × salário_médio × projectedChargeFactor
- * 6. VR/VT (import):
- *    - Atual = valor_dia × dias_mes_atual × quantidade
- *    - Proposto (quadro atual) = valor_dia × dias_mes_proposta(escala-alvo) × qty
- *    - HC adicional herda média valor_dia × dias_proposta do centro
- * 7. Uncovered hours/week (if not hiring) =
- *      additionalHC × targetWorkDays × hoursPerShift
+ * 3. headcountFactor = workRatio_current / workRatio_target × buffer × friction
+ * 4. Gap absorption via estrategia (contratação / HE cap / híbrido)
+ * 5. Folha + encargos por regime tributário CNPJ + provisões 13º/férias
+ * 6. HE cascade when salary divisor drops (220→210/200/180)
+ * 7. VR/VT + crew distribution by regime_funcionamento
  */
 export function simulate(input: SimulationInput): SimulationResult {
-  const ruleVersion = getRuleVersion(input.scenarioId)
+  const scenarioId = normalizeScenarioId(input.scenarioId)
+  const ruleVersion = getRuleVersion(scenarioId)
   const params = ruleVersion.params
   const sector = getSectorCalibration(input.sector)
 
@@ -57,10 +65,10 @@ export function simulate(input: SimulationInput): SimulationResult {
     ? wizardScale
     : params.targetScale
 
-  // When importing, HC and average salary come from the sheet.
   let headcount = input.headcount
   let averageMonthlySalary = input.averageMonthlySalary
   let baselineFromImport = 0
+  let heHoursExisting = 0
 
   if (payrollRows) {
     headcount = payrollRows.reduce((s, r) => s + r.quantidade, 0)
@@ -70,10 +78,15 @@ export function simulate(input: SimulationInput): SimulationResult {
     )
     averageMonthlySalary =
       headcount > 0 ? baselineFromImport / headcount : input.averageMonthlySalary
+    heHoursExisting = payrollRows.reduce(
+      (s, r) => s + (r.heMediaMensalHoras || 0) * r.quantidade,
+      0,
+    )
   }
 
   const effectiveInput: SimulationInput = {
     ...input,
+    scenarioId,
     headcount,
     averageMonthlySalary,
     payrollRows: payrollRows ?? undefined,
@@ -93,14 +106,34 @@ export function simulate(input: SimulationInput): SimulationResult {
   const headcountFactor =
     scaleFactor * bufferMultiplier * sector.staffingFriction
 
-  const requiredHeadcount = Math.max(
+  const requiredIdeal = Math.max(
     headcount,
     Math.ceil(headcount * headcountFactor),
   )
-  const additionalHeadcount = params.preserveCurrentScale
+  const gapHeadcount = params.preserveCurrentScale
     ? 0
-    : Math.max(0, requiredHeadcount - headcount)
+    : Math.max(0, requiredIdeal - headcount)
+
+  const estrategia =
+    input.estrategiaAbsorcao ?? DEFAULT_ESTRATEGIA_ABSORCAO
+
+  const absorption = planAbsorption({
+    estrategia,
+    currentHeadcount: headcount,
+    gapHeadcount,
+    averageMonthlySalary,
+    scenarioDivisor: params.salaryDivisor,
+    heMediaMensalHoras: heHoursExisting,
+  })
+
+  const additionalHeadcount = absorption.effectiveAdditionalHeadcount
   const effectiveRequired = headcount + additionalHeadcount
+
+  const heCascade = cascadeHeOnDivisor({
+    averageMonthlySalary,
+    heHoursExisting,
+    scenarioDivisor: params.salaryDivisor,
+  })
 
   const baselineMonthlyPayroll = roundMoney(
     usedPayrollImport
@@ -110,8 +143,23 @@ export function simulate(input: SimulationInput): SimulationResult {
   const projectedSalaryMass = roundMoney(
     effectiveRequired * averageMonthlySalary,
   )
+
+  const taxRegime = resolveInputTaxRegime(input, payrollRows)
+  const charges = computeChargeBreakdown({
+    projectedSalaryMass,
+    baselineSalaryMass: baselineMonthlyPayroll,
+    additionalHeadcount,
+    requiredHeadcount: effectiveRequired,
+    taxRegime,
+  })
+
+  // Prefer tax+provisions path; fall back to legacy flat factor when status_quo
+  // and charges would still apply — always add charge breakdown for transparency.
   const projectedMonthlyPayroll = roundMoney(
-    projectedSalaryMass * params.projectedChargeFactor,
+    projectedSalaryMass +
+      charges.totalMonthlyExtras +
+      heCascade.heCostDelta +
+      absorption.heAbsorptionCost,
   )
   const estimatedMonthlyCharges = roundMoney(
     projectedMonthlyPayroll - projectedSalaryMass,
@@ -122,7 +170,9 @@ export function simulate(input: SimulationInput): SimulationResult {
   const annualDelta = roundMoney(monthlyDelta * 12)
 
   const uncoveredShiftHoursPerWeek =
-    additionalHeadcount * targetScale.workDays * params.hoursPerShift
+    Math.max(0, gapHeadcount - additionalHeadcount) *
+    targetScale.workDays *
+    params.hoursPerShift
 
   const postsPerDay = input.units * input.shiftsPerDay
   const personDaysCurrent = headcount * currentScale.workDays
@@ -130,6 +180,12 @@ export function simulate(input: SimulationInput): SimulationResult {
     postsPerDay * (currentScale.workDays + currentScale.restDays)
 
   const proposedDaysPerMonth = estimateWorkDaysPerMonth(targetScale)
+
+  const defaultRegime = resolveRegime(
+    input.defaultRegimeFuncionamento ??
+      payrollRows?.find((r) => r.regimeFuncionamento)?.regimeFuncionamento,
+  )
+  const distribuicaoTurmas = distributeCrews(defaultRegime, effectiveRequired)
 
   let byCostCenter: CostCenterResult[] = []
   let vr: BenefitDelta | null = null
@@ -143,8 +199,10 @@ export function simulate(input: SimulationInput): SimulationResult {
       targetScale,
       headcountFactor,
       params.preserveCurrentScale,
-      params.projectedChargeFactor,
       proposedDaysPerMonth,
+      input,
+      params.salaryDivisor,
+      estrategia,
     )
     byCostCenter = resolved.centers
     vr = resolved.vr
@@ -169,6 +227,14 @@ export function simulate(input: SimulationInput): SimulationResult {
       detail: params.preserveCurrentScale
         ? `Status quo: alvo = escala atual (${targetScale.label}).`
         : `${targetScale.label} → razão ${formatRatio(targetWorkRatio)} (hipótese do cenário, não texto legal).`,
+    },
+    {
+      id: 'divisor-salario',
+      category: 'assumption',
+      label: 'Divisor salarial do cenário',
+      amount: params.salaryDivisor,
+      unit: 'none',
+      detail: `Teto semanal modelado ${params.weeklyHoursCap}h; cascata de HE sobre divisor ${heCascade.baselineDivisor}→${params.salaryDivisor}.`,
     },
     {
       id: 'factor-scale',
@@ -201,7 +267,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Headcount requerido (estimado)',
       amount: effectiveRequired,
       unit: 'people',
-      detail: `ceil(HC × ${formatFactor(headcountFactor)}) com piso no HC atual${params.preserveCurrentScale ? '; status quo força adicional = 0' : ''}.`,
+      detail: `Gap ideal ${gapHeadcount}; estratégia ${estrategia} → hires/intermitente ${additionalHeadcount}.`,
     },
     {
       id: 'hc-additional',
@@ -210,8 +276,18 @@ export function simulate(input: SimulationInput): SimulationResult {
       amount: additionalHeadcount,
       unit: 'people',
       detail: usedPayrollImport
-        ? `Diferença entre requerido e Σ quantidade da folha importada (${headcount}).`
-        : 'Diferença entre requerido e headcount informado.',
+        ? `Diferença efetiva após absorção vs Σ quantidade da folha (${headcount}).`
+        : 'Diferença efetiva após estratégia de absorção.',
+    },
+    {
+      id: 'he-cap',
+      category: 'coverage',
+      label: 'Horas extras usadas na absorção',
+      amount: absorption.heHoursUsed,
+      unit: 'none',
+      detail: absorption.heCapReached
+        ? `Teto legal simulado ${absorption.heCapHours} h/mês atingido — residual vira contratação/intermitente.`
+        : `Capacidade HE ${absorption.heCapHours} h/mês (44h × HC atual).`,
     },
     {
       id: 'payroll-baseline',
@@ -229,7 +305,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Folha mensal projetada',
       amount: projectedMonthlyPayroll,
       unit: 'BRL_month',
-      detail: `${effectiveRequired} × salário médio × fator de encargos ${formatFactor(params.projectedChargeFactor)}.`,
+      detail: `Massa salarial + encargos ${charges.taxRegime} (${pct(charges.employerChargeRate)}) + provisões + HE/divisor.`,
     },
     {
       id: 'payroll-charges',
@@ -238,7 +314,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       amount: estimatedMonthlyCharges,
       unit: 'BRL_month',
       detail:
-        'Parcela do fator de encargos acima de 1,0 — estimativa grossista, não memória de cálculo de folha.',
+        'Encargos patronais por CNPJ + férias/13º + onboarding amortizado + Δ HE por divisor — estimativa, não memória de cálculo.',
     },
     {
       id: 'payroll-delta-month',
@@ -325,7 +401,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Horas/semana descobertas se não contratar',
       amount: uncoveredShiftHoursPerWeek,
       unit: 'hours_week',
-      detail: `adicional × ${targetScale.workDays} dias-alvo × ${params.hoursPerShift}h/turno.`,
+      detail: `gap residual × ${targetScale.workDays} dias-alvo × ${params.hoursPerShift}h/turno.`,
     },
     {
       id: 'capacity-check',
@@ -348,6 +424,7 @@ export function simulate(input: SimulationInput): SimulationResult {
     'vr-delta-month',
     'vt-delta-month',
     'coverage-hours',
+    'he-cap',
   ]
 
   const explanations = [
@@ -363,13 +440,12 @@ export function simulate(input: SimulationInput): SimulationResult {
     ruleVersion.summary,
   ]
 
-  // Operational schedule/hour suggestions (allowlist only — never 12×36 etc.).
   const scheduleDemands: CostCenterDemand[] | undefined = byCostCenter.length
     ? byCostCenter.map((c) => {
         const avgSalary =
-          c.currentHeadcount > 0 ? c.baselinePayroll / c.currentHeadcount : averageMonthlySalary
-        // Recover avg VR/VT dia from proposed = dia × proposedDays × (hc+add);
-        // prefer reconstructing from current totals / estimated current days.
+          c.currentHeadcount > 0
+            ? c.baselinePayroll / c.currentHeadcount
+            : averageMonthlySalary
         const currentDays = estimateWorkDaysPerMonth(currentScale)
         const avgVr =
           c.vr.currentMonthly > 0 && c.currentHeadcount > 0 && currentDays > 0
@@ -428,7 +504,30 @@ export function simulate(input: SimulationInput): SimulationResult {
     explanations,
     disclaimer: DEFAULT_DISCLAIMER,
     isStub: false,
+    charges,
+    absorption,
+    heCascade,
+    distribuicaoTurmas,
   }
+}
+
+function resolveInputTaxRegime(
+  input: SimulationInput,
+  payrollRows: PayrollRow[] | null,
+): TaxRegime {
+  if (input.defaultTaxRegime) return input.defaultTaxRegime
+  if (input.taxRegimeByCnpj && payrollRows) {
+    for (const row of payrollRows) {
+      const key = row.cnpjCompleto?.replace(/\D/g, '')
+      if (key && input.taxRegimeByCnpj[key]) {
+        return input.taxRegimeByCnpj[key]
+      }
+      if (row.cnpjCompleto && input.taxRegimeByCnpj[row.cnpjCompleto]) {
+        return input.taxRegimeByCnpj[row.cnpjCompleto]
+      }
+    }
+  }
+  return DEFAULT_TAX_REGIME
 }
 
 function buildCostCenterResults(
@@ -437,8 +536,10 @@ function buildCostCenterResults(
   targetScale: ScaleCycle,
   headcountFactor: number,
   preserveCurrentScale: boolean,
-  projectedChargeFactor: number,
   proposedDaysPerMonth: number,
+  input: SimulationInput,
+  salaryDivisor: number,
+  estrategia: SimulationInput['estrategiaAbsorcao'],
 ): {
   centers: CostCenterResult[]
   vr: BenefitDelta
@@ -447,23 +548,47 @@ function buildCostCenterResults(
   const aggs = aggregateByCostCenter(rows, resolveScale, targetScale)
 
   const centers: CostCenterResult[] = aggs.map((agg) => {
-    const required = Math.max(
+    const requiredIdeal = Math.max(
       agg.headcount,
       Math.ceil(agg.headcount * headcountFactor),
     )
-    const additional = preserveCurrentScale
+    const gap = preserveCurrentScale
       ? 0
-      : Math.max(0, required - agg.headcount)
+      : Math.max(0, requiredIdeal - agg.headcount)
+    const avgSalary = agg.headcount > 0 ? agg.salaryMass / agg.headcount : 0
+    const plan = planAbsorption({
+      estrategia: estrategia ?? DEFAULT_ESTRATEGIA_ABSORCAO,
+      currentHeadcount: agg.headcount,
+      gapHeadcount: gap,
+      averageMonthlySalary: avgSalary,
+      scenarioDivisor: salaryDivisor,
+      heMediaMensalHoras: agg.heMediaMensalHoras * agg.headcount,
+    })
+    const additional = plan.effectiveAdditionalHeadcount
     const effectiveRequired = agg.headcount + additional
-    const avgSalary =
-      agg.headcount > 0 ? agg.salaryMass / agg.headcount : 0
+
+    const taxRegime = resolveCcTaxRegime(input, agg.cnpjCompleto)
+    const salaryMass = roundMoney(effectiveRequired * avgSalary)
+    const charges = computeChargeBreakdown({
+      projectedSalaryMass: salaryMass,
+      baselineSalaryMass: agg.baselinePayroll,
+      additionalHeadcount: additional,
+      requiredHeadcount: effectiveRequired,
+      taxRegime,
+    })
+    const heCascade = cascadeHeOnDivisor({
+      averageMonthlySalary: avgSalary,
+      heHoursExisting: agg.heMediaMensalHoras * agg.headcount,
+      scenarioDivisor: salaryDivisor,
+    })
     const projectedPayroll = roundMoney(
-      effectiveRequired * avgSalary * projectedChargeFactor,
+      salaryMass +
+        charges.totalMonthlyExtras +
+        heCascade.heCostDelta +
+        plan.heAbsorptionCost,
     )
     const baselinePayroll = roundMoney(agg.baselinePayroll)
 
-    // Existing staff: proposed VR/VT already at target days.
-    // Additional HC: avg valor_dia × proposed days.
     const vrProposedExisting = agg.vr.proposedMonthly
     const vrAdditional =
       additional > 0 && agg.avgVrValorDia > 0
@@ -480,6 +605,13 @@ function buildCostCenterResults(
     const vtProposed = roundMoney(vtProposedExisting + vtAdditional)
     const vtCurrent = roundMoney(agg.vt.currentMonthly)
 
+    const regime = resolveRegime(
+      input.regimeFuncionamentoByCc?.[agg.centroCusto] ??
+        agg.regimeFuncionamento ??
+        input.defaultRegimeFuncionamento,
+    )
+    const distribuicaoTurmas = distributeCrews(regime, effectiveRequired)
+
     return {
       centroCusto: agg.centroCusto,
       currentHeadcount: agg.headcount,
@@ -490,6 +622,8 @@ function buildCostCenterResults(
       payrollMonthlyDelta: roundMoney(projectedPayroll - baselinePayroll),
       vr: makeBenefitDelta(vrCurrent, vrProposed, proposedDaysPerMonth),
       vt: makeBenefitDelta(vtCurrent, vtProposed, proposedDaysPerMonth),
+      regimeFuncionamento: regime,
+      distribuicaoTurmas,
     }
   })
 
@@ -503,6 +637,18 @@ function buildCostCenterResults(
   )
 
   return { centers, vr, vt }
+}
+
+function resolveCcTaxRegime(
+  input: SimulationInput,
+  cnpj: string | null,
+): TaxRegime {
+  if (cnpj && input.taxRegimeByCnpj) {
+    const digits = cnpj.replace(/\D/g, '')
+    if (input.taxRegimeByCnpj[digits]) return input.taxRegimeByCnpj[digits]
+    if (input.taxRegimeByCnpj[cnpj]) return input.taxRegimeByCnpj[cnpj]
+  }
+  return input.defaultTaxRegime ?? DEFAULT_TAX_REGIME
 }
 
 function makeBenefitDelta(

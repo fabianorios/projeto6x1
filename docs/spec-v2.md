@@ -76,10 +76,10 @@ Entrega típica: relatório imprimível (PDF via browser) em reunião com o clie
 
 ### 4.3 Motor / regras
 
-1. Manter cenários versionados como **dados** (`rules.ts`): `status_quo`, `pec_draft_conservative` (5×2), `pec_draft_aggressive` (4×3).
+1. Cenários versionados (`rules.ts`): `status_quo`, `fase1_2026_42h` (42h / divisor 210 / 5×2), `fase2_2027_40h` (40h / 200), `stress_test_4x3` (4×3 / 180). Aliases legados `pec_draft_*` normalizam para fase1/stress.
 2. Allowlist de sugestão: `5x2`, `4x3`, `turnos_8h`; **nunca** sugerir `6x1` / `12x36` / `24x48` / sobreaviso / jornada &gt;10h como proposto.
-3. Fórmulas documentadas em `engine-assumptions.md` (scaleFactor, buffer, atrito setorial, encargos proxy).
-4. Calibração: histórico aceitar/editar/rejeitar permanece local na v2; sem sync multi-dispositivo neste ciclo.
+3. Encargos por CNPJ (Simples vs Lucro Real/Presumido) + provisões férias/13º + onboarding; cascata de divisor salarial sobre HE; estratégias de absorção `CONTRATACAO_INTEGRAL` / `HORA_EXTRA_MAXIMA` (cap 44h/mês) / `HIBRIDO_INTERMITENTE`; cobertura por `regime_funcionamento` + `distribuicao_turmas` (7 turmas 5×2 no contínuo).
+4. Fórmulas em `engine-assumptions.md`. Calibração local na v2; sem sync multi-dispositivo neste ciclo.
 
 ### 4.4 Plataforma / operação
 
@@ -94,7 +94,7 @@ Entrega típica: relatório imprimível (PDF via browser) em reunião com o clie
 ## 5. Fora de escopo v2 (out)
 
 - Parecer jurídico automático ou citação de texto legal da PEC como “cálculo oficial”.
-- Modelagem completa de encargos (INSS/FGTS/CCT), horas extras, banco de horas, feriados/DSR, sazonalidade.
+- Modelagem completa de encargos CCT/INSS por rubrica, banco de horas, feriados/DSR, sazonalidade (proxies de regime tributário + HE cap/divisor entram no motor; não substituem folha oficial).
 - Auth de usuários finais / multi-tenant SaaS com billing.
 - Persistência cloud de simulações/calibração (além de `localStorage` / `environments.json` no servidor).
 - DML/DDL via API ou MCP; exposição pública do MSSQL.

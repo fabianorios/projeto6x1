@@ -36,4 +36,5 @@ Hospital: plantão existente do cliente pode ser **lido** na importação como s
 - `6×1` no campo de escala atual: aviso suave (“só como Atual — não sugerida”); permanece válido como status quo.
 - Badge “Excluído da sugestão” se o usuário pedir 12×36 / 24×48 manualmente — explicar a política.
 - Campo wizard: horário de funcionamento (abertura/fechamento; opcional por weekday) — base das janelas sugeridas.
-- Lista de exclusão versionada no código (`src/engine/schedule-policy.ts`) espelhando este doc (`schedule-policy-v2`).
+- Lista de exclusão versionada no código (`src/engine/schedule-policy.ts`) espelhando este doc (`schedule-policy-v3`).
+- **Regime de funcionamento** por CC: `SEG_SEX`, `SEG_SAB`, `CONTINUO_7D`. Contínuo usa **7 turmas 5×2 rotativas** (`distribuicao_turmas` em `crew-distribution.ts`).

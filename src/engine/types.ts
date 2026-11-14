@@ -4,19 +4,35 @@ import type { OperatingHours } from './operating-hours'
 import type { PayrollRow } from './payroll'
 import type { ExclusionHit } from './schedule-policy'
 import type { ScheduleSuggestion } from './schedule-suggest'
+import type { ChargeBreakdown } from './charges'
+import type { AbsorptionPlan, HeCascadeResult } from './absorption'
+import type { TurmaDistribution } from './crew-distribution'
+import type {
+  EstrategiaAbsorcao,
+  RegimeFuncionamento,
+  TaxRegime,
+} from '../types'
 
 export type SectorId = 'varejo' | 'hospital' | 'construcao' | 'locacao'
 
 /**
  * Versioned normative scenarios (heuristic drafts — not legal text).
- * - status_quo: keep the client's current scale
- * - pec_draft_conservative: milder rest-day shift + small buffer
- * - pec_draft_aggressive: stronger rest-day shift + larger buffer
+ * - status_quo: keep the client's current scale / divisor 220
+ * - fase1_2026_42h: PEC phase 1 — ~42h week, divisor 210, 5×2
+ * - fase2_2027_40h: PEC phase 2 — ~40h week, divisor 200, 5×2
+ * - stress_test_4x3: aggressive 4×3 stress, divisor 180
+ *
+ * Legacy IDs `pec_draft_conservative` / `pec_draft_aggressive` normalize
+ * to fase1 / stress via `normalizeScenarioId`.
  */
 export type ScenarioId =
   | 'status_quo'
-  | 'pec_draft_conservative'
-  | 'pec_draft_aggressive'
+  | 'fase1_2026_42h'
+  | 'fase2_2027_40h'
+  | 'stress_test_4x3'
+
+/** Legacy scenario IDs kept for basket / localStorage migration. */
+export type LegacyScenarioId = 'pec_draft_conservative' | 'pec_draft_aggressive'
 
 /** Parsed work/rest cycle, e.g. 6×1 → { workDays: 6, restDays: 1 }. */
 export interface ScaleCycle {
@@ -43,13 +59,16 @@ export interface ScenarioParams {
    */
   coverageBuffer: number
   /**
-   * Multiplier on projected salary mass for rough employer charges
-   * (INSS/FGTS/benefits style). Applied only to the projected side so
-   * the delta surfaces charge growth with headcount. ESTIMATE.
+   * Legacy flat charge factor (kept as fallback when no tax regime path).
+   * Prefer CNPJ tax regime + provisions in simulate().
    */
   projectedChargeFactor: number
   /** Assumed hours per shift when converting gaps to hours. */
   hoursPerShift: number
+  /** Weekly hours ceiling modeled by the scenario (44 / 42 / 40 / 36). */
+  weeklyHoursCap: number
+  /** Monthly salary divisor for hourly rate (220 → 210 / 200 / 180). */
+  salaryDivisor: number
 }
 
 export interface RuleVersion {
@@ -92,6 +111,16 @@ export interface SimulationInput {
    * headcount/salário médio são sobrescritos pelos totais importados.
    */
   payrollRows?: PayrollRow[]
+  /** Default tax regime when CNPJ map misses. */
+  defaultTaxRegime?: TaxRegime
+  /** Tax regime keyed by CNPJ (digits or formatted). */
+  taxRegimeByCnpj?: Record<string, TaxRegime>
+  /** How to absorb coverage gap. */
+  estrategiaAbsorcao?: EstrategiaAbsorcao
+  /** Default operating regime when CC map misses. */
+  defaultRegimeFuncionamento?: RegimeFuncionamento
+  /** Operating regime keyed by centro de custo. */
+  regimeFuncionamentoByCc?: Record<string, RegimeFuncionamento>
 }
 
 export interface CostDelta {
@@ -127,6 +156,8 @@ export interface CostCenterResult {
   payrollMonthlyDelta: number
   vr: BenefitDelta
   vt: BenefitDelta
+  regimeFuncionamento?: RegimeFuncionamento
+  distribuicaoTurmas?: TurmaDistribution
 }
 
 export interface CoverageGap {
@@ -197,4 +228,12 @@ export interface SimulationResult {
    * numbers are estimates, not stubs of "1.2×".
    */
   isStub: boolean
+  /** Charge breakdown (tax + provisions + onboarding). */
+  charges: ChargeBreakdown
+  /** Absorption plan (hires vs HE vs hybrid). */
+  absorption: AbsorptionPlan
+  /** HE cost cascade from salary-divisor change. */
+  heCascade: HeCascadeResult
+  /** Crew distribution for default / aggregate regime. */
+  distribuicaoTurmas: TurmaDistribution
 }

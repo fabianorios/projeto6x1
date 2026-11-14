@@ -5,14 +5,26 @@ Os números são **estimativas transparentes** para apoio a consultoria — **n�
 
 ## Cenários versionados
 
-| ID | Rótulo | Escala-alvo (hipótese) | Buffer de cobertura | Fator de encargos na projeção |
-|----|--------|------------------------|---------------------|-------------------------------|
-| `status_quo` | Status quo | = escala informada | 0% | 1,00 |
-| `pec_draft_conservative` | PEC rascunho — conservador | 5×2 | 5% | 1,08 |
-| `pec_draft_aggressive` | PEC rascunho — agressivo | 4×3 | 12% | 1,15 |
+| ID | Rótulo | Escala-alvo | Divisor | Teto semanal | Buffer |
+|----|--------|-------------|---------|--------------|--------|
+| `status_quo` | Status quo | = escala informada | 220 | 44h | 0% |
+| `fase1_2026_42h` | Fase 1 — 2026 (42h) | 5×2 | 210 | 42h | 5% |
+| `fase2_2027_40h` | Fase 2 — 2027 (40h) | 5×2 | 200 | 40h | 8% |
+| `stress_test_4x3` | Stress-test 4×3 | 4×3 | 180 | 36h | 12% |
 
-IDs de regra: `rules-*-v1` (ver `RULE_VERSIONS` no código).  
-Os rascunhos **não** citam artigo de PEC aprovada; são alavancas para stress-test de custo e cobertura.
+IDs de regra: `rules-*-v2` / `rules-fase*-v1` (ver `RULE_VERSIONS`).  
+Aliases legados: `pec_draft_conservative` → `fase1_2026_42h`; `pec_draft_aggressive` → `stress_test_4x3`.  
+Encargos patronais vêm do **regime tributário por CNPJ** (Simples / Lucro Presumido / Lucro Real) + provisões de férias/13º + onboarding — não só do fator flat legado.
+
+### Absorção de gap e HE
+
+- Estratégias: `CONTRATACAO_INTEGRAL`, `HORA_EXTRA_MAXIMA` (teto 44 h/mês por pessoa), `HIBRIDO_INTERMITENTE`.
+- Cascata de divisor: HE existente reprecificada em `salário ÷ divisor_cenário` × 1,5.
+
+### Regime de funcionamento / turmas
+
+- `SEG_SEX`, `SEG_SAB`, `CONTINUO_7D`.
+- Contínuo: **7 turmas 5×2 rotativas** (`distribuicao_turmas`).
 
 ## Fórmulas (v1)
 

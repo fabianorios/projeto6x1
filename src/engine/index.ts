@@ -2,8 +2,10 @@ export {
   DEFAULT_DISCLAIMER,
   getRuleVersion,
   getSectorCalibration,
+  isLegacyScenarioId,
   listScenarios,
   makeScale,
+  normalizeScenarioId,
   RULE_VERSIONS,
   SECTOR_CALIBRATION,
 } from './rules'
@@ -12,6 +14,7 @@ export { simulate } from './simulate'
 export {
   PAYROLL_CSV_HEADERS,
   aggregateByCostCenter,
+  emptyPayrollExtras,
   estimateWorkDaysPerMonth,
   parseNumberBr,
   parsePayrollCsv,
@@ -37,6 +40,22 @@ export type {
   ExclusionHit,
   ExclusionMiss,
 } from './schedule-policy'
+export {
+  continuo7dRosterFactor,
+  distributeCrews,
+  resolveRegime,
+} from './crew-distribution'
+export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
+export {
+  cascadeHeOnDivisor,
+  planAbsorption,
+} from './absorption'
+export type { AbsorptionPlan, AbsorptionInput, HeCascadeResult } from './absorption'
+export {
+  computeChargeBreakdown,
+  resolveTaxRegime,
+} from './charges'
+export type { ChargeBreakdown, ChargeInput } from './charges'
 export {
   DEFAULT_OPERATING_HOURS,
   WEEKDAY_LABELS,
@@ -125,6 +144,7 @@ export type {
   CostCenterResult,
   CostDelta,
   CoverageGap,
+  LegacyScenarioId,
   LineItemCategory,
   LineItemUnit,
   ResultLineItem,
@@ -137,3 +157,18 @@ export type {
   SimulationInput,
   SimulationResult,
 } from './types'
+
+export type {
+  EstrategiaAbsorcao,
+  RegimeFuncionamento,
+  TaxRegime,
+} from '../types'
+export {
+  DEFAULT_ESTRATEGIA_ABSORCAO,
+  DEFAULT_REGIME_FUNCIONAMENTO,
+  DEFAULT_TAX_REGIME,
+  EMPLOYER_CHARGE_RATE,
+  HE_LEGAL_CAP_HOURS_MONTH,
+  REGIME_FUNCIONAMENTO_LABELS,
+  SALARY_DIVISOR_BASELINE,
+} from '../types'
