@@ -44,7 +44,7 @@ Entre sit=1: 63 horários distintos, 121 CC, 232 cargos; HMV dominante **220h/44
 2. **`QuantidadesHorasMes` não tem 210** (nem 42h semanais dedicados) — gap PEC etapa 1 já previsto na feasibility.
 3. **`HorariosBeneficios.HOB_QtiDiasBeneficioFixo` = 0** em 363/363 — dias VR/VT pelo ciclo / AT, não por esse campo.
 4. **`ConBeneficios.CBN_OplAtivo = 0` em todos** — nesta cópia use `CBN_DtdFim IS NULL` (≈40 k) em vez do flag.
-5. VT não aparece como `TiposBeneficios`; usar `HorariosTiposDiasAT` + valor/passe fora do Apdata ou parâmetro wizard.
+5. VT não aparece como `TiposBeneficios`; usar `ConATransportes` × `MeiosTransportesItens` para `vt_valor_dia` e `HorariosTiposDiasAT` ∩ jornada (`TIP_OplTrabalho=1`) para dias. **Ignorar `ConCalculoATransportes`.**
 
 ## Campo CSV ← Apdata
 
@@ -60,8 +60,8 @@ Separador `;` · UTF-8 · cabeçalho exato ([import-layout.md](import-layout.md)
 | `escala_atual` | Ciclo `HorariosJornadas` × `TiposDiasPonto` | Ver § Classificação. Não usar só `HOR_D1sHorario` nem só `HOR_CdiTipoEscala`. |
 | `vr_valor_dia` | `PlanosBeneficiosValores.PBV_VlnBeneficio` via plano tipo **53** (Vale-Refeição) | Nesta TEMP média ≈ **30.56** nos planos VR. Tipo **52** (VA) ≈ 361 parece mensal — **não** mapear direto para `vr_valor_dia`. Refeitório (20): fora do VR/dia do motor. |
 | `vr_dias_mes_atual` | Dias trabalho do ciclo × 30/`cycle_len` **ou** `HOB_QtiDiasBeneficioFixo` se &gt; 0 | TEMP: HOB inútil. Estimativa: `work_days / cycle_len * 30` (ex. 6×1 → 26; 5×2 → ≈21.4). Motor também estima se vazio. |
-| `vt_valor_dia` | Parâmetro / planilha externa / futuro cálculo de passes | Sem tipo VT em `TiposBeneficios`. `ConTransportesBeneficios` vazio (0 rows) nesta TEMP. |
-| `vt_dias_mes_atual` | Contagem de dias úteis cobertos por `HorariosTiposDiasAT` | Quase todo horário ativo tem AT em `1` (Dom), `7` (Sáb), `88` (2ª–6ª) → tipicamente dias úteis + sábados da grade. Sem AT → deixar vazio (motor estima). |
+| `vt_valor_dia` | `Σ(CAS_QtiPassesDia × MRI_VlnUnitario)` — `ConATransportes` × `MeiosTransportesItens` | Ativo: `CAS_DtdFim IS NULL` + não desativado. Sem `ConCalculoATransportes`. Override opcional no fluxo Apdata→Simular. |
+| `vt_dias_mes_atual` | `HorariosTiposDiasAT` ∩ dias de `HorariosJornadas` com `TIP_OplTrabalho=1` | Tipo `88` cobre 2ª–6ª. ≈ `30 × at_work / cycle_len`. Sem AT → vazio (motor estima). **Não** usar `CCA_QtiTotalDias`. |
 | `quantidade` | `COUNT(*)` grupo cargo×CC×horário (ou HMV/escala) | Default export agregado (sem PII). Alternativa: 1 linha/contratado **sem** `nome`. |
 | `nome` | *(omitir)* | Opcional no CSV; **não** preencher a partir de `CON_DssNome` no default LGPD. |
 
@@ -188,10 +188,8 @@ SELECT
     WHEN cl.cycle_len > 0
       THEN ROUND(30.0 * cl.work_days / cl.cycle_len, 1)
   END                                      AS vr_dias_mes_atual,  -- estimativa
-  CASE
-    WHEN cl.cycle_len > 0
-      THEN ROUND(30.0 * cl.work_days / cl.cycle_len, 1)
-  END                                      AS vt_dias_mes_atual,  -- mesma heurística se AT cobrir úteis
+  -- vt_valor_dia / vt_dias_mes_atual: ver SELECT E (ConATransportes × AT ∩ trabalho).
+  -- Runtime Apdata→Simular preenche via allowlist single-table + join cliente.
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
@@ -212,7 +210,7 @@ GROUP BY
   cl.work_days;
 ```
 
-Exportar o result set como CSV `;` com cabeçalho do layout. Preencher `vr_valor_dia` / `vt_valor_dia` em passo separado (abaixo) ou no adapter.
+Exportar o result set como CSV `;` com cabeçalho do layout. Preencher `vt_*` via SELECT E / adapter (`src/apdata/`).
 
 ### D) VR valor/dia (planos tipo 53)
 
@@ -235,7 +233,11 @@ GROUP BY pb.PLB_CdiPlanoBeneficio;
 
 Ligar ao contratado via `ConBeneficios` (`CBN_CdiContratado`, `CBN_CdiPlanoBeneficio`, `CBN_DtdFim IS NULL`). Nesta TEMP `CBN_OplAtivo` não discrimina.
 
-### E) Dias AT (auxílio-transporte) por horário
+### E) VT valor/dia + dias (ConATransportes × AT ∩ trabalho)
+
+`vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario)` com `CAS_DtdFim IS NULL`.  
+`vt_dias_mes` = máscara `HorariosTiposDiasAT` ∩ dias de jornada com `TIP_OplTrabalho=1` (tipo `88` cobre 2ª–6ª).  
+**Não** usar `ConCalculoATransportes`. Skeleton completo: UI Apdata→Simular SELECT E / store `docs/apdata-vt-conatransportes.md`.
 
 ```sql
 SELECT HTD_CdiHorario,
@@ -292,7 +294,7 @@ Ambiente Turnocheck (**Ambientes**): host `127.0.0.1`, porta `1433`, database `a
 | Export sem PII | OK se omitir `nome` e usar `CCU_CosEstrutura` |
 | `salario` preenchível | **Falha** (zerado) — blocker de CSV “pronto para motor” |
 | `vr_valor_dia` | OK via planos tipo 53 |
-| `vt_valor_dia` | **Externo** / wizard |
+| `vt_valor_dia` | OK via `ConATransportes` × `MeiosTransportesItens` |
 | `12x36` detectável | OK (`HOR_CdiTipoEscala=3`, 7 horários) |
 
 ## Próximo passo técnico
@@ -301,7 +303,7 @@ Calibrar salário quando a TEMP/produção tiver `CON_VlnSalario` ≠ 0. Opciona
 
 ## UI Turnocheck
 
-- **Apdata → Simular** (`src/components/ApdataFlowPanel.tsx` + `src/apdata/`): revisão dos SELECTs B/C/D → progresso dos `/api/query/select` no ambiente ativo → agregação `PayrollRow[]` → `ResultsView`. LGPD: sem `nome`; CC por `CCU_CosEstrutura`.
+- **Apdata → Simular** (`src/components/ApdataFlowPanel.tsx` + `src/apdata/`): revisão dos SELECTs B/C/D/E → progresso dos `/api/query/select` (incl. `ConATransportes`, `MeiosTransportesItens`, `HorariosTiposDiasAT`) → agregação `PayrollRow[]` → `ResultsView`. LGPD: sem `nome`; CC por `CCU_CosEstrutura`.
 - **Mapeamento** (`src/components/MapeamentoPanel.tsx`): tabela CSV←Apdata e SELECTs de referência.
 
 ## Deploy (VPS, após merge)

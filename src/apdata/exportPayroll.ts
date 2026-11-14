@@ -1,13 +1,19 @@
 /**
  * Apdata → PayrollRow[] via /api/query/select (single-table) + client join.
  * LGPD: never selects CON_DssNome; centro_custo uses CCU_CosEstrutura.
+ * VT: ConATransportes (CAS_DtdFim IS NULL) × MeiosTransportesItens;
+ *     days = HorariosTiposDiasAT ∩ TIP_OplTrabalho=1. No ConCalculoATransportes.
  */
 
 import { selectRows } from '../api/query'
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import {
+  buildAtWorkDaysMap,
   buildCycleMap,
+  buildMeioPrecoMap,
+  buildVtValorDiaMap,
   estimateDaysFromCycle,
+  estimateVtDaysFromAtAndCycle,
   resolveEscala,
   type CycleStats,
   type EscalaCode,
@@ -26,6 +32,7 @@ export type ExportOverrides = {
   /** Applied when CON_VlnSalario / Integral are 0 (TEMP gap). */
   defaultSalario?: number
   vrValorDia?: number | null
+  /** When set, overrides ConATransportes Σ. Empty/null → compute from cadastro. */
   vtValorDia?: number | null
   environmentId?: string
   /** Max rows per select (server clamps to SQL_MAX_ROWS). */
@@ -36,6 +43,7 @@ export type ExportStats = {
   contratadosAtivos: number
   linhasAgregadas: number
   salariosZerados: number
+  comVtCadastro: number
   escalaCounts: Record<string, number>
   /** LGPD-safe preview: cargo / CC code / escala / qty only — no names. */
   sample: {
@@ -74,7 +82,7 @@ function initialSteps(): ExportProgressStep[] {
     })),
     {
       id: 'classify',
-      label: 'Classificar ciclos → escala_atual',
+      label: 'Classificar ciclos + VT (AT ∩ trabalho)',
       status: 'pending',
     },
     {
@@ -145,10 +153,13 @@ export async function exportPayrollFromApdata(
     const tiposRes = await runStep('tipos-dia')
     const jornadasRes = await runStep('jornadas')
     const horariosRes = await runStep('horarios')
+    const atMaskRes = await runStep('at-mask')
     const contratadosRes = await runStep('contratados')
     const cargosRes = await runStep('cargos')
     const centrosRes = await runStep('centros')
     const hmvRes = await runStep('hmv')
+    const conAtRes = await runStep('con-at')
+    const meiosRes = await runStep('meios-itens')
 
     steps = patchStep(
       steps,
@@ -164,9 +175,16 @@ export async function exportPayrollFromApdata(
     const jornadas = jornadasRes.rows.map((r) => ({
       horarioId: num(r.HRI_CdiHorario) ?? 0,
       tipoDiaId: num(r.HRI_CdiTipoDiaPonto) ?? 0,
+      tipoDiaCalendario: num(r.HRI_CdiTipoDiaCalendario),
       desativado: num(r.HRI_OplDesativado),
     }))
     const cycleMap = buildCycleMap(jornadas, tipos)
+    const atRows = atMaskRes.rows.map((r) => ({
+      horarioId: num(r.HTD_CdiHorario) ?? 0,
+      tipoDiaCalendario: num(r.HTD_CdiTipoDiaCalendario) ?? 0,
+      desativado: num(r.HTD_OplDesativado),
+    }))
+    const atWorkByHorario = buildAtWorkDaysMap(jornadas, tipos, atRows)
 
     const tipoEscalaByHorario = new Map<number, number>()
     for (const r of horariosRes.rows) {
@@ -179,6 +197,25 @@ export async function exportPayrollFromApdata(
       if (te !== null) tipoEscalaByHorario.set(id, te)
     }
 
+    const precos = buildMeioPrecoMap(
+      meiosRes.rows.map((r) => ({
+        meioId: num(r.MRI_CdiMeioTransporte) ?? 0,
+        unitario: num(r.MRI_VlnUnitario) ?? 0,
+        inicioVigencia: (r.MRI_DtdInicioVigencia as string | null) ?? null,
+        desativado: num(r.MRI_OplDesativado),
+      })),
+    )
+    const vtValorByContratado = buildVtValorDiaMap(
+      conAtRes.rows.map((r) => ({
+        contratadoId: num(r.CAS_CdiContratado) ?? 0,
+        meioId: num(r.CAS_CdiMeioTransporte) ?? 0,
+        passesDia: num(r.CAS_QtiPassesDia) ?? 0,
+        desativado: num(r.CAS_OplDesativado),
+        dtdFim: r.CAS_DtdFim,
+      })),
+      precos,
+    )
+
     const escalaCounts: Record<string, number> = {}
     for (const [hid, c] of cycleMap) {
       const code = resolveEscala(c.escala, tipoEscalaByHorario.get(hid) ?? null)
@@ -190,7 +227,7 @@ export async function exportPayrollFromApdata(
       'classify',
       {
         status: 'done',
-        detail: `${cycleMap.size} horário(s) classificados`,
+        detail: `${cycleMap.size} horário(s) · ${vtValorByContratado.size} VT cadastro`,
       },
       onProgress,
     )
@@ -239,18 +276,30 @@ export async function exportPayrollFromApdata(
       cargaMensal: number
       cargaSemanal: number
       escala: EscalaCode
-      days: number | null
+      vrDays: number | null
+      vtDays: number | null
+      vtValorSum: number
+      vtValorN: number
       quantidade: number
     }
 
     const groups = new Map<AggKey, Agg>()
     let salariosZerados = 0
     let contratadosAtivos = 0
+    let comVtCadastro = 0
+
+    const vtOverride =
+      overrides.vtValorDia !== undefined &&
+      overrides.vtValorDia !== null &&
+      Number.isFinite(overrides.vtValorDia)
+        ? overrides.vtValorDia
+        : null
 
     for (const r of contratadosRes.rows) {
       if (num(r.CON_CdiSituacao) !== 1) continue
       contratadosAtivos += 1
 
+      const contratadoId = num(r.CON_CdiContratado)
       const cargoId = num(r.CON_CdiCargo)
       const ccId = num(r.CON_CdiCentroCusto)
       const hmvId = num(r.CON_CdiQuantidadeHoraMes)
@@ -274,7 +323,21 @@ export async function exportPayrollFromApdata(
           ? (tipoEscalaByHorario.get(horarioId) ?? null)
           : null
       const escala = resolveEscala(cycle?.escala ?? null, tipoEscala)
-      const days = estimateDaysFromCycle(cycle ?? null)
+      const vrDays = estimateDaysFromCycle(cycle ?? null)
+      const atWork =
+        horarioId !== null ? (atWorkByHorario.get(horarioId) ?? null) : null
+      const vtDays = estimateVtDaysFromAtAndCycle(cycle ?? null, atWork)
+
+      let vtValor: number | null = null
+      if (vtOverride !== null) {
+        vtValor = vtOverride
+      } else if (contratadoId !== null) {
+        const computed = vtValorByContratado.get(contratadoId)
+        if (computed != null && computed > 0) {
+          vtValor = computed
+          comVtCadastro += 1
+        }
+      }
 
       let salario =
         num(r.CON_VlnSalario) ?? num(r.CON_VlnSalarioIntegral) ?? 0
@@ -294,7 +357,8 @@ export async function exportPayrollFromApdata(
         String(cargaMensal),
         String(cargaSemanal),
         escala,
-        String(days ?? ''),
+        String(vrDays ?? ''),
+        String(vtDays ?? ''),
       ].join('\u0001')
 
       let agg = groups.get(key)
@@ -307,7 +371,10 @@ export async function exportPayrollFromApdata(
           cargaMensal,
           cargaSemanal,
           escala,
-          days,
+          vrDays,
+          vtDays,
+          vtValorSum: 0,
+          vtValorN: 0,
           quantidade: 0,
         }
         groups.set(key, agg)
@@ -317,6 +384,10 @@ export async function exportPayrollFromApdata(
         agg.salarioSum += salario
         agg.salarioN += 1
       }
+      if (vtValor != null && vtValor > 0) {
+        agg.vtValorSum += vtValor
+        agg.vtValorN += 1
+      }
     }
 
     const defaultSal =
@@ -325,8 +396,6 @@ export async function exportPayrollFromApdata(
         : 0
     const vr =
       overrides.vrValorDia !== undefined ? overrides.vrValorDia : null
-    const vt =
-      overrides.vtValorDia !== undefined ? overrides.vtValorDia : null
 
     const rows: PayrollRow[] = []
     let line = 2
@@ -344,6 +413,12 @@ export async function exportPayrollFromApdata(
         issues.push({ line, message: 'cargo ou centro_custo vazio' })
         continue
       }
+      const vtValorDia =
+        vtOverride !== null
+          ? vtOverride
+          : agg.vtValorN > 0
+            ? agg.vtValorSum / agg.vtValorN
+            : null
       rows.push({
         cargo: agg.cargo,
         salario,
@@ -351,9 +426,9 @@ export async function exportPayrollFromApdata(
         cargaHorariaSemanal: agg.cargaSemanal,
         centroCusto: agg.centroCusto,
         vrValorDia: vr,
-        vrDiasMesAtual: agg.days,
-        vtValorDia: vt,
-        vtDiasMesAtual: agg.days,
+        vrDiasMesAtual: agg.vrDays,
+        vtValorDia,
+        vtDiasMesAtual: agg.vtDays,
         nome: null,
         quantidade: agg.quantidade,
         escalaAtual: agg.escala,
@@ -395,7 +470,7 @@ export async function exportPayrollFromApdata(
       'aggregate',
       {
         status: 'done',
-        detail: `${rows.length} linha(s) · ${contratadosAtivos} ativo(s)`,
+        detail: `${rows.length} linha(s) · ${contratadosAtivos} ativo(s) · ${comVtCadastro} c/ VT`,
       },
       onProgress,
     )
@@ -407,6 +482,7 @@ export async function exportPayrollFromApdata(
         contratadosAtivos,
         linhasAgregadas: rows.length,
         salariosZerados,
+        comVtCadastro,
         escalaCounts,
         sample,
       },

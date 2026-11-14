@@ -60,13 +60,17 @@ const CSV_FIELDS: {
   },
   {
     csv: 'vt_valor_dia',
-    origem: 'Parâmetro / planilha externa / futuro cálculo de passes',
-    notas: 'Sem tipo VT em TiposBeneficios nesta TEMP.',
+    origem:
+      'Σ(CAS_QtiPassesDia × MRI_VlnUnitario) — ConATransportes × MeiosTransportesItens',
+    notas:
+      'Ativo: CAS_DtdFim IS NULL + não desativado. Sem ConCalculoATransportes. Override opcional no fluxo.',
   },
   {
     csv: 'vt_dias_mes_atual',
-    origem: 'Contagem de dias úteis cobertos por HorariosTiposDiasAT',
-    notas: 'Sem AT → deixar vazio (motor estima).',
+    origem:
+      'HorariosTiposDiasAT ∩ HorariosJornadas com TIP_OplTrabalho=1 (tipo 88 cobre 2ª–6ª)',
+    notas:
+      '≈ 30 × at_work_days / cycle_len. Sem AT → vazio (motor estima). Não usar CCA_QtiTotalDias.',
   },
   {
     csv: 'quantidade',
@@ -160,6 +164,57 @@ class AS (
            ELSE 'other'
          END AS escala_ciclo
   FROM ciclo
+),
+at_mask AS (
+  SELECT HTD_CdiHorario, HTD_CdiTipoDiaCalendario
+  FROM dbo.HorariosTiposDiasAT
+  WHERE ISNULL(HTD_OplDesativado, 0) = 0
+),
+ciclo_vt AS (
+  SELECT hj.HRI_CdiHorario,
+         COUNT(*) AS cycle_len,
+         SUM(CASE
+               WHEN td.TIP_OplTrabalho = 1
+                AND (
+                  EXISTS (
+                    SELECT 1 FROM at_mask m
+                    WHERE m.HTD_CdiHorario = hj.HRI_CdiHorario
+                      AND m.HTD_CdiTipoDiaCalendario = hj.HRI_CdiTipoDiaCalendario
+                  )
+                  OR (
+                    EXISTS (
+                      SELECT 1 FROM at_mask m
+                      WHERE m.HTD_CdiHorario = hj.HRI_CdiHorario
+                        AND m.HTD_CdiTipoDiaCalendario = 88
+                    )
+                    AND hj.HRI_CdiTipoDiaCalendario BETWEEN 2 AND 6
+                  )
+                )
+               THEN 1 ELSE 0
+             END) AS at_work_days
+  FROM dbo.HorariosJornadas hj
+  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
+  GROUP BY hj.HRI_CdiHorario
+),
+preco AS (
+  SELECT MRI_CdiMeioTransporte, MRI_VlnUnitario,
+         ROW_NUMBER() OVER (
+           PARTITION BY MRI_CdiMeioTransporte
+           ORDER BY MRI_DtdInicioVigencia DESC) AS rn
+  FROM dbo.MeiosTransportesItens
+  WHERE ISNULL(MRI_OplDesativado, 0) = 0
+),
+vt_cad AS (
+  SELECT a.CAS_CdiContratado,
+         SUM(CAST(ISNULL(a.CAS_QtiPassesDia, 0) AS float)
+             * ISNULL(p.MRI_VlnUnitario, 0)) AS vt_valor_dia
+  FROM dbo.ConATransportes a
+  LEFT JOIN preco p
+    ON p.MRI_CdiMeioTransporte = a.CAS_CdiMeioTransporte AND p.rn = 1
+  WHERE ISNULL(a.CAS_OplDesativado, 0) = 0
+    AND a.CAS_DtdFim IS NULL
+  GROUP BY a.CAS_CdiContratado
 )
 SELECT
   car.CAR_D1sCargo                         AS cargo,
@@ -175,9 +230,10 @@ SELECT
     WHEN cl.cycle_len > 0
       THEN ROUND(30.0 * cl.work_days / cl.cycle_len, 1)
   END                                      AS vr_dias_mes_atual,
+  AVG(vt.vt_valor_dia)                     AS vt_valor_dia,
   CASE
-    WHEN cl.cycle_len > 0
-      THEN ROUND(30.0 * cl.work_days / cl.cycle_len, 1)
+    WHEN cv.cycle_len > 0 AND cv.at_work_days > 0
+      THEN ROUND(30.0 * cv.at_work_days / cv.cycle_len, 1)
   END                                      AS vt_dias_mes_atual,
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
@@ -187,6 +243,8 @@ LEFT JOIN dbo.QuantidadesHorasMes hmv
   ON hmv.HMV_CdiQuantidadeHoraMes = con.CON_CdiQuantidadeHoraMes
 LEFT JOIN dbo.Horarios hor ON hor.HOR_CdiHorario = con.CON_CdiHorario
 LEFT JOIN class cl ON cl.HRI_CdiHorario = con.CON_CdiHorario
+LEFT JOIN ciclo_vt cv ON cv.HRI_CdiHorario = con.CON_CdiHorario
+LEFT JOIN vt_cad vt ON vt.CAS_CdiContratado = con.CON_CdiContratado
 WHERE con.CON_CdiSituacao = 1
 GROUP BY
   car.CAR_D1sCargo,
@@ -196,7 +254,9 @@ GROUP BY
   hor.HOR_CdiTipoEscala,
   cl.escala_ciclo,
   cl.cycle_len,
-  cl.work_days;`
+  cl.work_days,
+  cv.cycle_len,
+  cv.at_work_days;`
 
 const SELECT_VR = `SELECT pb.PLB_CdiPlanoBeneficio,
        AVG(pbv.PBV_VlnBeneficio) AS vr_valor_dia
@@ -221,7 +281,7 @@ const GAPS: { item: string; status: string }[] = [
   { item: 'Export sem PII', status: 'OK se omitir nome e usar CCU_CosEstrutura' },
   { item: 'salario preenchível', status: 'Falha (zerado nesta TEMP)' },
   { item: 'vr_valor_dia', status: 'OK via planos tipo 53' },
-  { item: 'vt_valor_dia', status: 'Externo / wizard' },
+  { item: 'vt_valor_dia', status: 'OK via ConATransportes × MeiosTransportesItens' },
   { item: '12x36 detectável', status: 'OK (HOR_CdiTipoEscala=3)' },
 ]
 

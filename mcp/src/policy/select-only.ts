@@ -50,6 +50,9 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "HorariosTiposDiasAT",
   "TiposEscalas",
   "TiposEscalasTrabalhos",
+  /** VT cadastro (passe/dia) — never ConCalculoATransportes */
+  "ConATransportes",
+  "MeiosTransportesItens",
 ] as const;
 
 export type AllowlistedTable = (typeof DEFAULT_TABLE_ALLOWLIST)[number];

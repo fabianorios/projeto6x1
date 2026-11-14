@@ -14,7 +14,7 @@ Produto separado deste repo (`fabianorios/projeto6x1`). Integração com Gestão
 
 **Bloqueado:** `INSERT` / `UPDATE` / `DELETE` / DDL / `EXEC` / multi-statement (ver `src/policy/select-only.ts`).
 
-**Allowlist (seed):** `Horarios`, `HorariosJornadas`, `Jornadas`, `TiposDiasPonto`, `Contratados`, `CentrosCustos`, `Cargos`, `QuantidadesHorasMes`, `Folhas`, `HorariosTiposDiasAT`, `TiposEscalas`, `TiposEscalasTrabalhos`.
+**Allowlist (seed):** `Horarios`, `HorariosJornadas`, `Jornadas`, `TiposDiasPonto`, `Contratados`, `CentrosCustos`, `Cargos`, `QuantidadesHorasMes`, `Folhas`, `HorariosTiposDiasAT`, `TiposEscalas`, `TiposEscalasTrabalhos`, `ConATransportes`, `MeiosTransportesItens`. (`ConCalculoATransportes` fora de propósito.)
 
 **LGPD:** não selecionar nem logar nomes de cliente / CPF por padrão; preferir colunas técnicas e agregação.
 

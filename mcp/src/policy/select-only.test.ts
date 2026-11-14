@@ -79,9 +79,16 @@ describe("allowlist", () => {
       "Cargos",
       "QuantidadesHorasMes",
       "Folhas",
+      "HorariosTiposDiasAT",
+      "ConATransportes",
+      "MeiosTransportesItens",
     ]) {
       assert.equal(isAllowlistedTable(t), true, t);
     }
+  });
+
+  it("rejects ConCalculoATransportes (VT uses cadastro, not cálculo)", () => {
+    assert.equal(isAllowlistedTable("ConCalculoATransportes"), false);
   });
 
   it("rejects unknown tables", () => {
