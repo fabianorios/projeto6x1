@@ -40,7 +40,10 @@ export function createApp(deps: AppDeps) {
     createEnvironmentRoutes({ store, config: deps.config }),
   );
   app.route("/api/query", createQueryRoutes({ store, config: deps.config }));
-  app.route("/api/query", createEphemeralRoutes());
+  app.route(
+    "/api/query",
+    createEphemeralRoutes({ config: deps.config }),
+  );
 
   app.notFound((c) => c.json({ error: "not found" }, 404));
 

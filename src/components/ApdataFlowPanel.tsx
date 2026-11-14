@@ -6,11 +6,21 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  postEphemeralCatalog,
+  postEphemeralExtract,
+  type EphemeralSessionCreds,
+} from '../api/ephemeral'
+import {
   checkApiHealth,
   getActiveEnvironment,
   type EnvironmentPublic,
 } from '../api/environments'
-import { EXCLUDED_SITUACOES, type Establishment } from '../apdata/cnpj'
+import { cnpjDigits, EXCLUDED_SITUACOES, type Establishment } from '../apdata/cnpj'
+import {
+  establishmentsFromEphemeralCatalog,
+  ramosFromEphemeralCatalog,
+} from '../apdata/ephemeralCatalog'
+import { exportResultFromEphemeralRows } from '../apdata/exportFromEphemeral'
 import {
   exportPayrollFromApdata,
   loadEstablishmentsFromApdata,
@@ -39,9 +49,31 @@ import {
   type SimulationResult,
 } from '../engine'
 import { PILOT_TEMPLATES } from '../templates'
+import {
+  DEFAULT_EPHEMERAL_CREDS_FORM,
+  EphemeralCredsFields,
+  ephemeralFormComplete,
+  type EphemeralCredsFormValue,
+} from './EphemeralCredsFields'
 import { ResultsView } from './ResultsView'
 
 type Phase = 'review' | 'running' | 'ready' | 'results'
+type AmbMode = 'saved' | 'direct'
+
+function formToSessionCreds(
+  form: EphemeralCredsFormValue,
+): EphemeralSessionCreds {
+  return {
+    engine: form.engine,
+    host: form.host.trim(),
+    port:
+      Number.parseInt(form.port, 10) ||
+      (form.engine === 'oracle' ? 1521 : 1433),
+    database: form.database.trim(),
+    user: form.user.trim(),
+    password: form.password,
+  }
+}
 
 interface ApdataFlowPanelProps {
   open: boolean
@@ -83,6 +115,36 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
   const [selectedRamoIds, setSelectedRamoIds] = useState<number[]>([])
   const [cnpjLoading, setCnpjLoading] = useState(false)
   const [cnpjError, setCnpjError] = useState<string | null>(null)
+  const [ambMode, setAmbMode] = useState<AmbMode>('saved')
+  const [directForm, setDirectForm] = useState<EphemeralCredsFormValue>(
+    DEFAULT_EPHEMERAL_CREDS_FORM,
+  )
+  /** Session-only creds after Conectar — never written to disk/localStorage. */
+  const [ephemeralCreds, setEphemeralCreds] =
+    useState<EphemeralSessionCreds | null>(null)
+  const [directConnecting, setDirectConnecting] = useState(false)
+  const [directConnected, setDirectConnected] = useState(false)
+
+  const clearCatalog = useCallback(() => {
+    setEstablishments([])
+    setSelectedCnpjKeys([])
+    setRamos([])
+    setSelectedRamoIds([])
+  }, [])
+
+  const applyCatalog = useCallback(
+    (list: Establishment[], ramoList: RamoAtividade[]) => {
+      setEstablishments(list)
+      setSelectedCnpjKeys(list.map((e) => e.key))
+      setRamos(ramoList)
+      const ramoIds = ramoList.map((r) => r.id)
+      setSelectedRamoIds(ramoIds)
+      if (ramoIds.length > 0) {
+        setSector(sectorFromSelectedRamos(ramoList, ramoIds))
+      }
+    },
+    [],
+  )
 
   const refreshEnv = useCallback(async () => {
     setError(null)
@@ -92,24 +154,23 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       setApiOk(healthy)
       if (!healthy) {
         setActiveEnv(null)
-        setEstablishments([])
-        setSelectedCnpjKeys([])
-        setRamos([])
-        setSelectedRamoIds([])
+        clearCatalog()
         setError(
           'API indisponível. Suba o server/ (porta 8787) ou o proxy /api na VPS.',
         )
         return
       }
+      if (ambMode === 'direct') {
+        // Direct mode: catalog comes from Conectar (ephemeral), not Ambientes.
+        setActiveEnv(null)
+        return
+      }
       const { environment } = await getActiveEnvironment()
       setActiveEnv(environment)
       if (!environment) {
-        setEstablishments([])
-        setSelectedCnpjKeys([])
-        setRamos([])
-        setSelectedRamoIds([])
+        clearCatalog()
         setError(
-          'Nenhum ambiente ativo. Abra Ambientes, cadastre a base e selecione ativo.',
+          'Nenhum ambiente ativo. Abra Ambientes, cadastre a base e selecione ativo — ou use Conexão Direta.',
         )
         return
       }
@@ -121,19 +182,9 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           }),
           loadRamosFromApdata({ environmentId: environment.id }),
         ])
-        setEstablishments(list)
-        setSelectedCnpjKeys(list.map((e) => e.key))
-        setRamos(ramoList)
-        const ramoIds = ramoList.map((r) => r.id)
-        setSelectedRamoIds(ramoIds)
-        if (ramoIds.length > 0) {
-          setSector(sectorFromSelectedRamos(ramoList, ramoIds))
-        }
+        applyCatalog(list, ramoList)
       } catch (err) {
-        setEstablishments([])
-        setSelectedCnpjKeys([])
-        setRamos([])
-        setSelectedRamoIds([])
+        clearCatalog()
         setCnpjError(err instanceof Error ? err.message : String(err))
       } finally {
         setCnpjLoading(false)
@@ -142,7 +193,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       setApiOk(false)
       setError(err instanceof Error ? err.message : String(err))
     }
-  }, [])
+  }, [ambMode, applyCatalog, clearCatalog])
 
   useEffect(() => {
     if (open) {
@@ -152,8 +203,63 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
       setSteps([])
       setError(null)
       void refreshEnv()
+    } else {
+      // Drop volatile password when the panel closes.
+      setEphemeralCreds(null)
+      setDirectForm(DEFAULT_EPHEMERAL_CREDS_FORM)
+      setDirectConnected(false)
     }
   }, [open, refreshEnv])
+
+  function switchAmbMode(next: AmbMode) {
+    if (next === ambMode) return
+    setAmbMode(next)
+    setError(null)
+    setCnpjError(null)
+    setExported(null)
+    setPhase('review')
+    clearCatalog()
+    setEphemeralCreds(null)
+    setDirectConnected(false)
+    if (next === 'direct') {
+      setActiveEnv(null)
+      setDirectForm(DEFAULT_EPHEMERAL_CREDS_FORM)
+    }
+  }
+
+  async function handleDirectConnect() {
+    setError(null)
+    setCnpjError(null)
+    setDirectConnecting(true)
+    setCnpjLoading(true)
+    setDirectConnected(false)
+    clearCatalog()
+    try {
+      const healthy = await checkApiHealth()
+      setApiOk(healthy)
+      if (!healthy) {
+        setError(
+          'API indisponível. Suba o server/ (porta 8787) ou o proxy /api na VPS.',
+        )
+        return
+      }
+      const creds = formToSessionCreds(directForm)
+      const catalog = await postEphemeralCatalog(creds)
+      const list = establishmentsFromEphemeralCatalog(catalog)
+      const ramoList = ramosFromEphemeralCatalog(catalog)
+      applyCatalog(list, ramoList)
+      // Keep password only in React state for the export step.
+      setEphemeralCreds(creds)
+      setDirectConnected(true)
+    } catch (err) {
+      setEphemeralCreds(null)
+      setDirectConnected(false)
+      setCnpjError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDirectConnecting(false)
+      setCnpjLoading(false)
+    }
+  }
 
   if (!open) return null
 
@@ -195,17 +301,60 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
     const vt = vtValorDia.trim()
       ? Number(vtValorDia.replace(',', '.'))
       : null
+    const overrides = {
+      defaultSalario: Number.isFinite(sal) && sal > 0 ? sal : undefined,
+      vrValorDia: vr !== null && Number.isFinite(vr) ? vr : null,
+      vtValorDia: vt !== null && Number.isFinite(vt) ? vt : null,
+      selectedCnpjKeys:
+        selectedCnpjKeys.length > 0 ? selectedCnpjKeys : undefined,
+      selectedRamoIds:
+        selectedRamoIds.length > 0 ? selectedRamoIds : undefined,
+    }
     try {
+      if (ambMode === 'direct') {
+        if (!ephemeralCreds) {
+          throw new Error(
+            'Conecte com IP/Porta antes de executar o export (Conectar).',
+          )
+        }
+        let steps: ExportProgressStep[] = [
+          {
+            id: 'ephemeral-extract',
+            label: 'Extrator efêmero (POST /api/query/ephemeral)',
+            status: 'running',
+            detail: 'Conexão volátil — credenciais só nesta requisição',
+          },
+        ]
+        setSteps(steps)
+        const cnpjs = (overrides.selectedCnpjKeys ?? [])
+          .map((k) => cnpjDigits(k))
+          .filter(Boolean)
+          .slice(0, 32)
+        const extracted = await postEphemeralExtract(ephemeralCreds, {
+          cnpjs,
+        })
+        steps = [
+          {
+            id: 'ephemeral-extract',
+            label: 'Extrator efêmero (POST /api/query/ephemeral)',
+            status: 'done',
+            detail: `${extracted.rowCount} linha(s) agregadas · ${extracted.latencyMs}ms`,
+          },
+        ]
+        const out = exportResultFromEphemeralRows(
+          extracted.rows,
+          overrides,
+          steps,
+        )
+        setExported(out)
+        setSteps(out.steps)
+        setPhase('ready')
+        return
+      }
       const out = await exportPayrollFromApdata(
         {
           environmentId: activeEnv?.id,
-          defaultSalario: Number.isFinite(sal) && sal > 0 ? sal : undefined,
-          vrValorDia: vr !== null && Number.isFinite(vr) ? vr : null,
-          vtValorDia: vt !== null && Number.isFinite(vt) ? vt : null,
-          selectedCnpjKeys:
-            selectedCnpjKeys.length > 0 ? selectedCnpjKeys : undefined,
-          selectedRamoIds:
-            selectedRamoIds.length > 0 ? selectedRamoIds : undefined,
+          ...overrides,
         },
         setSteps,
       )
@@ -388,29 +537,100 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
           </div>
         ) : (
           <>
-            <section className="mt-5">
+            <section className="mt-5 space-y-3">
               <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
                 Ambiente
               </h3>
-              <p className="mt-1 text-sm text-[var(--color-muted)]">
-                {activeEnv ? (
-                  <>
-                    Ativo:{' '}
-                    <span className="text-[var(--color-ink)]">
-                      {activeEnv.name}
-                    </span>{' '}
-                    · {activeEnv.engine.toUpperCase()} · {activeEnv.host}:
-                    {activeEnv.port}/{activeEnv.database}
-                    {apiOk && (
-                      <span className="ml-2 text-[var(--color-accent)]">
-                        API online
+              <div
+                className="flex flex-wrap gap-2"
+                role="radiogroup"
+                aria-label="Modo de ambiente"
+              >
+                {(
+                  [
+                    ['saved', 'Ambiente Salvo'],
+                    ['direct', 'Conexão Direta (IP / Porta)'],
+                  ] as const
+                ).map(([id, label]) => {
+                  const selected = ambMode === id
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => switchAmbMode(id)}
+                      className={[
+                        'border px-3 py-1.5 text-sm',
+                        selected
+                          ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
+                          : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-[var(--color-accent)]/50',
+                      ].join(' ')}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {ambMode === 'saved' ? (
+                <p className="text-sm text-[var(--color-muted)]">
+                  {activeEnv ? (
+                    <>
+                      Ativo:{' '}
+                      <span className="text-[var(--color-ink)]">
+                        {activeEnv.name}
+                      </span>{' '}
+                      · {activeEnv.engine.toUpperCase()} · {activeEnv.host}:
+                      {activeEnv.port}/{activeEnv.database}
+                      {apiOk && (
+                        <span className="ml-2 text-[var(--color-accent)]">
+                          API online
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    'Nenhum ambiente ativo.'
+                  )}
+                </p>
+              ) : (
+                <div className="space-y-3 border border-[var(--color-line)] bg-white/60 px-3 py-3">
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Credenciais só na sessão do navegador e nas requisições
+                    efêmeras — não são gravadas em disco nem em localStorage.
+                    Conectar carrega estabelecimentos e ramos; o export usa o
+                    extrator via{' '}
+                    <code>POST /api/query/ephemeral</code>.
+                  </p>
+                  <EphemeralCredsFields
+                    value={directForm}
+                    onChange={setDirectForm}
+                    disabled={directConnecting || phase === 'running'}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        directConnecting ||
+                        !ephemeralFormComplete(directForm) ||
+                        apiOk === false
+                      }
+                      onClick={() => void handleDirectConnect()}
+                      className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    >
+                      {directConnecting ? 'Conectando…' : 'Conectar'}
+                    </button>
+                    {directConnected && ephemeralCreds && (
+                      <span className="text-xs text-[var(--color-accent)]">
+                        Conectado (sessão) ·{' '}
+                        {ephemeralCreds.engine.toUpperCase()} ·{' '}
+                        {ephemeralCreds.host}:{ephemeralCreds.port}/
+                        {ephemeralCreds.database}
                       </span>
                     )}
-                  </>
-                ) : (
-                  'Nenhum ambiente ativo.'
-                )}
-              </p>
+                  </div>
+                </div>
+              )}
             </section>
 
             {(phase === 'review' || phase === 'ready') && (
@@ -441,7 +661,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                   {!cnpjLoading &&
                     !cnpjError &&
                     establishments.length === 0 &&
-                    activeEnv && (
+                    (ambMode === 'saved' ? activeEnv : directConnected) && (
                       <p className="text-sm text-[var(--color-muted)]">
                         Nenhum estabelecimento com Folha/Local/Empresa no
                         ambiente.
@@ -535,7 +755,7 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
                   {!cnpjLoading &&
                     !cnpjError &&
                     ramos.length === 0 &&
-                    activeEnv && (
+                    (ambMode === 'saved' ? activeEnv : directConnected) && (
                       <p className="text-sm text-[var(--color-muted)]">
                         Nenhum ramo ativo na base — use o seletor de setor
                         abaixo.
@@ -802,7 +1022,12 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
               {phase === 'review' && (
                 <button
                   type="button"
-                  disabled={!activeEnv || apiOk === false}
+                  disabled={
+                    apiOk === false ||
+                    (ambMode === 'saved'
+                      ? !activeEnv
+                      : !ephemeralCreds || !directConnected)
+                  }
                   onClick={() => void handleRun()}
                   className="bg-[var(--color-accent)] px-4 py-2 text-sm text-white disabled:opacity-50"
                 >
@@ -833,15 +1058,27 @@ export function ApdataFlowPanel({ open, onClose }: ApdataFlowPanelProps) {
               )}
               {phase === 'running' && (
                 <span className="text-sm text-[var(--color-muted)]">
-                  Aguardando SELECT-only…
+                  {ambMode === 'direct'
+                    ? 'Aguardando extrator efêmero…'
+                    : 'Aguardando SELECT-only…'}
                 </span>
               )}
               <button
                 type="button"
-                onClick={() => void refreshEnv()}
+                onClick={() => {
+                  if (ambMode === 'direct') {
+                    if (ephemeralFormComplete(directForm)) {
+                      void handleDirectConnect()
+                    }
+                    return
+                  }
+                  void refreshEnv()
+                }}
                 className="border border-[var(--color-line)] px-3 py-2 text-sm"
               >
-                Atualizar ambiente
+                {ambMode === 'direct'
+                  ? 'Atualizar conexão'
+                  : 'Atualizar ambiente'}
               </button>
             </div>
           </>
