@@ -3,8 +3,9 @@
  * Defense in depth: also use a read-only DB account.
  */
 
+/** DML/DDL/EXEC denylist. `REPLACE INTO` (MySQL) — not SQL REPLACE() string fn. */
 const FORBIDDEN =
-  /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|REPLACE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE|CALL|INTO\s+#|xp_|sp_|OPENROWSET|OPENDATASOURCE|BULK\s+INSERT|DBCC|BACKUP|RESTORE|SHUTDOWN|KILL|WAITFOR|WRITETEXT|UPDATETEXT)\b/i;
+  /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|REPLACE\s+INTO|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE|CALL|INTO\s+#|xp_|sp_|OPENROWSET|OPENDATASOURCE|BULK\s+INSERT|DBCC|BACKUP|RESTORE|SHUTDOWN|KILL|WAITFOR|WRITETEXT|UPDATETEXT)\b/i;
 
 const SELECT_START = /^\s*(WITH\b[\s\S]+?\bSELECT\b|SELECT\b)/i;
 
@@ -43,6 +44,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Jornadas",
   "TiposDiasPonto",
   "Contratados",
+  /** Canonical extractor uses Contratos (Apdata folha) */
+  "Contratos",
   "CentrosCustos",
   "Cargos",
   "QuantidadesHorasMes",
@@ -59,6 +62,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   /** VT cadastro (passe/dia) — never ConCalculoATransportes */
   "ConATransportes",
   "MeiosTransportesItens",
+  /** VR plano tipo 53 (extractor canônico) */
+  "PlanosBeneficiosValores",
 ] as const;
 
 export type AllowlistedTable = (typeof DEFAULT_TABLE_ALLOWLIST)[number];

@@ -46,6 +46,15 @@ export class MssqlClient implements DbClient {
     }
   }
 
+  /** Dirty-read isolation for ephemeral consulting extracts (SELECT-only). */
+  async beginReadUncommitted(): Promise<void> {
+    await this.connect();
+    if (!this.pool) throw new Error("MSSQL pool not connected");
+    await this.pool.request().batch(
+      "SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED",
+    );
+  }
+
   async query(
     sqlText: string,
     params: Record<string, QueryParam> = {},

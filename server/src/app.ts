@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { ServerConfig } from "./config.js";
 import { EnvironmentStore } from "./lib/store.js";
 import { createEnvironmentRoutes } from "./routes/environments.js";
+import { createEphemeralRoutes } from "./routes/ephemeral.js";
 import { createQueryRoutes } from "./routes/query.js";
 
 export type AppDeps = {
@@ -39,6 +40,7 @@ export function createApp(deps: AppDeps) {
     createEnvironmentRoutes({ store, config: deps.config }),
   );
   app.route("/api/query", createQueryRoutes({ store, config: deps.config }));
+  app.route("/api/query", createEphemeralRoutes());
 
   app.notFound((c) => c.json({ error: "not found" }, 404));
 

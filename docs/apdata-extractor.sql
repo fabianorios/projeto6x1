@@ -51,9 +51,9 @@ SELECT
     CAST(c.EMP_CdiEmpresa AS VARCHAR(20))                                           AS cod_empresa,
     CAST(c.LOC_CdiLocal AS VARCHAR(20))                                             AS cod_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '')              AS cnpj_completo,
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), ';', ' ')                        AS cod_cc,
+    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')                        AS cod_cc,
     CAST(ISNULL(c.CAR_CdiCargo, 0) AS VARCHAR(20))                                  AS cod_cargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), ';', ' ')                     AS desc_cargo,
+    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' ')                     AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20))                                AS cod_vinculo,
     CAST(ISNULL(c.HOR_CdiHorario, 0) AS VARCHAR(20))                                AS cod_horario_atual,
     CASE 
@@ -98,9 +98,9 @@ GROUP BY
     c.EMP_CdiEmpresa,
     c.LOC_CdiLocal,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
-    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), ';', ' '),
+    REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '),
     c.CAR_CdiCargo,
-    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), ';', ' '),
+    REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '),
     c.CON_CdiVinculo,
     c.HOR_CdiHorario,
     cic.cycle_len,
@@ -112,7 +112,9 @@ ORDER BY
 
 /* ----------------------------------------------------------------------------
    [DIALETO 2] ORACLE DATABASE (APDATA SAAS ORACLE)
-   ----------------------------------------------------------------------------
+   ---------------------------------------------------------------------------- */
+SET TRANSACTION READ ONLY;
+
 WITH CTE_VT_DIARIO AS (
     SELECT 
         cat.CON_CdiContrato,
@@ -147,9 +149,9 @@ SELECT
     TO_CHAR(c.EMP_CdiEmpresa)                                                       AS cod_empresa,
     TO_CHAR(c.LOC_CdiLocal)                                                         AS cod_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '')                   AS cnpj_completo,
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), ';', ' ')                           AS cod_cc,
+    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')                           AS cod_cc,
     TO_CHAR(NVL(c.CAR_CdiCargo, 0))                                                 AS cod_cargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), ';', ' ')                        AS desc_cargo,
+    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' ')                        AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0))                                               AS cod_vinculo,
     TO_CHAR(NVL(c.HOR_CdiHorario, 0))                                               AS cod_horario_atual,
     CASE 
@@ -194,9 +196,9 @@ GROUP BY
     c.EMP_CdiEmpresa,
     c.LOC_CdiLocal,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
-    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), ';', ' '),
+    REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '),
     c.CAR_CdiCargo,
-    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), ';', ' '),
+    REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '),
     c.CON_CdiVinculo,
     c.HOR_CdiHorario,
     cic.cycle_len,
@@ -204,4 +206,7 @@ GROUP BY
     NVL(h.HOR_NuiCargaHorariaSemanal, 44.0)
 ORDER BY 
     cod_empresa, cod_filial, cod_cc, desc_cargo;
----------------------------------------------------------------------------- */
+
+
+/* NOTE: Run ONE dialect per session (MSSQL *or* Oracle). Isolation SET is
+   applied by the ephemeral API separately from the SELECT body. */
