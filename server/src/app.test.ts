@@ -133,4 +133,45 @@ describe("API routes", () => {
     assert.equal(assertSelectOnly("DELETE FROM Contratados").ok, false);
     assert.equal(assertSelectOnly("SELECT TOP (1) 1 FROM Horarios").ok, true);
   });
+
+  it("GET extractor-sql returns Aptools script without credentials", async () => {
+    const res = await app.request("/api/query/extractor-sql?engine=mssql");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.engine, "mssql");
+    assert.match(String(body.sql), /Contratos/i);
+    assert.match(String(body.sql), /READ UNCOMMITTED/i);
+    assert.ok(!JSON.stringify(body).toLowerCase().includes("password"));
+  });
+
+  it("POST ephemeral validates body and never echoes password", async () => {
+    const res = await app.request("/api/query/ephemeral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engine: "mssql",
+        host: "127.0.0.1",
+        port: 1,
+        database: "nope",
+        user: "ro",
+        password: "ephemeral-secret-should-not-leak",
+      }),
+    });
+    // Unreachable DB → 502 JSON; password must not appear
+    assert.equal(res.status, 502);
+    const text = await res.text();
+    assert.ok(!text.includes("ephemeral-secret-should-not-leak"));
+    const body = JSON.parse(text);
+    assert.equal(body.ok, false);
+    assert.equal(body.engine, "mssql");
+  });
+
+  it("POST ephemeral rejects incomplete body", async () => {
+    const res = await app.request("/api/query/ephemeral", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engine: "mssql", host: "x" }),
+    });
+    assert.equal(res.status, 400);
+  });
 });

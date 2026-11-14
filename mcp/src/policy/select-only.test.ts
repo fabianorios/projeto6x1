@@ -67,6 +67,19 @@ describe("assertSelectOnly", () => {
     );
     assert.equal(embedded.ok, false);
   });
+
+  it("allows SELECT with REPLACE() string function", () => {
+    const sql =
+      "SELECT REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc FROM CentrosCustos cc";
+    assert.equal(assertSelectOnly(sql).ok, true);
+  });
+
+  it("rejects REPLACE INTO", () => {
+    assert.equal(
+      assertSelectOnly("REPLACE INTO Horarios (id) VALUES (1)").ok,
+      false,
+    );
+  });
 });
 
 describe("allowlist", () => {
@@ -86,6 +99,8 @@ describe("allowlist", () => {
       "HorariosTiposDiasAT",
       "ConATransportes",
       "MeiosTransportesItens",
+      "Contratos",
+      "PlanosBeneficiosValores",
     ]) {
       assert.equal(isAllowlistedTable(t), true, t);
     }

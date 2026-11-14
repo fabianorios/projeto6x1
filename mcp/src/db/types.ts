@@ -20,4 +20,8 @@ export interface DbClient {
   close(): Promise<void>;
   query(sql: string, params?: Record<string, QueryParam>): Promise<QueryResult>;
   describeTable(table: string): Promise<ColumnInfo[]>;
+  /** Optional: MSSQL dirty-read session for ephemeral extracts. */
+  beginReadUncommitted?(): Promise<void>;
+  /** Optional: Oracle READ ONLY transaction for ephemeral extracts. */
+  beginReadOnly?(): Promise<void>;
 }
