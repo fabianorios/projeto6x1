@@ -158,13 +158,15 @@ export function ApdataFlowPanel({
       | BenefitSessionOverrides
       | ((prev: BenefitSessionOverrides) => BenefitSessionOverrides),
   ) => {
-    const resolved =
-      typeof next === 'function' ? next(benefitOverrides) : next
     if (onBenefitSessionOverridesChange) {
+      const resolved =
+        typeof next === 'function' ? next(benefitOverrides) : next
       onBenefitSessionOverridesChange(resolved)
-    } else {
-      setLocalBenefitOverrides(resolved)
+      return
     }
+    setLocalBenefitOverrides((prev) =>
+      typeof next === 'function' ? next(prev) : next,
+    )
   }
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)

@@ -46,6 +46,7 @@ const slotQueriesSchema = z.object({
 const slotsSchema = z.object({
   ESTABELECIMENTOS: slotQueriesSchema,
   FOLHA_E_ESCALAS: slotQueriesSchema,
+  TIPOS_BENEFICIOS: slotQueriesSchema,
   REGRA_VR: slotQueriesSchema,
   REGRA_VA: slotQueriesSchema,
   REGRA_VT: slotQueriesSchema,

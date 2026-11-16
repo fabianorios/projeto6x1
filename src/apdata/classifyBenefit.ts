@@ -118,6 +118,21 @@ export function benefitKey(b: Pick<ExtractedBenefit, 'codigo' | 'descricao'>): s
   return `${b.codigo}::${b.descricao}`
 }
 
+/** Lookup session override by exact key, then by codigo prefix (Studio vs agg text drift). */
+export function lookupBenefitSessionOverride(
+  overrides: BenefitSessionOverrides | Record<string, BenefitClass>,
+  b: Pick<ExtractedBenefit, 'codigo' | 'descricao'>,
+): BenefitSessionOverride | BenefitClass | undefined {
+  const key = benefitKey(b)
+  const exact = overrides[key]
+  if (exact != null) return exact
+  const prefix = `${b.codigo}::`
+  for (const [k, v] of Object.entries(overrides)) {
+    if (k === b.codigo || k.startsWith(prefix)) return v
+  }
+  return undefined
+}
+
 /** Merge a partial override into the session map. */
 export function mergeBenefitSessionOverride(
   prev: BenefitSessionOverrides,
@@ -260,8 +275,7 @@ export function applyBenefitOverrides(
   overrides: BenefitSessionOverrides | Record<string, BenefitClass>,
 ): ExtractedBenefit[] {
   return benefits.map((b) => {
-    const key = benefitKey(b)
-    const raw = overrides[key]
+    const raw = lookupBenefitSessionOverride(overrides, b)
     if (raw == null) return b
     if (typeof raw === 'string') {
       return { ...b, classificacao: raw }
@@ -298,10 +312,11 @@ export function benefitsFromTiposRows(
   const out: ExtractedBenefit[] = []
   for (const row of rows) {
     const codigo = rowCell(row, 'cod_tipo', 'codigo')
-    const descricao = rowCell(row, 'desc_tipo', 'descricao')
+    if (!codigo) continue
+    const descricao = rowCell(row, 'desc_tipo', 'descricao') || codigo
     const valorRaw = rowCell(row, 'valor_medio', 'valorMedio').replace(',', '.')
-    const valorMedio = Number(valorRaw)
-    if (!codigo || !descricao || !Number.isFinite(valorMedio)) continue
+    const parsed = valorRaw === '' ? 0 : Number(valorRaw)
+    const valorMedio = Number.isFinite(parsed) ? parsed : 0
     out.push({
       codigo,
       descricao,

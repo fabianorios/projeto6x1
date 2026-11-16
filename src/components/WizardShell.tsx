@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
@@ -13,6 +13,11 @@ import {
   type TaxRegime,
 } from '../engine'
 import type { BenefitSessionOverrides } from '../apdata/classifyBenefit'
+import {
+  navigateShellMode,
+  shellModeFromPath,
+  type ShellMode,
+} from '../shellMode'
 import { AmbientesPanel } from './AmbientesPanel'
 import { ApdataFlowPanel } from './ApdataFlowPanel'
 import { SqlStudioPanel } from './SqlStudioPanel'
@@ -60,15 +65,36 @@ export const initialWizardForm: WizardFormState = {
 
 /**
  * Unified Turnocheck shell: Logo + Wizard + Studio SQL.
- * The 5-step linear flow lives in ApdataFlowPanel (embedded).
+ * Modes are URL-driven: `/` Wizard, `/studio` Studio SQL (page, not modal-only).
  * Ambientes stays reachable from Studio / saved-env path (not top nav).
  */
 export function WizardShell() {
-  const [sqlStudioOpen, setSqlStudioOpen] = useState(false)
+  const [mode, setMode] = useState<ShellMode>(() =>
+    typeof window !== 'undefined'
+      ? shellModeFromPath(window.location.pathname)
+      : 'wizard',
+  )
   const [ambientesOpen, setAmbientesOpen] = useState(false)
   /** Session-local only — Studio + Passo 4; never written to sql-profiles.json. */
   const [benefitSessionOverrides, setBenefitSessionOverrides] =
     useState<BenefitSessionOverrides>({})
+
+  useEffect(() => {
+    const sync = () => setMode(shellModeFromPath(window.location.pathname))
+    window.addEventListener('popstate', sync)
+    // Normalize unknown paths that still serve the SPA (e.g. /studio/).
+    const initial = shellModeFromPath(window.location.pathname)
+    navigateShellMode(initial, { replace: true })
+    setMode(initial)
+    return () => window.removeEventListener('popstate', sync)
+  }, [])
+
+  function go(next: ShellMode) {
+    navigateShellMode(next)
+    setMode(next)
+  }
+
+  const studio = mode === 'studio'
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -90,39 +116,66 @@ export function WizardShell() {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-            <span className="rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm">
-              Wizard
-            </span>
+          <nav
+            className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"
+            aria-label="Modo do aplicativo"
+          >
             <button
               type="button"
-              onClick={() => setSqlStudioOpen(true)}
-              className="rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm"
+              onClick={() => go('wizard')}
+              aria-current={studio ? undefined : 'page'}
+              className={
+                studio
+                  ? 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
+                  : 'rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
+              }
+            >
+              Wizard
+            </button>
+            <button
+              type="button"
+              onClick={() => go('studio')}
+              aria-current={studio ? 'page' : undefined}
+              className={
+                studio
+                  ? 'rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
+                  : 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
+              }
               title="Studio SQL"
             >
               ⚙️ Studio SQL
             </button>
-          </div>
+          </nav>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
-        <ApdataFlowPanel
-          open
-          embedded
-          onClose={() => undefined}
-          onOpenAmbientes={() => setAmbientesOpen(true)}
-          benefitSessionOverrides={benefitSessionOverrides}
-          onBenefitSessionOverridesChange={setBenefitSessionOverrides}
-        />
+      <div
+        className={
+          studio
+            ? 'mx-auto flex w-full max-w-5xl flex-1 flex-col px-3 py-4 sm:px-6 sm:py-6'
+            : 'mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8'
+        }
+      >
+        {studio ? (
+          <SqlStudioPanel
+            open
+            layout="page"
+            onClose={() => go('wizard')}
+            benefitSessionOverrides={benefitSessionOverrides}
+            onBenefitSessionOverridesChange={setBenefitSessionOverrides}
+          />
+        ) : (
+          <ApdataFlowPanel
+            open
+            embedded
+            onClose={() => undefined}
+            onOpenAmbientes={() => setAmbientesOpen(true)}
+            benefitSessionOverrides={benefitSessionOverrides}
+            onBenefitSessionOverridesChange={setBenefitSessionOverrides}
+          />
+        )}
       </div>
 
-      <SqlStudioPanel
-        open={sqlStudioOpen}
-        onClose={() => setSqlStudioOpen(false)}
-        benefitSessionOverrides={benefitSessionOverrides}
-        onBenefitSessionOverridesChange={setBenefitSessionOverrides}
-      />
       <AmbientesPanel
         open={ambientesOpen}
         onClose={() => setAmbientesOpen(false)}

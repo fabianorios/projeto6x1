@@ -113,6 +113,29 @@ describe('parseBeneficiosAgg + scalars', () => {
     assert.equal(list[1].valorMedio, 30)
   })
 
+  it('benefitsFromTiposRows keeps rows with empty desc or null valor', () => {
+    const list = benefitsFromTiposRows([
+      { cod_tipo: 9, desc_tipo: '', valor_medio: null },
+      { cod_tipo: 10, desc_tipo: 'X' },
+    ])
+    assert.equal(list.length, 2)
+    assert.equal(list[0].descricao, '9')
+    assert.equal(list[0].valorMedio, 0)
+    assert.equal(list[1].valorMedio, 0)
+  })
+
+  it('applyBenefitOverrides matches by codigo when desc drifts', () => {
+    const list = parseBeneficiosAgg('80|VALE COMBUSTIVEL X|12.5')
+    const overridden = applyBenefitOverrides(list, {
+      '80::Vale Combustivel': {
+        classificacao: 'FIXO_MENSAL',
+        valorMedio: 99,
+      },
+    })
+    assert.equal(overridden[0].classificacao, 'FIXO_MENSAL')
+    assert.equal(overridden[0].valorMedio, 99)
+  })
+
   it('sanitizes separators in text', () => {
     assert.equal(sanitizeBenefitText('A;B\tC|D'), 'A B C D')
   })
