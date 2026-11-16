@@ -37,6 +37,9 @@ describe("SqlProfilesStore", () => {
     assert.equal(list[0]!.benefitParams.vrTipoBeneficio, 53);
     assert.ok(list[0]!.slots.REGRA_VA);
     assert.ok(list[0]!.slots.REGRA_FIXOS);
+    assert.ok(list[0]!.slots.TIPOS_BENEFICIOS);
+    assert.match(list[0]!.slots.TIPOS_BENEFICIOS.mssql, /TiposBeneficios/);
+    assert.match(list[0]!.slots.TIPOS_BENEFICIOS.mssql, /valor_medio/);
     assert.match(list[0]!.slots.REGRA_VR.mssql, /@tipo\b/);
     assert.match(list[0]!.slots.REGRA_VR.mssql, /PBV_DtdInicio/);
     assert.match(list[0]!.slots.REGRA_VT.mssql, /MRI_DtdInicioVigencia/);

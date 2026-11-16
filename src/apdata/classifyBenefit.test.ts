@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyBenefitOverrides,
+  benefitsFromTiposRows,
   benefitsToPayrollScalars,
   classifyBenefitByDescription,
+  mergeBenefitSessionOverride,
   parseBeneficiosAgg,
   sanitizeBenefitText,
 } from './classifyBenefit'
@@ -13,6 +16,21 @@ describe('classifyBenefitByDescription', () => {
     assert.equal(classifyBenefitByDescription('VR Empresa'), 'VARIAVEL_DIA')
     assert.equal(
       classifyBenefitByDescription('Alimentação diária'),
+      'VARIAVEL_DIA',
+    )
+  })
+
+  it('classifies vale-combustível as VARIAVEL_DIA (VR-like, not VT)', () => {
+    assert.equal(
+      classifyBenefitByDescription('Vale-Combustível'),
+      'VARIAVEL_DIA',
+    )
+    assert.equal(
+      classifyBenefitByDescription('Auxílio Combustivel'),
+      'VARIAVEL_DIA',
+    )
+    assert.equal(
+      classifyBenefitByDescription('COMBUSTIVEL FROTA'),
       'VARIAVEL_DIA',
     )
   })
@@ -47,6 +65,52 @@ describe('parseBeneficiosAgg + scalars', () => {
     assert.equal(s.vaValorMes, 361)
     assert.equal(s.assistMedicaMes, 450)
     assert.equal(s.assistOdontoMes, null)
+  })
+
+  it('folds combustível into VR scalar (not VT)', () => {
+    const list = parseBeneficiosAgg(
+      '53|VALE REFEICAO|30;80|VALE COMBUSTIVEL|12.5',
+    )
+    assert.equal(list[1].classificacao, 'VARIAVEL_DIA')
+    const s = benefitsToPayrollScalars(list)
+    assert.equal(s.vrValorDia, 42.5)
+  })
+
+  it('applies session overrides for class + valor', () => {
+    const list = parseBeneficiosAgg('80|VALE COMBUSTIVEL|12.5')
+    const overridden = applyBenefitOverrides(list, {
+      '80::VALE COMBUSTIVEL': {
+        classificacao: 'FIXO_MENSAL',
+        valorMedio: 200,
+      },
+    })
+    assert.equal(overridden[0].classificacao, 'FIXO_MENSAL')
+    assert.equal(overridden[0].valorMedio, 200)
+    const s = benefitsToPayrollScalars(overridden)
+    assert.equal(s.vrValorDia, null)
+    assert.equal(s.assistMedicaMes, 200)
+  })
+
+  it('mergeBenefitSessionOverride patches fields', () => {
+    let map = mergeBenefitSessionOverride({}, '1::X', {
+      classificacao: 'VARIAVEL_DIA',
+    })
+    map = mergeBenefitSessionOverride(map, '1::X', { valorMedio: 9 })
+    assert.deepEqual(map['1::X'], {
+      classificacao: 'VARIAVEL_DIA',
+      valorMedio: 9,
+    })
+  })
+
+  it('benefitsFromTiposRows maps Studio grid rows', () => {
+    const list = benefitsFromTiposRows([
+      { cod_tipo: 80, desc_tipo: 'Vale Combustivel', valor_medio: 12.5 },
+      { COD_TIPO: '53', DESC_TIPO: 'VR', VALOR_MEDIO: '30' },
+    ])
+    assert.equal(list.length, 2)
+    assert.equal(list[0].classificacao, 'VARIAVEL_DIA')
+    assert.equal(list[1].codigo, '53')
+    assert.equal(list[1].valorMedio, 30)
   })
 
   it('sanitizes separators in text', () => {

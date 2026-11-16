@@ -76,7 +76,9 @@ import {
   applyBenefitOverrides,
   benefitsToPayrollScalars,
   collectUniqueBenefits,
-  type BenefitClass,
+  mergeBenefitSessionOverride,
+  type BenefitSessionOverride,
+  type BenefitSessionOverrides,
   type ExtractedBenefit,
 } from '../apdata/classifyBenefit'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
@@ -130,6 +132,9 @@ interface ApdataFlowPanelProps {
   embedded?: boolean
   /** Open Ambientes panel (saved DB envs) — header no longer exposes it. */
   onOpenAmbientes?: () => void
+  /** Session-local benefit overrides shared with Studio SQL (classification + value). */
+  benefitSessionOverrides?: BenefitSessionOverrides
+  onBenefitSessionOverridesChange?: (next: BenefitSessionOverrides) => void
 }
 
 export function ApdataFlowPanel({
@@ -138,13 +143,29 @@ export function ApdataFlowPanel({
   onManualSheet,
   embedded = false,
   onOpenAmbientes,
+  benefitSessionOverrides,
+  onBenefitSessionOverridesChange,
 }: ApdataFlowPanelProps) {
   const [phase, setPhase] = useState<Phase>(embedded ? 'segment' : 'origem')
   const [originCard, setOriginCard] = useState<OriginCard>('apdata')
   const [manualMode, setManualMode] = useState(false)
-  const [benefitOverrides, setBenefitOverrides] = useState<
-    Record<string, BenefitClass>
-  >({})
+  const [localBenefitOverrides, setLocalBenefitOverrides] =
+    useState<BenefitSessionOverrides>({})
+  const benefitOverrides =
+    benefitSessionOverrides ?? localBenefitOverrides
+  const setBenefitOverrides = (
+    next:
+      | BenefitSessionOverrides
+      | ((prev: BenefitSessionOverrides) => BenefitSessionOverrides),
+  ) => {
+    const resolved =
+      typeof next === 'function' ? next(benefitOverrides) : next
+    if (onBenefitSessionOverridesChange) {
+      onBenefitSessionOverridesChange(resolved)
+    } else {
+      setLocalBenefitOverrides(resolved)
+    }
+  }
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1241,8 +1262,10 @@ export function ApdataFlowPanel({
                   <BenefitMappingTable
                     benefits={mappedBenefits}
                     overrides={benefitOverrides}
-                    onOverrideChange={(key, next) =>
-                      setBenefitOverrides((prev) => ({ ...prev, [key]: next }))
+                    onOverrideChange={(key, patch: BenefitSessionOverride) =>
+                      setBenefitOverrides((prev) =>
+                        mergeBenefitSessionOverride(prev, key, patch),
+                      )
                     }
                   />
                 </div>

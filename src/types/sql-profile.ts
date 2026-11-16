@@ -59,6 +59,7 @@ export function defaultBenefitParams(): BenefitParams {
 export type SqlSlotId =
   | 'ESTABELECIMENTOS'
   | 'FOLHA_E_ESCALAS'
+  | 'TIPOS_BENEFICIOS'
   | 'REGRA_VR'
   | 'REGRA_VA'
   | 'REGRA_VT'
@@ -68,6 +69,7 @@ export type SqlSlotId =
 export const SQL_SLOT_IDS: readonly SqlSlotId[] = [
   'ESTABELECIMENTOS',
   'FOLHA_E_ESCALAS',
+  'TIPOS_BENEFICIOS',
   'REGRA_VR',
   'REGRA_VA',
   'REGRA_VT',
@@ -78,6 +80,7 @@ export const SQL_SLOT_IDS: readonly SqlSlotId[] = [
 export const SQL_SLOT_LABELS: Record<SqlSlotId, string> = {
   ESTABELECIMENTOS: 'Estabelecimentos',
   FOLHA_E_ESCALAS: 'Folha e Escalas',
+  TIPOS_BENEFICIOS: 'Benefícios',
   REGRA_VR: 'Regra VR',
   REGRA_VA: 'Regra VA',
   REGRA_VT: 'Regra VT',
@@ -109,6 +112,11 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     'qtd_colaboradores',
     'massa_salarial_base',
     'dias_trabalho_mes_atual',
+  ],
+  TIPOS_BENEFICIOS: [
+    'cod_tipo',
+    'desc_tipo',
+    'valor_medio',
   ],
   REGRA_VR: [
     'cod_empresa',
@@ -185,6 +193,8 @@ export const SQL_SLOT_EXAMPLES: Record<SqlSlotId, string> = {
     'Lista CNPJs com razão social, filial e headcount ativo (sit NOT IN 0,2,3,99).',
   FOLHA_E_ESCALAS:
     'Agrega folha por CC/cargo/escala — sem PII. VR/VT/VA ficam nos slots REGRA_*.',
+  TIPOS_BENEFICIOS:
+    'Catálogo TiposBeneficios (CBN→PLB→PBV max PBV_DtdInicio→EBT→TBE). Na prévia, edite classificação e valor (override de sessão → motor).',
   REGRA_VR:
     "VR via ConBeneficios × PlanosBeneficiosValores (PBV_DtdInicio DESC). @tipo = benefitParams.vrTipoBeneficio. modo_dias: 'ESCALA' | 'FIXO_MES' | 'CALENDARIO_LOCAL'.",
   REGRA_VA:

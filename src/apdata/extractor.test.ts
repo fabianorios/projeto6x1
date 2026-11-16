@@ -114,4 +114,40 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].assistMedicaMes, 400)
     assert.equal(rows[0].benefits.length, 3)
   })
+
+  it('maps vale-combustível into VR and respects session overrides', () => {
+    const base = mapExtractorAggregatesToPayroll([
+      {
+        desc_cargo: 'Motorista',
+        cod_cc: 'CC-02',
+        qtd_colaboradores: 2,
+        massa_salarial_base: 5000,
+        carga_semanal_atual: 44,
+        beneficios_agg: '80|VALE COMBUSTIVEL|15;53|VALE REFEICAO|30',
+      },
+    ])
+    assert.equal(base[0].vrValorDia, 45)
+    assert.equal(base[0].benefits[0].classificacao, 'VARIAVEL_DIA')
+
+    const overridden = mapExtractorAggregatesToPayroll(
+      [
+        {
+          desc_cargo: 'Motorista',
+          cod_cc: 'CC-02',
+          qtd_colaboradores: 2,
+          massa_salarial_base: 5000,
+          carga_semanal_atual: 44,
+          beneficios_agg: '80|VALE COMBUSTIVEL|15;53|VALE REFEICAO|30',
+        },
+      ],
+      {
+        '80::VALE COMBUSTIVEL': {
+          classificacao: 'FIXO_MENSAL',
+          valorMedio: 250,
+        },
+      },
+    )
+    assert.equal(overridden[0].vrValorDia, 30)
+    assert.equal(overridden[0].assistMedicaMes, 250)
+  })
 })

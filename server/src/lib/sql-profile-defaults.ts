@@ -565,6 +565,85 @@ GROUP BY
     REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')
 `.trim();
 
+/** Catálogo TiposBeneficios — calibrated join (MAX PBV_DtdInicio). */
+const TIPOS_BENEFICIOS_MSSQL = `
+SELECT
+    tbe.TBE_CdiTipoBeneficio AS cod_tipo,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(tbe.TBE_D1sTipoBeneficio, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(124), ' '), CHAR(10), ' ') AS desc_tipo,
+    COUNT(*) AS n_valores_ativos,
+    AVG(CAST(ISNULL(pbv.PBV_VlnBeneficio, 0) AS DECIMAL(18,4))) AS valor_medio,
+    MIN(pbv.PBV_VlnBeneficio) AS valor_min,
+    MAX(pbv.PBV_VlnBeneficio) AS valor_max
+FROM ConBeneficios cbn
+INNER JOIN PlanosBeneficios plb
+    ON plb.PLB_CdiPlanoBeneficio = cbn.CBN_CdiPlanoBeneficio
+INNER JOIN (
+    SELECT
+        p.PBV_CdiPlanoBeneficio,
+        p.PBV_VlnBeneficio,
+        p.PBV_DtdInicio
+    FROM PlanosBeneficiosValores p
+    INNER JOIN (
+        SELECT
+            PBV_CdiPlanoBeneficio,
+            MAX(PBV_DtdInicio) AS max_inicio
+        FROM PlanosBeneficiosValores
+        GROUP BY PBV_CdiPlanoBeneficio
+    ) u
+        ON u.PBV_CdiPlanoBeneficio = p.PBV_CdiPlanoBeneficio
+       AND u.max_inicio = p.PBV_DtdInicio
+) pbv
+    ON pbv.PBV_CdiPlanoBeneficio = plb.PLB_CdiPlanoBeneficio
+INNER JOIN TiposBeneficiosEntsBens ebt
+    ON ebt.EBT_CdiTipoBeneficioEntBen = plb.PLB_CdiTipoBeneficioEntBen
+INNER JOIN TiposBeneficios tbe
+    ON tbe.TBE_CdiTipoBeneficio = ebt.EBT_CdiTipoBeneficio
+WHERE cbn.CBN_DtdFim IS NULL
+GROUP BY
+    tbe.TBE_CdiTipoBeneficio,
+    tbe.TBE_D1sTipoBeneficio
+ORDER BY n_valores_ativos DESC, tbe.TBE_CdiTipoBeneficio
+`.trim();
+
+const TIPOS_BENEFICIOS_ORACLE = `
+SELECT
+    tbe.TBE_CdiTipoBeneficio AS cod_tipo,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(tbe.TBE_D1sTipoBeneficio, ''), CHR(59), ' '), CHR(9), ' '), CHR(124), ' '), CHR(10), ' ') AS desc_tipo,
+    COUNT(*) AS n_valores_ativos,
+    AVG(CAST(NVL(pbv.PBV_VlnBeneficio, 0) AS NUMBER(18,4))) AS valor_medio,
+    MIN(pbv.PBV_VlnBeneficio) AS valor_min,
+    MAX(pbv.PBV_VlnBeneficio) AS valor_max
+FROM ConBeneficios cbn
+INNER JOIN PlanosBeneficios plb
+    ON plb.PLB_CdiPlanoBeneficio = cbn.CBN_CdiPlanoBeneficio
+INNER JOIN (
+    SELECT
+        p.PBV_CdiPlanoBeneficio,
+        p.PBV_VlnBeneficio,
+        p.PBV_DtdInicio
+    FROM PlanosBeneficiosValores p
+    INNER JOIN (
+        SELECT
+            PBV_CdiPlanoBeneficio,
+            MAX(PBV_DtdInicio) AS max_inicio
+        FROM PlanosBeneficiosValores
+        GROUP BY PBV_CdiPlanoBeneficio
+    ) u
+        ON u.PBV_CdiPlanoBeneficio = p.PBV_CdiPlanoBeneficio
+       AND u.max_inicio = p.PBV_DtdInicio
+) pbv
+    ON pbv.PBV_CdiPlanoBeneficio = plb.PLB_CdiPlanoBeneficio
+INNER JOIN TiposBeneficiosEntsBens ebt
+    ON ebt.EBT_CdiTipoBeneficioEntBen = plb.PLB_CdiTipoBeneficioEntBen
+INNER JOIN TiposBeneficios tbe
+    ON tbe.TBE_CdiTipoBeneficio = ebt.EBT_CdiTipoBeneficio
+WHERE cbn.CBN_DtdFim IS NULL
+GROUP BY
+    tbe.TBE_CdiTipoBeneficio,
+    tbe.TBE_D1sTipoBeneficio
+ORDER BY n_valores_ativos DESC, tbe.TBE_CdiTipoBeneficio
+`.trim();
+
 const REGRA_FIXOS_MSSQL = `
 WITH CTE_MED AS (
     SELECT
@@ -748,6 +827,10 @@ export function factoryDefaultSlots(): Record<SqlSlotId, SqlSlotQueries> {
     FOLHA_E_ESCALAS: {
       mssql: FOLHA_MSSQL,
       oracle: FOLHA_ORACLE,
+    },
+    TIPOS_BENEFICIOS: {
+      mssql: TIPOS_BENEFICIOS_MSSQL,
+      oracle: TIPOS_BENEFICIOS_ORACLE,
     },
     REGRA_VR: {
       mssql: REGRA_VR_MSSQL,

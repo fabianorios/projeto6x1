@@ -1,9 +1,11 @@
 /**
  * Studio SQL — edit/test modular SqlProfile slots (consultant tool).
  * Factory profile is read-only; duplicate before editing.
+ * TIPOS_BENEFICIOS prévia: classification + valor edits are session-local
+ * overrides passed into the wizard motor (not saved to sql-profiles.json).
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   activateSqlProfile,
   createSqlProfile,
@@ -19,6 +21,13 @@ import {
   getActiveEnvironment,
   type EnvironmentPublic,
 } from '../api/environments'
+import {
+  benefitKey,
+  benefitsFromTiposRows,
+  mergeBenefitSessionOverride,
+  type BenefitClass,
+  type BenefitSessionOverrides,
+} from '../apdata/classifyBenefit'
 import {
   MODO_DIAS_OPTIONS,
   SQL_SLOT_CONTRACT,
@@ -39,14 +48,27 @@ import {
   type EphemeralCredsFormValue,
 } from './EphemeralCredsFields'
 
+const CLASS_OPTIONS: { id: BenefitClass; label: string }[] = [
+  { id: 'VARIAVEL_DIA', label: 'Variável por Dia (Escala)' },
+  { id: 'FIXO_MENSAL', label: 'Fixo Mensal (Por Vida)' },
+  { id: 'IGNORAR', label: 'Ignorar' },
+]
+
 interface SqlStudioPanelProps {
   open: boolean
   onClose: () => void
+  benefitSessionOverrides?: BenefitSessionOverrides
+  onBenefitSessionOverridesChange?: (next: BenefitSessionOverrides) => void
 }
 
 type ConnMode = 'env' | 'ephemeral'
 
-export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
+export function SqlStudioPanel({
+  open,
+  onClose,
+  benefitSessionOverrides,
+  onBenefitSessionOverridesChange,
+}: SqlStudioPanelProps) {
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [profiles, setProfiles] = useState<SqlProfile[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -69,9 +91,31 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
     defaultBenefitParams(),
   )
   const [copiedSql, setCopiedSql] = useState(false)
+  const [localOverrides, setLocalOverrides] = useState<BenefitSessionOverrides>(
+    {},
+  )
+  const sessionOverrides = benefitSessionOverrides ?? localOverrides
+  const setSessionOverrides = (
+    next:
+      | BenefitSessionOverrides
+      | ((prev: BenefitSessionOverrides) => BenefitSessionOverrides),
+  ) => {
+    const resolved =
+      typeof next === 'function' ? next(sessionOverrides) : next
+    if (onBenefitSessionOverridesChange) {
+      onBenefitSessionOverridesChange(resolved)
+    } else {
+      setLocalOverrides(resolved)
+    }
+  }
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
   const readonly = Boolean(selected?.readonly)
+
+  const tiposBenefits = useMemo(() => {
+    if (slot !== 'TIPOS_BENEFICIOS' || !testResult) return []
+    return benefitsFromTiposRows(testResult.rows)
+  }, [slot, testResult])
 
   const load = useCallback(async () => {
     setError(null)
@@ -279,6 +323,8 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
   const contract = SQL_SLOT_CONTRACT[slot]
   const showModoDias =
     slot === 'REGRA_VR' || slot === 'REGRA_VA' || slot === 'REGRA_VT'
+  const showBenefitEditGrid =
+    slot === 'TIPOS_BENEFICIOS' && tiposBenefits.length > 0
   const skippedNotes = [
     draftBenefits.vrTipoBeneficio == null
       ? 'VR: tipo não cadastrado — benefício ignorado.'
@@ -617,40 +663,152 @@ export function SqlStudioPanel({ open, onClose }: SqlStudioPanelProps) {
                       </span>
                     )}
                   </p>
-                  <div className="mt-2 max-h-48 overflow-auto">
-                    <table className="w-full border-collapse text-left text-xs">
-                      <thead>
-                        <tr>
-                          {testResult.columns.map((col) => (
-                            <th
-                              key={col}
-                              className="border-b border-[var(--color-line)] px-2 py-1 font-medium"
-                            >
-                              {col}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {testResult.rows.map((row, i) => (
-                          <tr key={i}>
+                  {showBenefitEditGrid ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Override de sessão (classificação + valor) — alimenta o
+                        motor no Wizard / Passo 4. Não grava no perfil SQL.
+                      </p>
+                      <div className="max-h-64 overflow-auto">
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead>
+                            <tr>
+                              <th className="border-b border-[var(--color-line)] px-2 py-1 font-medium">
+                                Código
+                              </th>
+                              <th className="border-b border-[var(--color-line)] px-2 py-1 font-medium">
+                                Descrição
+                              </th>
+                              <th className="border-b border-[var(--color-line)] px-2 py-1 font-medium">
+                                Valor médio
+                              </th>
+                              <th className="border-b border-[var(--color-line)] px-2 py-1 font-medium">
+                                Classificação
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tiposBenefits.map((b) => {
+                              const key = benefitKey(b)
+                              const over = sessionOverrides[key]
+                              const classValue =
+                                over?.classificacao ?? b.classificacao
+                              const valorValue =
+                                over?.valorMedio != null &&
+                                Number.isFinite(over.valorMedio)
+                                  ? over.valorMedio
+                                  : b.valorMedio
+                              return (
+                                <tr key={key}>
+                                  <td className="border-b border-[var(--color-line)]/50 px-2 py-1 font-mono">
+                                    {b.codigo}
+                                  </td>
+                                  <td className="border-b border-[var(--color-line)]/50 px-2 py-1">
+                                    {b.descricao}
+                                  </td>
+                                  <td className="border-b border-[var(--color-line)]/50 px-2 py-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      className="w-full min-w-[5.5rem] border border-[var(--color-line)] bg-white px-1.5 py-1 tabular-nums"
+                                      value={
+                                        Number.isFinite(valorValue)
+                                          ? valorValue
+                                          : ''
+                                      }
+                                      aria-label={`Valor médio ${b.descricao}`}
+                                      onChange={(e) => {
+                                        const raw = e.target.value.trim()
+                                        if (raw === '') return
+                                        const n = Number(raw.replace(',', '.'))
+                                        if (!Number.isFinite(n) || n < 0) return
+                                        setSessionOverrides((prev) =>
+                                          mergeBenefitSessionOverride(
+                                            prev,
+                                            key,
+                                            { valorMedio: n },
+                                          ),
+                                        )
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="border-b border-[var(--color-line)]/50 px-2 py-1">
+                                    <select
+                                      className="w-full min-w-[11rem] border border-[var(--color-line)] bg-white px-1.5 py-1"
+                                      value={classValue}
+                                      onChange={(e) =>
+                                        setSessionOverrides((prev) =>
+                                          mergeBenefitSessionOverride(
+                                            prev,
+                                            key,
+                                            {
+                                              classificacao: e.target
+                                                .value as BenefitClass,
+                                            },
+                                          ),
+                                        )
+                                      }
+                                    >
+                                      {CLASS_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {Object.keys(sessionOverrides).length > 0 && (
+                        <button
+                          type="button"
+                          className="text-xs text-[var(--color-muted)] underline"
+                          onClick={() => setSessionOverrides({})}
+                        >
+                          Limpar overrides de sessão
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-2 max-h-48 overflow-auto">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead>
+                          <tr>
                             {testResult.columns.map((col) => (
-                              <td
+                              <th
                                 key={col}
-                                className="border-b border-[var(--color-line)]/50 px-2 py-1 tabular-nums"
+                                className="border-b border-[var(--color-line)] px-2 py-1 font-medium"
                               >
-                                {String(
-                                  row[col] ??
-                                    row[col.toUpperCase()] ??
-                                    '',
-                                )}
-                              </td>
+                                {col}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {testResult.rows.map((row, i) => (
+                            <tr key={i}>
+                              {testResult.columns.map((col) => (
+                                <td
+                                  key={col}
+                                  className="border-b border-[var(--color-line)]/50 px-2 py-1 tabular-nums"
+                                >
+                                  {String(
+                                    row[col] ??
+                                      row[col.toUpperCase()] ??
+                                      '',
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

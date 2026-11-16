@@ -13,6 +13,7 @@ export type ModoDias = "ESCALA" | "FIXO_MES" | "CALENDARIO_LOCAL";
 export type SqlSlotId =
   | "ESTABELECIMENTOS"
   | "FOLHA_E_ESCALAS"
+  | "TIPOS_BENEFICIOS"
   | "REGRA_VR"
   | "REGRA_VA"
   | "REGRA_VT"
@@ -22,6 +23,7 @@ export type SqlSlotId =
 export const SQL_SLOT_IDS: readonly SqlSlotId[] = [
   "ESTABELECIMENTOS",
   "FOLHA_E_ESCALAS",
+  "TIPOS_BENEFICIOS",
   "REGRA_VR",
   "REGRA_VA",
   "REGRA_VT",
@@ -53,6 +55,7 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     "massa_salarial_base",
     "dias_trabalho_mes_atual",
   ],
+  TIPOS_BENEFICIOS: ["cod_tipo", "desc_tipo", "valor_medio"],
   REGRA_VR: [
     "cod_empresa",
     "cod_filial",

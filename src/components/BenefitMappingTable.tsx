@@ -1,11 +1,15 @@
 /**
  * Step 4 — benefit mapping: Código + Descrição + Valor Médio with
  * Variável por Dia | Fixo Mensal | Ignorar overrides (live recalc).
+ * Values are session-local (editable before simulate).
  */
 
 import {
+  benefitKey,
   collectUniqueBenefits,
   type BenefitClass,
+  type BenefitSessionOverride,
+  type BenefitSessionOverrides,
   type ExtractedBenefit,
 } from '../apdata/classifyBenefit'
 
@@ -15,14 +19,10 @@ const CLASS_OPTIONS: { id: BenefitClass; label: string }[] = [
   { id: 'IGNORAR', label: 'Ignorar' },
 ]
 
-function benefitKey(b: ExtractedBenefit): string {
-  return `${b.codigo}::${b.descricao}`
-}
-
 interface BenefitMappingTableProps {
   benefits: ExtractedBenefit[]
-  overrides: Record<string, BenefitClass>
-  onOverrideChange: (key: string, next: BenefitClass) => void
+  overrides: BenefitSessionOverrides
+  onOverrideChange: (key: string, patch: BenefitSessionOverride) => void
 }
 
 export function BenefitMappingTable({
@@ -55,7 +55,12 @@ export function BenefitMappingTable({
         <tbody>
           {list.map((b) => {
             const key = benefitKey(b)
-            const value = overrides[key] ?? b.classificacao
+            const over = overrides[key]
+            const classValue = over?.classificacao ?? b.classificacao
+            const valorValue =
+              over?.valorMedio != null && Number.isFinite(over.valorMedio)
+                ? over.valorMedio
+                : b.valorMedio
             return (
               <tr
                 key={key}
@@ -63,18 +68,31 @@ export function BenefitMappingTable({
               >
                 <td className="px-2 py-1.5 font-mono text-xs">{b.codigo}</td>
                 <td className="px-2 py-1.5">{b.descricao}</td>
-                <td className="px-2 py-1.5 tabular-nums">
-                  {b.valorMedio.toLocaleString('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  })}
+                <td className="px-2 py-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="w-full min-w-[6.5rem] border border-[var(--color-line)] bg-white px-2 py-1 text-xs tabular-nums"
+                    value={Number.isFinite(valorValue) ? valorValue : ''}
+                    aria-label={`Valor médio ${b.descricao}`}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim()
+                      if (raw === '') return
+                      const n = Number(raw.replace(',', '.'))
+                      if (!Number.isFinite(n) || n < 0) return
+                      onOverrideChange(key, { valorMedio: n })
+                    }}
+                  />
                 </td>
                 <td className="px-2 py-1.5">
                   <select
                     className="w-full min-w-[12rem] border border-[var(--color-line)] bg-white px-2 py-1 text-xs"
-                    value={value}
+                    value={classValue}
                     onChange={(e) =>
-                      onOverrideChange(key, e.target.value as BenefitClass)
+                      onOverrideChange(key, {
+                        classificacao: e.target.value as BenefitClass,
+                      })
                     }
                   >
                     {CLASS_OPTIONS.map((o) => (
