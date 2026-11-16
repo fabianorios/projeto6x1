@@ -6,11 +6,14 @@ import {
   emptyPayrollExtras,
   type PayrollRow,
 } from '../engine'
+import type { BenefitParams } from '../types/sql-profile'
 import {
   applyBenefitOverrides,
   benefitsToPayrollScalars,
   parseBeneficiosAgg,
+  resolveBenefitSlotAmounts,
   type BenefitSessionOverrides,
+  type BenefitSlotAmounts,
   type ExtractedBenefit,
 } from './classifyBenefit'
 
@@ -50,11 +53,29 @@ export type PayrollRowWithBenefits = PayrollRow & {
   benefits: ExtractedBenefit[]
 }
 
+export type MapExtractorOptions = {
+  sessionOverrides?: BenefitSessionOverrides
+  /** SqlProfile code→slot map (and optional amount defaults). */
+  benefitParams?: BenefitParams | null
+  /** Session scalar overrides for VR/VA/médico/odonto. */
+  slotAmounts?: BenefitSlotAmounts | null
+}
+
 /** Convert LGPD-safe extractor rows into engine PayrollRow[]. */
 export function mapExtractorAggregatesToPayroll(
   rows: ExtractorAggregate[],
-  sessionOverrides: BenefitSessionOverrides = {},
+  sessionOverridesOrOpts: BenefitSessionOverrides | MapExtractorOptions = {},
 ): PayrollRowWithBenefits[] {
+  const opts: MapExtractorOptions =
+    'sessionOverrides' in sessionOverridesOrOpts ||
+    'benefitParams' in sessionOverridesOrOpts ||
+    'slotAmounts' in sessionOverridesOrOpts
+      ? (sessionOverridesOrOpts as MapExtractorOptions)
+      : { sessionOverrides: sessionOverridesOrOpts as BenefitSessionOverrides }
+  const sessionOverrides = opts.sessionOverrides ?? {}
+  const codeMap = opts.benefitParams ?? null
+  const slotAmounts = opts.slotAmounts ?? null
+
   return rows.map((r, i) => {
     const qty = Math.max(0, num(r.qtd_colaboradores, 0))
     const massa = num(r.massa_salarial_base, 0)
@@ -65,7 +86,7 @@ export function mapExtractorAggregatesToPayroll(
       parseBeneficiosAgg(r.beneficios_agg),
       sessionOverrides,
     )
-    const fromAgg = benefitsToPayrollScalars(benefits)
+    const fromAgg = benefitsToPayrollScalars(benefits, codeMap)
 
     // Prefer dynamic agg classification; fall back to legacy scalar columns.
     const vrLegacy = num(r.vr_dia_medio, 0)
@@ -73,24 +94,46 @@ export function mapExtractorAggregatesToPayroll(
     const vaLegacy = num(r.va_valor_medio, 0)
     const medLegacy = num(r.assist_medica_mes, 0)
     const odontoLegacy = num(r.assist_odonto_mes, 0)
-    const vaModo = r.va_modo_valor === 'DIA' ? 'DIA' : 'MES'
+    const vaModo =
+      codeMap?.vaModoValor === 'DIA' || r.va_modo_valor === 'DIA'
+        ? 'DIA'
+        : 'MES'
 
-    const vr =
-      fromAgg.vrValorDia != null && fromAgg.vrValorDia > 0
-        ? fromAgg.vrValorDia
-        : vrLegacy
-    const va =
-      fromAgg.vaValorMes != null && fromAgg.vaValorMes > 0
-        ? fromAgg.vaValorMes
-        : vaLegacy
-    const med =
-      fromAgg.assistMedicaMes != null && fromAgg.assistMedicaMes > 0
-        ? fromAgg.assistMedicaMes
-        : medLegacy
-    const odonto =
-      fromAgg.assistOdontoMes != null && fromAgg.assistOdontoMes > 0
-        ? fromAgg.assistOdontoMes
-        : odontoLegacy
+    const extracted = {
+      vrValorDia:
+        fromAgg.vrValorDia != null && fromAgg.vrValorDia > 0
+          ? fromAgg.vrValorDia
+          : vrLegacy > 0
+            ? vrLegacy
+            : null,
+      vaValorMes:
+        fromAgg.vaValorMes != null && fromAgg.vaValorMes > 0
+          ? fromAgg.vaValorMes
+          : vaLegacy > 0
+            ? vaLegacy
+            : null,
+      assistMedicaMes:
+        fromAgg.assistMedicaMes != null && fromAgg.assistMedicaMes > 0
+          ? fromAgg.assistMedicaMes
+          : medLegacy > 0
+            ? medLegacy
+            : null,
+      assistOdontoMes:
+        fromAgg.assistOdontoMes != null && fromAgg.assistOdontoMes > 0
+          ? fromAgg.assistOdontoMes
+          : odontoLegacy > 0
+            ? odontoLegacy
+            : null,
+    }
+    const resolved = resolveBenefitSlotAmounts(
+      extracted,
+      codeMap,
+      slotAmounts,
+    )
+    const vr = resolved.vrValorDia
+    const va = resolved.vaValorMes
+    const med = resolved.assistMedicaMes
+    const odonto = resolved.assistOdontoMes
 
     const cargo = (r.desc_cargo || 'NAO_INFORMADO').trim()
     const centro = (r.cod_cc || 'SEM_CC').trim()
@@ -101,7 +144,7 @@ export function mapExtractorAggregatesToPayroll(
       cargaHorariaMensal: Math.round(cargaSemanal * 5 * 100) / 100,
       cargaHorariaSemanal: cargaSemanal,
       centroCusto: centro,
-      vrValorDia: vr > 0 ? vr : null,
+      vrValorDia: vr != null && vr > 0 ? vr : null,
       vrDiasMesAtual: dias > 0 ? dias : null,
       vtValorDia: vt > 0 ? vt : null,
       vtDiasMesAtual: dias > 0 ? dias : null,
@@ -119,11 +162,11 @@ export function mapExtractorAggregatesToPayroll(
       codVinculo: r.cod_vinculo || null,
       codHorarioAtual: r.cod_horario_atual || null,
       massaSalarialBase: massa,
-      vaModoValor: va > 0 ? vaModo : null,
-      vaValorDia: va > 0 && vaModo === 'DIA' ? va : null,
-      vaValorMes: va > 0 && vaModo === 'MES' ? va : null,
-      assistMedicaMes: med > 0 ? med : null,
-      assistOdontoMes: odonto > 0 ? odonto : null,
+      vaModoValor: va != null && va > 0 ? vaModo : null,
+      vaValorDia: va != null && va > 0 && vaModo === 'DIA' ? va : null,
+      vaValorMes: va != null && va > 0 && vaModo === 'MES' ? va : null,
+      assistMedicaMes: med != null && med > 0 ? med : null,
+      assistOdontoMes: odonto != null && odonto > 0 ? odonto : null,
       benefits,
     }
   })

@@ -1,9 +1,30 @@
 /**
  * Auto-classify Apdata TiposBeneficios by description keywords.
  * Used after extractor brings all active benefits (no hard-coded tipo 53).
+ * Optional SqlProfile.benefitParams code→slot map overrides keywords.
  */
 
+import {
+  slotForBenefitCodigo,
+  type BenefitParams,
+} from '../types/sql-profile'
+
 export type BenefitClass = 'VARIAVEL_DIA' | 'FIXO_MENSAL' | 'IGNORAR'
+
+/** Session (or profile-seeded) scalar amounts for the four motor slots. */
+export type BenefitSlotAmounts = {
+  vrValorDia?: number | null
+  vaValorMes?: number | null
+  assistMedicaMes?: number | null
+  assistOdontoMes?: number | null
+}
+
+export type PayrollBenefitScalars = {
+  vrValorDia: number | null
+  vaValorMes: number | null
+  assistMedicaMes: number | null
+  assistOdontoMes: number | null
+}
 
 export type ExtractedBenefit = {
   codigo: string
@@ -193,26 +214,43 @@ export function parseBeneficiosAgg(raw: string | null | undefined): ExtractedBen
 
 /**
  * Collapse extracted benefits into engine scalar fields.
- * VARIAVEL_DIA → vr (sum of averages); FIXO_MENSAL split by keyword
- * (odonto / alimentação-VA / else médica); IGNORAR skipped.
+ * When `codeMap` is set, matching Apdata codes win over keywords.
+ * Otherwise: VARIAVEL_DIA → vr; FIXO_MENSAL → odonto / VA / médica by keyword.
  */
-export function benefitsToPayrollScalars(benefits: ExtractedBenefit[]): {
-  vrValorDia: number | null
-  vaValorMes: number | null
-  assistMedicaMes: number | null
-  assistOdontoMes: number | null
-} {
+export function benefitsToPayrollScalars(
+  benefits: ExtractedBenefit[],
+  codeMap?: BenefitParams | null,
+): PayrollBenefitScalars {
   let vr = 0
   let va = 0
   let med = 0
   let odonto = 0
   for (const b of benefits) {
+    // Explicit profile code→slot wins over keyword class (incl. IGNORAR).
+    const mapped = codeMap ? slotForBenefitCodigo(b.codigo, codeMap) : null
+    if (mapped === 'vr') {
+      vr += b.valorMedio
+      continue
+    }
+    if (mapped === 'va') {
+      va += b.valorMedio
+      continue
+    }
+    if (mapped === 'medica') {
+      med += b.valorMedio
+      continue
+    }
+    if (mapped === 'odonto') {
+      odonto += b.valorMedio
+      continue
+    }
     if (b.classificacao === 'IGNORAR') continue
     if (b.classificacao === 'VARIAVEL_DIA') {
       vr += b.valorMedio
       continue
     }
-    // FIXO_MENSAL
+    if (b.classificacao !== 'FIXO_MENSAL') continue
+    // FIXO_MENSAL without code map hit
     const hay = normalizeDesc(b.descricao)
     if (hasKeyword(hay, ['odonto'])) {
       odonto += b.valorMedio
@@ -237,6 +275,62 @@ export function benefitsToPayrollScalars(benefits: ExtractedBenefit[]): {
     vaValorMes: va > 0 ? va : null,
     assistMedicaMes: med > 0 ? med : null,
     assistOdontoMes: odonto > 0 ? odonto : null,
+  }
+}
+
+/**
+ * Resolve final slot amounts: session override > extract/agg > profile defaults.
+ */
+export function resolveBenefitSlotAmounts(
+  fromExtract: PayrollBenefitScalars,
+  profileDefaults?: BenefitParams | null,
+  session?: BenefitSlotAmounts | null,
+): PayrollBenefitScalars {
+  const pick = (
+    sessionVal: number | null | undefined,
+    extractVal: number | null,
+    profileVal: number | null | undefined,
+  ): number | null => {
+    if (sessionVal != null && Number.isFinite(sessionVal)) return sessionVal
+    if (extractVal != null && extractVal > 0) return extractVal
+    if (profileVal != null && Number.isFinite(profileVal) && profileVal > 0) {
+      return profileVal
+    }
+    return null
+  }
+  return {
+    vrValorDia: pick(
+      session?.vrValorDia,
+      fromExtract.vrValorDia,
+      profileDefaults?.vrValorDiaPadrao,
+    ),
+    vaValorMes: pick(
+      session?.vaValorMes,
+      fromExtract.vaValorMes,
+      profileDefaults?.vaValorMesPadrao,
+    ),
+    assistMedicaMes: pick(
+      session?.assistMedicaMes,
+      fromExtract.assistMedicaMes,
+      profileDefaults?.assistenciaMedicaValorMes,
+    ),
+    assistOdontoMes: pick(
+      session?.assistOdontoMes,
+      fromExtract.assistOdontoMes,
+      profileDefaults?.assistenciaOdontologicaValorMes,
+    ),
+  }
+}
+
+export function profileDefaultsToSlotAmounts(
+  params: BenefitParams | null | undefined,
+): BenefitSlotAmounts {
+  if (!params) return {}
+  return {
+    vrValorDia: params.vrValorDiaPadrao,
+    vaValorMes: params.vaValorMesPadrao,
+    assistMedicaMes: params.assistenciaMedicaValorMes,
+    assistOdontoMes: params.assistenciaOdontologicaValorMes,
   }
 }
 

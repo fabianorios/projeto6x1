@@ -54,13 +54,24 @@ const slotsSchema = z.object({
   INDICES_ENCARGOS: slotQueriesSchema,
 });
 
+const tipoListSchema = z.array(z.number().int().nonnegative()).optional();
+const amountSchema = z.number().nonnegative().nullable().optional();
+
 const benefitParamsSchema = z
   .object({
     vrTipoBeneficio: z.number().int().nonnegative().nullable(),
     vaTipoBeneficio: z.number().int().nonnegative().nullable(),
     assistenciaMedicaTipo: z.number().int().nonnegative().nullable(),
     assistenciaOdontologicaTipo: z.number().int().nonnegative().nullable(),
+    vrTiposExtras: tipoListSchema,
+    vaTiposExtras: tipoListSchema,
+    medicaTiposExtras: tipoListSchema,
+    odontoTiposExtras: tipoListSchema,
     vaModoValor: z.enum(["DIA", "MES"]).optional(),
+    vrValorDiaPadrao: amountSchema,
+    vaValorMesPadrao: amountSchema,
+    assistenciaMedicaValorMes: amountSchema,
+    assistenciaOdontologicaValorMes: amountSchema,
     labels: z
       .object({
         vr: z.string().optional(),
@@ -105,6 +116,8 @@ const testSlotSchema = z.object({
   dialect: z.enum(["mssql", "oracle"]).optional(),
   /** Override SQL for draft editor (not persisted until save). */
   sql: z.string().min(1).optional(),
+  /** Draft benefitParams (tipos) — used for @tipo binds without saving first. */
+  benefitParams: benefitParamsSchema,
   environmentId: z.string().uuid().optional(),
   connection: ephemeralCredsSchema.optional(),
 });
@@ -382,7 +395,9 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
         );
       }
 
-      const benefitParams = normalizeBenefitParams(profile.benefitParams);
+      const benefitParams = normalizeBenefitParams(
+        args.benefitParams ?? profile.benefitParams,
+      );
       const bound = bindParamsForSlot(slot, dialect, benefitParams);
       // REGRA_FIXOS may run with one of two tipos; warn but still bind what exists.
       if (

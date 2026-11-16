@@ -71,14 +71,20 @@ import {
   type TaxRegime,
 } from '../engine'
 import { PILOT_TEMPLATES } from '../templates'
-import type { SqlProfile } from '../types/sql-profile'
+import {
+  defaultBenefitParams,
+  normalizeBenefitParams,
+  type SqlProfile,
+} from '../types/sql-profile'
 import {
   applyBenefitOverrides,
   benefitsToPayrollScalars,
   collectUniqueBenefits,
   mergeBenefitSessionOverride,
+  resolveBenefitSlotAmounts,
   type BenefitSessionOverride,
   type BenefitSessionOverrides,
+  type BenefitSlotAmounts,
   type ExtractedBenefit,
 } from '../apdata/classifyBenefit'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
@@ -88,6 +94,7 @@ import {
   type ExtractFiltersState,
 } from './ExtractFiltersPanel'
 import { BenefitMappingTable } from './BenefitMappingTable'
+import { BenefitSlotParamsFields } from './BenefitSlotParamsFields'
 import {
   DEFAULT_EPHEMERAL_CREDS_FORM,
   EphemeralCredsFields,
@@ -135,6 +142,9 @@ interface ApdataFlowPanelProps {
   /** Session-local benefit overrides shared with Studio SQL (classification + value). */
   benefitSessionOverrides?: BenefitSessionOverrides
   onBenefitSessionOverridesChange?: (next: BenefitSessionOverrides) => void
+  /** Session scalar amounts for VR/VA/Médico/Odonto. */
+  benefitSlotAmounts?: BenefitSlotAmounts
+  onBenefitSlotAmountsChange?: (next: BenefitSlotAmounts) => void
 }
 
 export function ApdataFlowPanel({
@@ -145,6 +155,8 @@ export function ApdataFlowPanel({
   onOpenAmbientes,
   benefitSessionOverrides,
   onBenefitSessionOverridesChange,
+  benefitSlotAmounts,
+  onBenefitSlotAmountsChange,
 }: ApdataFlowPanelProps) {
   const [phase, setPhase] = useState<Phase>(embedded ? 'segment' : 'origem')
   const [originCard, setOriginCard] = useState<OriginCard>('apdata')
@@ -167,6 +179,17 @@ export function ApdataFlowPanel({
     setLocalBenefitOverrides((prev) =>
       typeof next === 'function' ? next(prev) : next,
     )
+  }
+  const [localSlotAmounts, setLocalSlotAmounts] = useState<BenefitSlotAmounts>(
+    {},
+  )
+  const slotAmounts = benefitSlotAmounts ?? localSlotAmounts
+  const setSlotAmounts = (next: BenefitSlotAmounts) => {
+    if (onBenefitSlotAmountsChange) {
+      onBenefitSlotAmountsChange(next)
+      return
+    }
+    setLocalSlotAmounts(next)
   }
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)
@@ -574,6 +597,18 @@ export function ApdataFlowPanel({
     }
   }
 
+  const activeBenefitParams = useMemo(() => {
+    const selected =
+      (sqlProfileId
+        ? sqlProfiles.find((p) => p.id === sqlProfileId)
+        : null) ??
+      sqlProfiles[0] ??
+      null
+    return normalizeBenefitParams(
+      selected?.benefitParams ?? defaultBenefitParams(),
+    )
+  }, [sqlProfiles, sqlProfileId])
+
   const mappedBenefits = useMemo((): ExtractedBenefit[] => {
     if (!exported) return []
     const raw = collectUniqueBenefits(
@@ -584,24 +619,79 @@ export function ApdataFlowPanel({
     return applyBenefitOverrides(raw, benefitOverrides)
   }, [exported, benefitOverrides])
 
+  // Seed session amounts once from extract / profile when Premissas loads.
+  useEffect(() => {
+    if (phase !== 'premissas' || !exported) return
+    const hasSession =
+      slotAmounts.vrValorDia != null ||
+      slotAmounts.vaValorMes != null ||
+      slotAmounts.assistMedicaMes != null ||
+      slotAmounts.assistOdontoMes != null
+    if (hasSession) return
+    const fromAgg = benefitsToPayrollScalars(
+      mappedBenefits,
+      activeBenefitParams,
+    )
+    const seeded = resolveBenefitSlotAmounts(
+      fromAgg,
+      activeBenefitParams,
+      null,
+    )
+    if (
+      seeded.vrValorDia == null &&
+      seeded.vaValorMes == null &&
+      seeded.assistMedicaMes == null &&
+      seeded.assistOdontoMes == null
+    ) {
+      return
+    }
+    setSlotAmounts({
+      vrValorDia: seeded.vrValorDia,
+      vaValorMes: seeded.vaValorMes,
+      assistMedicaMes: seeded.assistMedicaMes,
+      assistOdontoMes: seeded.assistOdontoMes,
+    })
+    // Only on entering premissas with empty session — ignore further deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, exported])
+
   function applyBenefitOverridesToRows(
     rows: PayrollRow[],
   ): PayrollRow[] {
-    if (Object.keys(benefitOverrides).length === 0 && mappedBenefits.length === 0) {
-      return rows
-    }
+    const codeMap = activeBenefitParams
     return rows.map((row) => {
       const raw = (row as { benefits?: ExtractedBenefit[] }).benefits ?? []
-      if (raw.length === 0) return row
-      const overridden = applyBenefitOverrides(raw, benefitOverrides)
-      const scalars = benefitsToPayrollScalars(overridden)
+      const overridden =
+        raw.length > 0
+          ? applyBenefitOverrides(raw, benefitOverrides)
+          : raw
+      const fromAgg = benefitsToPayrollScalars(overridden, codeMap)
+      const extracted = {
+        vrValorDia: fromAgg.vrValorDia ?? row.vrValorDia,
+        vaValorMes: fromAgg.vaValorMes ?? row.vaValorMes,
+        assistMedicaMes: fromAgg.assistMedicaMes ?? row.assistMedicaMes,
+        assistOdontoMes: fromAgg.assistOdontoMes ?? row.assistOdontoMes,
+      }
+      const scalars = resolveBenefitSlotAmounts(
+        extracted,
+        codeMap,
+        slotAmounts,
+      )
+      const vaModo = codeMap.vaModoValor === 'DIA' ? 'DIA' : 'MES'
       return {
         ...row,
-        benefits: overridden,
+        ...(overridden.length > 0 ? { benefits: overridden } : {}),
         vrValorDia: scalars.vrValorDia ?? row.vrValorDia,
-        vaValorMes: scalars.vaValorMes ?? row.vaValorMes,
+        vaValorMes:
+          scalars.vaValorMes != null && vaModo === 'MES'
+            ? scalars.vaValorMes
+            : row.vaValorMes,
+        vaValorDia:
+          scalars.vaValorMes != null && vaModo === 'DIA'
+            ? scalars.vaValorMes
+            : row.vaValorDia,
         vaModoValor:
-          scalars.vaValorMes != null ? 'MES' : row.vaModoValor,
+          scalars.vaValorMes != null ? vaModo : row.vaModoValor,
         assistMedicaMes: scalars.assistMedicaMes ?? row.assistMedicaMes,
         assistOdontoMes: scalars.assistOdontoMes ?? row.assistOdontoMes,
       }
@@ -1257,9 +1347,30 @@ export function ApdataFlowPanel({
                   categs={categCatalog}
                 />
 
+                <div className="space-y-2 border border-[var(--color-line)] bg-white/80 px-3 py-3">
+                  <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                    VR / VA / Médico / Odonto — códigos e valores
+                  </p>
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Valores editáveis nesta sessão. Códigos Apdata vêm do perfil
+                    SQL ativo (edite e salve no Studio SQL). Vale-combustível
+                    permanece no pipeline de VR.
+                  </p>
+                  <BenefitSlotParamsFields
+                    benefitParams={activeBenefitParams}
+                    onBenefitParamsChange={() => {
+                      /* codes persist only via Studio SQL profile */
+                    }}
+                    persistAmountsOnProfile={false}
+                    sessionAmounts={slotAmounts}
+                    onSessionAmountsChange={setSlotAmounts}
+                    codesReadOnly
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                    Mapeamento de benefícios (TiposBeneficios)
+                    Mapeamento detalhado (TiposBeneficios / agg)
                   </p>
                   <BenefitMappingTable
                     benefits={mappedBenefits}

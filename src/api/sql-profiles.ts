@@ -124,6 +124,7 @@ export function testSqlSlot(input: {
   slot: SqlSlotId
   dialect?: SqlDialect
   sql?: string
+  benefitParams?: BenefitParams
   environmentId?: string
   connection?: EphemeralSessionCreds
 }): Promise<TestSlotResult> {
