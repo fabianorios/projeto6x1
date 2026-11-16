@@ -12,7 +12,10 @@ import {
   type ScenarioId,
   type TaxRegime,
 } from '../engine'
-import type { BenefitSessionOverrides } from '../apdata/classifyBenefit'
+import type {
+  BenefitSessionOverrides,
+  BenefitSlotAmounts,
+} from '../apdata/classifyBenefit'
 import {
   navigateShellMode,
   shellModeFromPath,
@@ -78,6 +81,9 @@ export function WizardShell() {
   /** Session-local only — Studio + Passo 4; never written to sql-profiles.json. */
   const [benefitSessionOverrides, setBenefitSessionOverrides] =
     useState<BenefitSessionOverrides>({})
+  /** Session scalar amounts for VR/VA/Médico/Odonto (Passo 4). */
+  const [benefitSlotAmounts, setBenefitSlotAmounts] =
+    useState<BenefitSlotAmounts>({})
 
   useEffect(() => {
     const sync = () => setMode(shellModeFromPath(window.location.pathname))
@@ -172,6 +178,8 @@ export function WizardShell() {
             onOpenAmbientes={() => setAmbientesOpen(true)}
             benefitSessionOverrides={benefitSessionOverrides}
             onBenefitSessionOverridesChange={setBenefitSessionOverrides}
+            benefitSlotAmounts={benefitSlotAmounts}
+            onBenefitSlotAmountsChange={setBenefitSlotAmounts}
           />
         )}
       </div>

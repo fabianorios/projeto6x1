@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  defaultBenefitParams,
+  setSlotTipoCodes,
+} from '../types/sql-profile'
+import {
   applyBenefitOverrides,
   benefitsFromTiposRows,
   benefitsToPayrollScalars,
   classifyBenefitByDescription,
   mergeBenefitSessionOverride,
   parseBeneficiosAgg,
+  resolveBenefitSlotAmounts,
   sanitizeBenefitText,
 } from './classifyBenefit'
 
@@ -138,5 +143,42 @@ describe('parseBeneficiosAgg + scalars', () => {
 
   it('sanitizes separators in text', () => {
     assert.equal(sanitizeBenefitText('A;B\tC|D'), 'A B C D')
+  })
+
+  it('maps scalars by profile code→slot (overrides keywords)', () => {
+    let params = defaultBenefitParams()
+    // Force code 9 (farmacia / IGNORAR by keyword) into VR via mapping.
+    params = setSlotTipoCodes(params, 'vr', '53, 9')
+    params = setSlotTipoCodes(params, 'odonto', '12')
+    const list = parseBeneficiosAgg(
+      '53|VALE REFEICAO|30;9|CONVENIO FARMACIA|5;12|ASSIST MEDICA UNIMED|100',
+    )
+    const s = benefitsToPayrollScalars(list, params)
+    assert.equal(s.vrValorDia, 35)
+    assert.equal(s.assistOdontoMes, 100)
+    assert.equal(s.assistMedicaMes, null)
+  })
+
+  it('resolveBenefitSlotAmounts prefers session > extract > profile', () => {
+    const resolved = resolveBenefitSlotAmounts(
+      {
+        vrValorDia: 10,
+        vaValorMes: null,
+        assistMedicaMes: 50,
+        assistOdontoMes: null,
+      },
+      {
+        ...defaultBenefitParams(),
+        vrValorDiaPadrao: 99,
+        vaValorMesPadrao: 200,
+        assistenciaMedicaValorMes: 1,
+        assistenciaOdontologicaValorMes: 40,
+      },
+      { vrValorDia: 15, assistOdontoMes: 8 },
+    )
+    assert.equal(resolved.vrValorDia, 15)
+    assert.equal(resolved.vaValorMes, 200)
+    assert.equal(resolved.assistMedicaMes, 50)
+    assert.equal(resolved.assistOdontoMes, 8)
   })
 })

@@ -1,8 +1,8 @@
 /**
  * Studio SQL — edit/test modular SqlProfile slots (consultant tool).
- * Factory profile is read-only; duplicate before editing.
- * TIPOS_BENEFICIOS prévia: classification + valor edits are session-local
- * overrides passed into the wizard motor (not saved to sql-profiles.json).
+ * SQL blocks on factory are read-only; benefit code/amount params are always
+ * editable (saving factory auto-duplicates). TIPOS_BENEFICIOS prévia: session
+ * overrides for classification + valor (not required for slot amounts).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -35,12 +35,14 @@ import {
   SQL_SLOT_IDS,
   SQL_SLOT_LABELS,
   defaultBenefitParams,
+  normalizeBenefitParams,
   type BenefitParams,
   type SqlDialect,
   type SqlProfile,
   type SqlSlotId,
   type SqlSlotQueries,
 } from '../types/sql-profile'
+import { BenefitSlotParamsFields } from './BenefitSlotParamsFields'
 import {
   DEFAULT_EPHEMERAL_CREDS_FORM,
   EphemeralCredsFields,
@@ -156,13 +158,21 @@ export function SqlStudioPanel({
     void load()
   }, [open, load])
 
+  // Sync name + benefit params when profile list / selection changes
+  // (not when only slot/dialect changes — that wiped unsaved code edits).
   useEffect(() => {
     if (!selectedId) return
     const sel = profiles.find((p) => p.id === selectedId)
     if (!sel) return
     setDraftName(sel.name)
+    setDraftBenefits(normalizeBenefitParams(sel.benefitParams))
+  }, [selectedId, profiles])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const sel = profiles.find((p) => p.id === selectedId)
+    if (!sel) return
     setDraftSql(sel.slots[slot]?.[dialect] ?? '')
-    setDraftBenefits(sel.benefitParams ?? defaultBenefitParams())
   }, [selectedId, slot, dialect, profiles])
 
   // Clear prévia only when the user switches profile / slot / dialect —
@@ -212,26 +222,42 @@ export function SqlStudioPanel({
   }
 
   async function handleSave() {
-    if (!selected || readonly) return
+    if (!selected) return
     setSaving(true)
     setError(null)
     try {
+      let targetId = selected.id
+      let targetSlots = selected.slots
+      let targetName = draftName.trim() || selected.name
+
+      // Factory SQL is immutable — duplicate so codes/amounts/SQL can persist.
+      if (readonly) {
+        const { profile: copy } = await duplicateSqlProfile(
+          selected.id,
+          `${selected.name} (cópia)`,
+        )
+        targetId = copy.id
+        targetSlots = copy.slots
+        targetName = copy.name
+        setSelectedId(copy.id)
+        setActiveId(copy.id)
+      }
+
       const nextSlots: Record<SqlSlotId, SqlSlotQueries> = {
-        ...selected.slots,
+        ...targetSlots,
         [slot]: {
-          ...selected.slots[slot],
+          ...targetSlots[slot],
           [dialect]: draftSql,
         },
       }
-      const { profile } = await updateSqlProfile(selected.id, {
-        name: draftName.trim() || selected.name,
+      const { profile } = await updateSqlProfile(targetId, {
+        name: targetName,
         slots: nextSlots,
         benefitParams: draftBenefits,
       })
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === profile.id ? profile : p)),
-      )
-      setDraftBenefits(profile.benefitParams)
+      await load()
+      setSelectedId(profile.id)
+      setDraftBenefits(normalizeBenefitParams(profile.benefitParams))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -247,24 +273,6 @@ export function SqlStudioPanel({
     } catch {
       setError('Não foi possível copiar o SQL — selecione e use Ctrl+C.')
     }
-  }
-
-  function setTipo(
-    key:
-      | 'vrTipoBeneficio'
-      | 'vaTipoBeneficio'
-      | 'assistenciaMedicaTipo'
-      | 'assistenciaOdontologicaTipo',
-    raw: string,
-  ) {
-    const trimmed = raw.trim()
-    if (trimmed === '') {
-      setDraftBenefits((b) => ({ ...b, [key]: null }))
-      return
-    }
-    const n = Number.parseInt(trimmed, 10)
-    if (!Number.isFinite(n) || n < 0) return
-    setDraftBenefits((b) => ({ ...b, [key]: n }))
   }
 
   async function handleActivate() {
@@ -305,6 +313,7 @@ export function SqlStudioPanel({
         slot,
         dialect,
         sql: draftSql,
+        benefitParams: draftBenefits,
       }
       if (connMode === 'ephemeral') {
         if (!ephemeralFormComplete(ephemeralForm)) {
@@ -471,47 +480,26 @@ export function SqlStudioPanel({
 
               <fieldset className="border border-[var(--color-line)] bg-white/70 px-3 py-3">
                 <legend className="px-1 text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                  Tipos de benefício (cliente)
+                  Códigos e valores (VR / VA / Médico / Odonto)
                 </legend>
                 <p className="mb-3 text-xs text-[var(--color-muted)]">
-                  Códigos Apdata variam por cliente; usados pelas queries de
-                  benefício (@tipo / @tipoMedica / @tipoOdonto). Vazio = benefício
-                  ignorado no motor.
+                  Mapeie códigos Apdata → slot e edite os valores padrão. Não
+                  precisa rodar TIPOS_BENEFICIOS. O 1º código de cada slot alimenta
+                  @tipo / @tipoMedica / @tipoOdonto. Salvar no perfil de fábrica
+                  cria uma cópia editável.
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(
-                    [
-                      ['vrTipoBeneficio', 'VR / refeição'],
-                      ['vaTipoBeneficio', 'VA / alimentação'],
-                      ['assistenciaMedicaTipo', 'Médico titular'],
-                      ['assistenciaOdontologicaTipo', 'Odontológica'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key} className="block text-sm">
-                      <span className="mb-1 block text-[var(--color-muted)]">
-                        {label}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        className="w-full border border-[var(--color-line)] bg-white px-3 py-2 disabled:bg-white/50"
-                        value={draftBenefits[key] ?? ''}
-                        disabled={readonly}
-                        placeholder="—"
-                        onChange={(e) => setTipo(key, e.target.value)}
-                      />
-                    </label>
-                  ))}
-                </div>
+                <BenefitSlotParamsFields
+                  benefitParams={draftBenefits}
+                  onBenefitParamsChange={setDraftBenefits}
+                  persistAmountsOnProfile
+                />
                 <label className="mt-3 block text-sm">
                   <span className="mb-1 block text-[var(--color-muted)]">
                     VA — modo do valor
                   </span>
                   <select
-                    className="w-full border border-[var(--color-line)] bg-white px-3 py-2 disabled:bg-white/50"
+                    className="w-full border border-[var(--color-line)] bg-white px-3 py-2"
                     value={draftBenefits.vaModoValor}
-                    disabled={readonly}
                     onChange={(e) =>
                       setDraftBenefits((b) => ({
                         ...b,
@@ -525,8 +513,8 @@ export function SqlStudioPanel({
                 </label>
                 {readonly && (
                   <p className="mt-2 text-xs text-[var(--color-muted)]">
-                    Perfil de fábrica: defaults históricos (VR=53, VA=52). Duplique
-                    para alterar.
+                    Perfil de fábrica: SQL permanece somente leitura; ao salvar
+                    códigos/valores, o Studio duplica o perfil automaticamente.
                   </p>
                 )}
                 {skippedNotes.length > 0 && (
@@ -606,11 +594,15 @@ export function SqlStudioPanel({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={saving || readonly}
+                  disabled={saving}
                   onClick={() => void handleSave()}
                   className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
-                  {readonly ? 'Somente leitura' : saving ? 'Salvando…' : 'Salvar bloco'}
+                  {saving
+                    ? 'Salvando…'
+                    : readonly
+                      ? 'Duplicar e salvar'
+                      : 'Salvar bloco'}
                 </button>
                 <button
                   type="button"
