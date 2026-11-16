@@ -165,7 +165,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
     return c.json({
       engine: dialect,
       sql: getAptoolsExtractorScript(dialect),
-      note: "Official Apdata extractor (LGPD-safe aggregates). Active TiposBeneficios → beneficios_agg (codigo|descricao|valor;…); classify in wizard step 4.",
+      note: "Official Apdata extractor (LGPD-safe aggregates). TIP_* escalas (work×off); ConBeneficios→TBE_* → beneficios_agg (codigo|descricao|valor;…); classify in wizard step 4.",
     });
   });
 
@@ -321,7 +321,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
           "beneficios_agg",
         ],
         rows,
-        note: "Ephemeral connection destroyed after response. Credentials were not persisted. Benefits via TiposBeneficios → beneficios_agg (parity with Aptools).",
+        note: "Ephemeral connection destroyed after response. Credentials were not persisted. Benefits via ConBeneficios→TBE_* → beneficios_agg (parity with Aptools).",
       });
     } catch (err) {
       // Connection/login/network → 422 JSON (never Nginx/Cloudflare 502 HTML).

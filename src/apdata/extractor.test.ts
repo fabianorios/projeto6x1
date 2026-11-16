@@ -28,12 +28,44 @@ describe('extractor SQL (SPA)', () => {
     assert.match(oracle, /CHR\(9\)/)
     assert.match(oracle, /CHR\(10\)/)
     assert.match(oracle, /CHR\(13\)/)
-    // Dynamic TiposBeneficios (no hard-coded tipo 53 filter).
-    assert.match(mssql, /TiposBeneficios/)
+  })
+
+  it('uses TIP_* escalas with work_days x off_days concat', () => {
+    const mssql = getAptoolsExtractorScript('mssql')
+    const oracle = getAptoolsExtractorScript('oracle')
+    assert.match(mssql, /TIP_OplTrabalho/)
+    assert.match(mssql, /TIP_CdiTipoDiaPonto/)
+    assert.ok(!mssql.includes('TDP_OplTrabalho'))
+    assert.ok(!mssql.includes('TDP_CdiTipoDiaPonto'))
+    assert.match(mssql, /HOR_OplDesativado/)
+    assert.match(
+      mssql,
+      /CAST\(cic\.work_days AS VARCHAR\(10\)\) \+ 'x' \+ CAST\(cic\.off_days AS VARCHAR\(10\)\)/,
+    )
+    assert.ok(!/WHEN cic\.cycle_len = 7 AND cic\.work_days = 6 THEN '6x1'/.test(mssql))
+    assert.match(oracle, /TIP_OplTrabalho/)
+    assert.match(oracle, /TO_CHAR\(cic\.work_days\) \|\| 'x' \|\| TO_CHAR\(cic\.off_days\)/)
+  })
+
+  it('joins ConBeneficios → PLB → PBV max inicio → EBT → TBE', () => {
+    const mssql = getAptoolsExtractorScript('mssql')
+    const oracle = getAptoolsExtractorScript('oracle')
+    assert.match(mssql, /ConBeneficios/)
+    assert.match(mssql, /PlanosBeneficios/)
+    assert.match(mssql, /TiposBeneficiosEntsBens/)
+    assert.match(mssql, /TBE_CdiTipoBeneficio/)
+    assert.match(mssql, /TBE_D1sTipoBeneficio/)
+    assert.match(mssql, /MAX\(PBV_DtdInicio\)/)
+    assert.match(mssql, /CBN_DtdFim IS NULL/)
+    assert.ok(!mssql.includes('PBV_DtdFim IS NULL'))
+    assert.ok(!mssql.includes('CBN_OplDesativado'))
+    assert.ok(!mssql.includes('TPB_CdiTipoBeneficio'))
+    assert.ok(!mssql.includes('TPB_D1sTipoBeneficio'))
     assert.match(mssql, /beneficios_agg/)
-    assert.match(mssql, /PBV_DtdFim IS NULL/)
-    assert.ok(!/TPB_CdiTipoBeneficio\s*=\s*53/.test(mssql))
+    assert.ok(!/TBE_CdiTipoBeneficio\s*=\s*53/.test(mssql))
     assert.match(oracle, /LISTAGG/)
+    assert.match(oracle, /ConBeneficios/)
+    assert.match(oracle, /TBE_CdiTipoBeneficio/)
     assert.match(oracle, /beneficios_agg/)
   })
 })

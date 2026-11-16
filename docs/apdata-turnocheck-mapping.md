@@ -6,7 +6,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 
 **Verificado em:** 2026-11-14 · SQL Server 2022 CU28 · DB `apdata_6x1` ONLINE · engine compat 100.
 
-**Prefixos Aptools (fonte de verdade para SQL exportável):** tabela `Contratados` (não `Contratos`); `Locais` = `LOC_*` (não `LPC_*`); `HorariosJornadas` = `HRI_*`; `TiposDiasPonto` = `TDP_*` (TEMP historicamente usava `TIP_*` — preferir `TDP_*` no extrator/Studio); `ConATransportes` = `CAS_*`; `MeiosTransportesItens` = `MRI_*`. Estabelecimento: `CON_CdiFolha` → `Folhas` → `Locais` → `Empresas`.
+**Prefixos Aptools (fonte de verdade para SQL exportável):** tabela `Contratados` (não `Contratos`); `Locais` = `LOC_*` (não `LPC_*`); `HorariosJornadas` = `HRI_*`; `TiposDiasPonto` = `TIP_*` (validado no cliente live 2026-11-16 — `TIP_CdiTipoDiaPonto`, `TIP_OplTrabalho`; não usar `TDP_*`); `ConATransportes` = `CAS_*`; `MeiosTransportesItens` = `MRI_*`; `TiposBeneficios` = `TBE_*` (não `TPB_*`). Estabelecimento: `CON_CdiFolha` → `Folhas` → `Locais` → `Empresas`.
 
 ## Inventário verificado (TEMP)
 
@@ -15,7 +15,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `Horarios` | 363 | Cadastro do horário (h/sem, h/mês, tipo escala, regime) |
 | `HorariosJornadas` | 2 906 | Sequência do ciclo (ordem × tipo dia × jornada) |
 | `Jornadas` | 217 | Carga prevista do dia (`JOR_HrdTotalHorasPrevistasTrab`) |
-| `TiposDiasPonto` | 9 | Trabalho vs folga (`TDP_OplTrabalho`, siglas T/F/C/D/P) |
+| `TiposDiasPonto` | 9 | Trabalho vs folga (`TIP_OplTrabalho`, siglas T/F/C/D/P) |
 | `Contratados` | 64 903 | Vínculo → cargo, CC, horário, HMV, salário, situação |
 | `QuantidadesHorasMes` | 16 | Catálogo horas-mês / horas-semana (sem código 210) |
 | `Cargos` | 2 225 | `CAR_D1sCargo` → `cargo` |
@@ -55,7 +55,8 @@ Entre sit=1 (referência TEMP): 63 horários distintos, 121 CC, 232 cargos; HMV 
 2. **`QuantidadesHorasMes` não tem 210** (nem 42h semanais dedicados) — gap PEC etapa 1 já previsto na feasibility.
 3. **`HorariosBeneficios.HOB_QtiDiasBeneficioFixo` = 0** em 363/363 — dias VR/VT pelo ciclo / AT, não por esse campo.
 4. **`ConBeneficios.CBN_OplAtivo = 0` em todos** — nesta cópia use `CBN_DtdFim IS NULL` (≈40 k) em vez do flag.
-5. VT não aparece como `TiposBeneficios`; usar `ConATransportes` × `MeiosTransportesItens` para `vt_valor_dia` e `HorariosTiposDiasAT` ∩ jornada (`TDP_OplTrabalho=1`) para dias. **Ignorar `ConCalculoATransportes`.**
+5. VT não aparece como `TiposBeneficios`; usar `ConATransportes` × `MeiosTransportesItens` para `vt_valor_dia` e `HorariosTiposDiasAT` ∩ jornada (`TIP_OplTrabalho=1`) para dias. **Ignorar `ConCalculoATransportes`.**
+6. Benefícios no extrator: `ConBeneficios` → `PlanosBeneficios` → `PlanosBeneficiosValores` (MAX `PBV_DtdInicio`) → `TiposBeneficiosEntsBens` → `TiposBeneficios` (`TBE_*`). Ativo: `CBN_DtdFim IS NULL` apenas.
 
 ## Campo CSV ← Apdata
 
@@ -68,19 +69,19 @@ Separador `;` · UTF-8 · cabeçalho exato ([import-layout.md](import-layout.md)
 | `carga_horaria_mensal` | `QuantidadesHorasMes.HMV_QtnQuantidadeHoraMes` ← `CON_CdiQuantidadeHoraMes` | Preferir HMV ao `HOR_QtnHorasMensais` (cadastro do horário pode divergir). Catálogo TEMP: 0, 44, 72, 80, 96, 100, 110, 120, 125, 150, 180, **220**. Sem 210. |
 | `carga_horaria_semanal` | `HMV_QtnHorasSemanal` ou `HOR_QtnHorasSemanal` | HMV alinhado ao contratado; HOR como fallback. Dominante 44. |
 | `centro_custo` | `CentrosCustos.CCU_D1sCentroCusto` (ou `CCU_CosEstrutura` / `CCU_CosReferencia`) | Mesma chave de agregação do relatório. Não exportar nomes de cliente embutidos se houver — preferir código interno. |
-| `escala_atual` | Ciclo `HorariosJornadas` × `TiposDiasPonto` | Ver § Classificação. Não usar só `HOR_D1sHorario` nem só `HOR_CdiTipoEscala`. |
-| `vr_valor_dia` | `PlanosBeneficiosValores.PBV_VlnBeneficio` via plano tipo **53** (Vale-Refeição) | Nesta TEMP média ≈ **30.56** nos planos VR. Tipo **52** (VA) ≈ 361 parece mensal — **não** mapear direto para `vr_valor_dia`. Refeitório (20): fora do VR/dia do motor. |
+| `escala_atual` | Ciclo `HorariosJornadas` × `TiposDiasPonto` (`TIP_*`) | Extrator: `work_days + 'x' + off_days` (concat). Não usar só `HOR_D1sHorario` nem só `HOR_CdiTipoEscala`. |
+| `vr_valor_dia` | Via cadeia `ConBeneficios` → plano → valor (MAX `PBV_DtdInicio`) → `TBE_*`; classificar tipo VR no wizard | Nesta TEMP média ≈ **30.56** nos planos VR. Tipo **52** (VA) ≈ 361 parece mensal — **não** mapear direto para `vr_valor_dia`. Refeitório (20): fora do VR/dia do motor. |
 | `vr_dias_mes_atual` | Dias trabalho do ciclo × 30/`cycle_len` **ou** `HOB_QtiDiasBeneficioFixo` se &gt; 0 | TEMP: HOB inútil. Estimativa: `work_days / cycle_len * 30` (ex. 6×1 → 26; 5×2 → ≈21.4). Motor também estima se vazio. |
 | `vt_valor_dia` | `Σ(CAS_QtiPassesDia × MRI_VlnUnitario)` — `ConATransportes` × `MeiosTransportesItens` | Ativo: `CAS_DtdFim IS NULL` + não desativado. Sem `ConCalculoATransportes`. Override opcional no fluxo Apdata→Simular. |
-| `vt_dias_mes_atual` | `HorariosTiposDiasAT` ∩ dias de `HorariosJornadas` com `TDP_OplTrabalho=1` | Tipo `88` cobre 2ª–6ª. ≈ `30 × at_work / cycle_len`. Sem AT → vazio (motor estima). **Não** usar `CCA_QtiTotalDias`. |
+| `vt_dias_mes_atual` | `HorariosTiposDiasAT` ∩ dias de `HorariosJornadas` com `TIP_OplTrabalho=1` | Tipo `88` cobre 2ª–6ª. ≈ `30 × at_work / cycle_len`. Sem AT → vazio (motor estima). **Não** usar `CCA_QtiTotalDias`. |
 | `quantidade` | `COUNT(*)` grupo cargo×CC×horário (ou HMV/escala) | Default export agregado (sem PII). Alternativa: 1 linha/contratado **sem** `nome`. |
 | `nome` | *(omitir)* | Opcional no CSV; **não** preencher a partir de `CON_DssNome` no default LGPD. |
 
 ### Domínios auxiliares
 
-**`TiposDiasPonto` (ciclo):**
+**`TiposDiasPonto` (ciclo) — prefixo `TIP_*`:**
 
-| Id | `TDP_OplTrabalho` | Sigla | Uso |
+| Id | `TIP_OplTrabalho` | Sigla | Uso |
 |----|-------------------|-------|-----|
 | 1 | 1 | T | Trabalho |
 | 2 | 0 | F | Folga |
@@ -94,21 +95,24 @@ Separador `;` · UTF-8 · cabeçalho exato ([import-layout.md](import-layout.md)
 
 ## Classificação `escala_atual`
 
-Derivar de `HorariosJornadas` ativos (`HRI_OplDesativado` null/0), ordenados por `HRI_NuiOrdem`:
+Derivar de `HorariosJornadas` ativos (`HRI_OplDesativado` null/0) e `Horarios` ativos (`HOR_OplDesativado` null/0), ordenados por `HRI_NuiOrdem`:
 
 ```text
-work_days = COUNT onde TDP_OplTrabalho = 1
-off_days  = COUNT onde TDP_OplTrabalho = 0
+work_days = COUNT onde TIP_OplTrabalho = 1
+off_days  = COUNT onde TIP_OplTrabalho = 0
 cycle_len = COUNT(*)
+escala_atual (extrator) = CAST(work_days) + 'x' + CAST(off_days)   -- ex. 6x1, 5x2, 14x17
 ```
+
+O extrator canônico **não** usa CASE fixo 6x1/5x2/4x3/12x36/other — emite o concat do ciclo. O motor/wizard ainda reconhece rótulos clássicos:
 
 | Código CSV | Regra | Status no motor ([schedule-policy](schedule-policy.md)) |
 |------------|-------|---------------------------------------------------------|
-| `6x1` | `cycle_len=7` ∧ `work_days=6` ∧ `off_days=1` | Só **Atual** — nunca sugerir |
-| `5x2` | `cycle_len=7` ∧ `work_days=5` ∧ `off_days=2` | Candidata |
+| `6x1` | `work_days=6` ∧ `off_days=1` (tipicamente `cycle_len=7`) | Só **Atual** — nunca sugerir |
+| `5x2` | `work_days=5` ∧ `off_days=2` | Candidata |
 | `12x36` | `HOR_CdiTipoEscala=3` **ou** ciclo 2 dias 1T+1F / padrões 14d com 7T | Ler como status quo — **não sugerir** |
-| `4x3` | `cycle_len=7` ∧ `work_days=4` ∧ `off_days=3` | Candidata (cenário agressivo) |
-| *(vazio / `other`)* | Demais (ciclos 28/31, mistos C/F) | Wizard / revisão humana |
+| `4x3` | `work_days=4` ∧ `off_days=3` | Candidata (cenário agressivo) |
+| *(outros concats / vazio)* | Demais (ciclos 28/31, mistos C/F) | Wizard / revisão humana |
 
 Padrões 7d mais frequentes nesta TEMP (siglas, sem texto de cliente): `TTTTTCD` (75 horários), `TTTTCDT` (32), `CDTTTTT` (26), `TTTTTTD` (13) — este último = clássico 6×1.
 
@@ -131,36 +135,27 @@ WHERE ISNULL(HMV_OplDesativado, 0) = 0
 ORDER BY HMV_QtnQuantidadeHoraMes;
 ```
 
-### B) Ciclo por horário → classificador
+### B) Ciclo por horário → classificador (extrator)
 
 ```sql
 SELECT hj.HRI_CdiHorario,
        COUNT(*) AS cycle_len,
-       SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-       SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
-       CASE
-         WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
-           THEN '6x1'
-         WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
-           THEN '5x2'
-         WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
-           THEN '4x3'
-         ELSE 'other'
-       END AS escala_atual
+       SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+       SUM(CASE WHEN ISNULL(td.TIP_OplTrabalho, 0) = 0 THEN 1 ELSE 0 END) AS off_days,
+       CAST(SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS VARCHAR(10))
+         + 'x'
+         + CAST(SUM(CASE WHEN ISNULL(td.TIP_OplTrabalho, 0) = 0 THEN 1 ELSE 0 END) AS VARCHAR(10))
+         AS escala_atual
 FROM dbo.HorariosJornadas hj
 JOIN dbo.TiposDiasPonto td
-  ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+JOIN dbo.Horarios h ON h.HOR_CdiHorario = hj.HRI_CdiHorario
 WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
+  AND ISNULL(h.HOR_OplDesativado, 0) = 0
 GROUP BY hj.HRI_CdiHorario;
 ```
 
-Sobrepor `12x36` quando `Horarios.HOR_CdiTipoEscala = 3` (mesmo se o CASE acima der `other`).
+Pista auxiliar: `Horarios.HOR_CdiTipoEscala = 3` (12×36) — o extrator emite o concat do ciclo; o wizard interpreta rótulos clássicos.
 
 ### C) Export agregado → colunas CSV (sem PII)
 
@@ -168,21 +163,18 @@ Sobrepor `12x36` quando `Horarios.HOR_CdiTipoEscala = 3` (mesmo se o CASE acima 
 ;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
-         SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-         SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
+         SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+         SUM(CASE WHEN ISNULL(td.TIP_OplTrabalho, 0) = 0 THEN 1 ELSE 0 END) AS off_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.Horarios h ON h.HOR_CdiHorario = hj.HRI_CdiHorario
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
+    AND ISNULL(h.HOR_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
 class AS (
   SELECT HRI_CdiHorario, cycle_len, work_days, off_days,
-         CASE
-           WHEN cycle_len = 7 AND work_days = 6 AND off_days = 1 THEN '6x1'
-           WHEN cycle_len = 7 AND work_days = 5 AND off_days = 2 THEN '5x2'
-           WHEN cycle_len = 7 AND work_days = 4 AND off_days = 3 THEN '4x3'
-           ELSE 'other'
-         END AS escala_ciclo
+         CAST(work_days AS VARCHAR(10)) + 'x' + CAST(off_days AS VARCHAR(10)) AS escala_ciclo
   FROM ciclo
 )
 SELECT
@@ -243,17 +235,17 @@ JOIN dbo.PlanosBeneficiosValores pbv
   ON pbv.PBV_CdiPlanoBeneficio = pb.PLB_CdiPlanoBeneficio
 WHERE tbe.TBE_CdiTipoBeneficio = 53          -- Vale-Refeição
   AND ISNULL(pb.PLB_OplDesativado, 0) = 0
-  AND ISNULL(pbv.PBV_OplDesativado, 0) = 0
   AND ISNULL(pbv.PBV_VlnBeneficio, 0) > 0
+  -- Extrator: valor = linha com MAX(PBV_DtdInicio) por plano (não PBV_DtdFim IS NULL)
 GROUP BY pb.PLB_CdiPlanoBeneficio;
 ```
 
-Ligar ao contratado via `ConBeneficios` (`CBN_CdiContratado`, `CBN_CdiPlanoBeneficio`, `CBN_DtdFim IS NULL`). Nesta TEMP `CBN_OplAtivo` não discrimina.
+Ligar ao contratado via `ConBeneficios` (`CBN_CdiContratado`, `CBN_CdiPlanoBeneficio`, `CBN_DtdFim IS NULL` apenas — sem `CBN_OplDesativado`). Nesta TEMP `CBN_OplAtivo` não discrimina.
 
 ### E) VT valor/dia + dias (ConATransportes × AT ∩ trabalho)
 
 `vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario)` com `CAS_DtdFim IS NULL`.  
-`vt_dias_mes` = máscara `HorariosTiposDiasAT` ∩ dias de jornada com `TDP_OplTrabalho=1` (tipo `88` cobre 2ª–6ª).  
+`vt_dias_mes` = máscara `HorariosTiposDiasAT` ∩ dias de jornada com `TIP_OplTrabalho=1` (tipo `88` cobre 2ª–6ª).  
 **Não** usar `ConCalculoATransportes`. Skeleton completo: UI Apdata→Simular SELECT E / store `docs/apdata-vt-conatransportes.md`.
 
 ```sql
