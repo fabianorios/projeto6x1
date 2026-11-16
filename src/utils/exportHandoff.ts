@@ -1,12 +1,22 @@
 /**
- * Export simulation → Gerador AHR JSON (SPEC-V2 handoff schema).
- * LGPD: no names/CPF/PII — aggregates only.
+ * Export simulation → Gerador AHR JSON (SPEC-V2 handoff schema)
+ * + Apdata cadastral hierarchy (Jornada→Horário→Ciclo→Grade).
+ * LGPD: no names/CPF/PII — aggregates / codes / turmas only.
  */
 
-import type { SimulationResult } from '../engine'
+import {
+  buildApdataHierarchy,
+  type ApdataHierarchyTree,
+  type SimulationResult,
+} from '../engine'
 import type { EstrategiaAbsorcao, RegimeFuncionamento, TaxRegime } from '../types'
 
-export const AHR_HANDOFF_SCHEMA_VERSION = 'turnocheck-ahr-handoff-v1'
+export const AHR_HANDOFF_SCHEMA_VERSION = 'turnocheck-ahr-handoff-v2'
+
+export interface AhrHandoffExportOptions {
+  /** Data Início for Ciclos de Horários (YYYY-MM-DD). */
+  dataInicio?: string
+}
 
 export interface AhrHandoffPayload {
   schemaVersion: typeof AHR_HANDOFF_SCHEMA_VERSION
@@ -69,11 +79,19 @@ export interface AhrHandoffPayload {
     assistMedicaMonthly: SimulationResult['assistMedicaMonthly']
     assistOdontoMonthly: SimulationResult['assistOdontoMonthly']
   }
+  /**
+   * Apdata cadastral tree for ERP parametrization/carga.
+   * Hierarchy: Jornada(+Steps) → Horário → Ciclo(+Data Início) → Grade/Turma.
+   */
+  apdataHierarchy: ApdataHierarchyTree
   disclaimer: string
 }
 
 /** Build Gerador AHR handoff JSON from a simulation result. */
-export function buildAhrHandoff(result: SimulationResult): AhrHandoffPayload {
+export function buildAhrHandoff(
+  result: SimulationResult,
+  options: AhrHandoffExportOptions = {},
+): AhrHandoffPayload {
   const { input, ruleVersion, coverage, cost, absorption, heCascade } = result
   const taxRegime =
     input.defaultTaxRegime ??
@@ -83,6 +101,10 @@ export function buildAhrHandoff(result: SimulationResult): AhrHandoffPayload {
   const regime =
     input.defaultRegimeFuncionamento ??
     result.distribuicaoTurmas.regime
+
+  const apdataHierarchy = buildApdataHierarchy(result, {
+    dataInicio: options.dataInicio,
+  })
 
   return {
     schemaVersion: AHR_HANDOFF_SCHEMA_VERSION,
@@ -147,13 +169,17 @@ export function buildAhrHandoff(result: SimulationResult): AhrHandoffPayload {
       assistMedicaMonthly: result.assistMedicaMonthly,
       assistOdontoMonthly: result.assistOdontoMonthly,
     },
+    apdataHierarchy,
     disclaimer: result.disclaimer,
   }
 }
 
 /** Trigger browser download of the AHR handoff JSON. */
-export function downloadAhrHandoff(result: SimulationResult): void {
-  const payload = buildAhrHandoff(result)
+export function downloadAhrHandoff(
+  result: SimulationResult,
+  options: AhrHandoffExportOptions = {},
+): void {
+  const payload = buildAhrHandoff(result, options)
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: 'application/json',
   })
