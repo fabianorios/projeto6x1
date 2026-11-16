@@ -57,6 +57,8 @@ const CLASS_OPTIONS: { id: BenefitClass; label: string }[] = [
 interface SqlStudioPanelProps {
   open: boolean
   onClose: () => void
+  /** `page` = embedded shell route `/studio`; `modal` = overlay (legacy). */
+  layout?: 'modal' | 'page'
   benefitSessionOverrides?: BenefitSessionOverrides
   onBenefitSessionOverridesChange?: (next: BenefitSessionOverrides) => void
 }
@@ -66,6 +68,7 @@ type ConnMode = 'env' | 'ephemeral'
 export function SqlStudioPanel({
   open,
   onClose,
+  layout = 'modal',
   benefitSessionOverrides,
   onBenefitSessionOverridesChange,
 }: SqlStudioPanelProps) {
@@ -100,13 +103,16 @@ export function SqlStudioPanel({
       | BenefitSessionOverrides
       | ((prev: BenefitSessionOverrides) => BenefitSessionOverrides),
   ) => {
-    const resolved =
-      typeof next === 'function' ? next(sessionOverrides) : next
+    // Always resolve against the latest map so rapid cell edits don't clobber.
     if (onBenefitSessionOverridesChange) {
+      const resolved =
+        typeof next === 'function' ? next(sessionOverrides) : next
       onBenefitSessionOverridesChange(resolved)
-    } else {
-      setLocalOverrides(resolved)
+      return
     }
+    setLocalOverrides((prev) =>
+      typeof next === 'function' ? next(prev) : next,
+    )
   }
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
@@ -151,14 +157,24 @@ export function SqlStudioPanel({
   }, [open, load])
 
   useEffect(() => {
-    if (!selected) return
-    setDraftName(selected.name)
-    setDraftSql(selected.slots[slot]?.[dialect] ?? '')
-    setDraftBenefits(selected.benefitParams ?? defaultBenefitParams())
+    if (!selectedId) return
+    const sel = profiles.find((p) => p.id === selectedId)
+    if (!sel) return
+    setDraftName(sel.name)
+    setDraftSql(sel.slots[slot]?.[dialect] ?? '')
+    setDraftBenefits(sel.benefitParams ?? defaultBenefitParams())
+  }, [selectedId, slot, dialect, profiles])
+
+  // Clear prévia only when the user switches profile / slot / dialect —
+  // not when `profiles` identity refreshes after load/save (that was wiping
+  // the TIPOS_BENEFICIOS edit grid mid-edit).
+  useEffect(() => {
     setTestResult(null)
-  }, [selected, slot, dialect])
+  }, [selectedId, slot, dialect])
 
   if (!open) return null
+
+  const isPage = layout === 'page'
 
   async function handleDuplicate() {
     if (!selectedId) return
@@ -340,17 +356,14 @@ export function SqlStudioPanel({
       : null,
   ].filter(Boolean) as string[]
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-ink)]/40 px-3 py-6"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sql-studio-title"
-      onClick={(ev) => {
-        if (ev.target === ev.currentTarget) onClose()
-      }}
-    >
-      <div className="w-full max-w-5xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 shadow-lg sm:p-6">
+  const panel = (
+      <div
+        className={
+          isPage
+            ? 'w-full border border-[var(--color-line)] bg-[var(--color-paper)] p-4 sm:p-6'
+            : 'w-full max-w-5xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 shadow-lg sm:p-6'
+        }
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2
@@ -362,7 +375,8 @@ export function SqlStudioPanel({
             <p className="mt-1 text-sm text-[var(--color-muted)]">
               Perfis com blocos SQL independentes (MSSQL / Oracle) e tipos de
               benefício por cliente. O padrão de fábrica é somente leitura —
-              duplique para editar.
+              duplique para editar. Overrides de Benefícios são de sessão e
+              alimentam o Wizard / simulação.
             </p>
           </div>
           <button
@@ -370,7 +384,7 @@ export function SqlStudioPanel({
             onClick={onClose}
             className="text-sm text-[var(--color-muted)] hover:text-[var(--color-ink)]"
           >
-            Fechar
+            {isPage ? 'Voltar ao Wizard' : 'Fechar'}
           </button>
         </div>
 
@@ -737,6 +751,7 @@ export function SqlStudioPanel({
                                     <select
                                       className="w-full min-w-[11rem] border border-[var(--color-line)] bg-white px-1.5 py-1"
                                       value={classValue}
+                                      aria-label={`Classificação ${b.descricao}`}
                                       onChange={(e) =>
                                         setSessionOverrides((prev) =>
                                           mergeBenefitSessionOverride(
@@ -850,6 +865,27 @@ export function SqlStudioPanel({
           </div>
         )}
       </div>
+  )
+
+  if (isPage) {
+    return (
+      <div role="region" aria-labelledby="sql-studio-title">
+        {panel}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--color-ink)]/40 px-3 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sql-studio-title"
+      onClick={(ev) => {
+        if (ev.target === ev.currentTarget) onClose()
+      }}
+    >
+      {panel}
     </div>
   )
 }
