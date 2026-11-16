@@ -8,13 +8,32 @@
  * `beneficios_agg` (codigo|descricao|valor;…) without duplicating HC/salary.
  * Classification happens in the SPA (classifyBenefit / BenefitMappingTable).
  * CNPJ filter: optional bound params (@cnpjN / :cnpjN), max 32.
+ * Situação / vínculo: Premissas filters (default exclude 0,2,3,99; CLT + empregatícios).
+ * Locais prefix: LOC_* (TEMP/dicionário — not LPC_*).
  */
+
+import {
+  buildSituacaoSqlPredicate,
+  buildVinculoSqlJoins,
+  buildVinculoSqlPredicate,
+  resolveExtractFilters,
+} from "./extract-filters.js";
 
 export type ExtractorDialect = "mssql" | "oracle";
 
 export type ExtractorFilters = {
   /** Full CNPJ strings (digits or formatted). Empty = no CNPJ filter. */
   cnpjs?: string[];
+  /** Situações to exclude (default 0,2,3,99). */
+  excludeSituacoes?: number[];
+  /** Keep afastamentos (SIT_OplAfastamento=1 beyond demissões). Default true. */
+  incluirAfastados?: boolean;
+  /** TiposRegimesTrabalhistas codes (default [1]=CLT). */
+  tipoRegimeTrabalhistaIds?: number[];
+  /** CategsTrabseSoc codes; empty + somenteEmpregaticios → flag join. */
+  categTrabeSocIds?: number[];
+  /** Default true — join CategsTrabseSoc with SDK_OplVinculoEmpregaticio=1. */
+  somenteEmpregaticios?: boolean;
 };
 
 const SANITIZE_MSSQL = (expr: string, fallback: string) =>
@@ -64,8 +83,8 @@ CTE_BEN_CONTRATO AS (
 CTE_BEN_COM_CHAVES AS (
     SELECT
         e.EMP_CdiEmpresa,
-        l.LPC_CdiLocal,
-        ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+        l.LOC_CdiLocal,
+        ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
         ${SANITIZE_MSSQL("cc.CCU_CosEstrutura", "SEM_CC")} AS cod_cc,
         c.CON_CdiCargo,
         ${SANITIZE_MSSQL("cg.CAR_D1sCargo", "NAO_INFORMADO")} AS desc_cargo,
@@ -79,31 +98,33 @@ CTE_BEN_COM_CHAVES AS (
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
     INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    __VINCULO_JOINS__
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-    INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+    INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
-    WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+    WHERE __SITUACAO_PREDICATE__
+AND __VINCULO_PREDICATE__
 ),
 CTE_BEN_GRUPO AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         STRING_AGG(
@@ -113,14 +134,14 @@ CTE_BENEFICIOS_AGG AS (
         ) WITHIN GROUP (ORDER BY cod_tipo) AS beneficios_agg
     FROM CTE_BEN_GRUPO
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_MSSQL("cc.CCU_CosEstrutura", "SEM_CC")} AS cod_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20)) AS cod_cargo,
     ${SANITIZE_MSSQL("cg.CAR_D1sCargo", "NAO_INFORMADO")} AS desc_cargo,
@@ -147,9 +168,10 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_trabalho_mes_atual,
     MAX(ben.beneficios_agg) AS beneficios_agg
 FROM Contratados c
+__VINCULO_JOINS__
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -157,8 +179,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
-   AND ben.LPC_CdiLocal = l.LPC_CdiLocal
-   AND ben.cnpj_completo = ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '')
+   AND ben.LOC_CdiLocal = l.LOC_CdiLocal
+   AND ben.cnpj_completo = ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '')
    AND ben.cod_cc = ${SANITIZE_MSSQL("cc.CCU_CosEstrutura", "SEM_CC")}
    AND ben.CON_CdiCargo = c.CON_CdiCargo
    AND ben.desc_cargo = ${SANITIZE_MSSQL("cg.CAR_D1sCargo", "NAO_INFORMADO")}
@@ -167,11 +189,12 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND ISNULL(ben.cycle_len, -1) = ISNULL(cic.cycle_len, -1)
    AND ISNULL(ben.work_days, -1) = ISNULL(cic.work_days, -1)
    AND ben.carga_semanal = ISNULL(h.HOR_QtnHorasSemanal, 44.0)
-WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+WHERE __SITUACAO_PREDICATE__
+AND __VINCULO_PREDICATE__
 __CNPJ_FILTER__
 GROUP BY
-    e.EMP_CdiEmpresa, l.LPC_CdiLocal,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''),
+    e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_MSSQL("cc.CCU_CosEstrutura", "SEM_CC")},
     c.CON_CdiCargo, ${SANITIZE_MSSQL("cg.CAR_D1sCargo", "NAO_INFORMADO")},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,
@@ -220,8 +243,8 @@ CTE_BEN_CONTRATO AS (
 CTE_BEN_COM_CHAVES AS (
     SELECT
         e.EMP_CdiEmpresa,
-        l.LPC_CdiLocal,
-        NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+        l.LOC_CdiLocal,
+        NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
         ${SANITIZE_ORACLE("cc.CCU_CosEstrutura", "SEM_CC")} AS cod_cc,
         c.CON_CdiCargo,
         ${SANITIZE_ORACLE("cg.CAR_D1sCargo", "NAO_INFORMADO")} AS desc_cargo,
@@ -235,31 +258,33 @@ CTE_BEN_COM_CHAVES AS (
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
     INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    __VINCULO_JOINS__
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-    INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+    INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
-    WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+    WHERE __SITUACAO_PREDICATE__
+AND __VINCULO_PREDICATE__
 ),
 CTE_BEN_GRUPO AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         LISTAGG(
@@ -269,14 +294,14 @@ CTE_BENEFICIOS_AGG AS (
         ) WITHIN GROUP (ORDER BY cod_tipo) AS beneficios_agg
     FROM CTE_BEN_GRUPO
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_ORACLE("cc.CCU_CosEstrutura", "SEM_CC")} AS cod_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0)) AS cod_cargo,
     ${SANITIZE_ORACLE("cg.CAR_D1sCargo", "NAO_INFORMADO")} AS desc_cargo,
@@ -303,9 +328,10 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_trabalho_mes_atual,
     MAX(ben.beneficios_agg) AS beneficios_agg
 FROM Contratados c
+__VINCULO_JOINS__
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -313,8 +339,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
-   AND ben.LPC_CdiLocal = l.LPC_CdiLocal
-   AND ben.cnpj_completo = NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '')
+   AND ben.LOC_CdiLocal = l.LOC_CdiLocal
+   AND ben.cnpj_completo = NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '')
    AND ben.cod_cc = ${SANITIZE_ORACLE("cc.CCU_CosEstrutura", "SEM_CC")}
    AND ben.CON_CdiCargo = c.CON_CdiCargo
    AND ben.desc_cargo = ${SANITIZE_ORACLE("cg.CAR_D1sCargo", "NAO_INFORMADO")}
@@ -323,11 +349,12 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND NVL(ben.cycle_len, -1) = NVL(cic.cycle_len, -1)
    AND NVL(ben.work_days, -1) = NVL(cic.work_days, -1)
    AND ben.carga_semanal = NVL(h.HOR_QtnHorasSemanal, 44.0)
-WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+WHERE __SITUACAO_PREDICATE__
+AND __VINCULO_PREDICATE__
 __CNPJ_FILTER__
 GROUP BY
-    e.EMP_CdiEmpresa, l.LPC_CdiLocal,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''),
+    e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_ORACLE("cc.CCU_CosEstrutura", "SEM_CC")},
     c.CON_CdiCargo, ${SANITIZE_ORACLE("cg.CAR_D1sCargo", "NAO_INFORMADO")},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,
@@ -339,15 +366,47 @@ export function cnpjDigits(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
+function applyExtractFilterPlaceholders(
+  template: string,
+  dialect: ExtractorDialect,
+  filters: ExtractorFilters,
+): string {
+  const resolved = resolveExtractFilters({
+    excludeSituacoes: filters.excludeSituacoes,
+    incluirAfastados: filters.incluirAfastados,
+    tipoRegimeTrabalhistaIds: filters.tipoRegimeTrabalhistaIds,
+    categTrabeSocIds: filters.categTrabeSocIds,
+    somenteEmpregaticios: filters.somenteEmpregaticios,
+  });
+  return template
+    .replaceAll(
+      "__VINCULO_JOINS__",
+      buildVinculoSqlJoins(resolved, dialect),
+    )
+    .replaceAll(
+      "__SITUACAO_PREDICATE__",
+      buildSituacaoSqlPredicate(resolved, dialect),
+    )
+    .replaceAll(
+      "__VINCULO_PREDICATE__",
+      buildVinculoSqlPredicate(resolved),
+    );
+}
+
 /**
  * Build SELECT-only extractor SQL + bind params for CNPJ filter.
  * Max 32 CNPJs (defense in depth). No benefit-tipo binds — dynamic TiposBeneficios.
+ * Situação / vínculo Premissas: literal integer lists (safe) + optional afastados EXISTS.
  */
 export function buildExtractorQuery(
   dialect: ExtractorDialect,
   filters: ExtractorFilters = {},
 ): { sql: string; params: Record<string, string | number> } {
-  const template = dialect === "oracle" ? ORACLE_SELECT : MSSQL_SELECT;
+  const template = applyExtractFilterPlaceholders(
+    dialect === "oracle" ? ORACLE_SELECT : MSSQL_SELECT,
+    dialect,
+    filters,
+  );
   const params: Record<string, string | number> = {};
 
   const rawList = (filters.cnpjs ?? [])
@@ -371,8 +430,8 @@ export function buildExtractorQuery(
 
   const expr =
     dialect === "oracle"
-      ? `REGEXP_REPLACE(NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''), '[^0-9]', '')`
-      : `REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''), '.', ''), '/', ''), '-', ''), ' ', '')`;
+      ? `REGEXP_REPLACE(NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''), '[^0-9]', '')`
+      : `REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''), '.', ''), '/', ''), '-', ''), ' ', '')`;
 
   const filter = `AND ${expr} IN (${placeholders.join(", ")})`;
   return {
@@ -385,7 +444,10 @@ export function buildExtractorQuery(
  * Aptools-ready SELECT (no SET TRANSACTION — Aptools may reject it).
  * Parity with SPA `src/apdata/extractorSql.ts` (beneficios_agg).
  */
-export function getAptoolsExtractorScript(dialect: ExtractorDialect): string {
-  const { sql } = buildExtractorQuery(dialect);
+export function getAptoolsExtractorScript(
+  dialect: ExtractorDialect,
+  filters: ExtractorFilters = {},
+): string {
+  const { sql } = buildExtractorQuery(dialect, filters);
   return sql + ";\n";
 }

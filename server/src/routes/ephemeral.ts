@@ -47,6 +47,11 @@ const ephemeralSchema = z
     filters: z
       .object({
         cnpjs: z.array(z.string()).max(32).optional(),
+        excludeSituacoes: z.array(z.number().int()).max(64).optional(),
+        incluirAfastados: z.boolean().optional(),
+        tipoRegimeTrabalhistaIds: z.array(z.number().int()).max(64).optional(),
+        categTrabeSocIds: z.array(z.number().int()).max(64).optional(),
+        somenteEmpregaticios: z.boolean().optional(),
       })
       .optional(),
     /**
@@ -81,10 +86,10 @@ const CATALOG_SELECTS: SelectRowsInput[] = [
   {
     table: "Locais",
     columns: [
-      "LPC_CdiLocal",
-      "LPC_CdiEmpresa",
-      "LPC_D1sLocal",
-      "LPC_NusCNPJSufixo",
+      "LOC_CdiLocal",
+      "LOC_CdiEmpresa",
+      "LOC_D1sLocal",
+      "LOC_NusCNPJSufixo",
     ],
   },
   {
@@ -98,7 +103,39 @@ const CATALOG_SELECTS: SelectRowsInput[] = [
   },
   {
     table: "Vinculos",
-    columns: ["VIN_CdiVinculo", "VIN_D1sVinculo"],
+    columns: [
+      "VIN_CdiVinculo",
+      "VIN_D1sVinculo",
+      "VIN_CdiCategTrabeSoc",
+      "VIN_CdiTipoRegimeTrabalhista",
+    ],
+  },
+  {
+    table: "Situacoes",
+    columns: [
+      "SIT_CdiSituacao",
+      "SIT_D1sSituacao",
+      "SIT_OplAfastamento",
+      "SIT_OplRemuneracao",
+      "SIT_OplDesativado",
+    ],
+  },
+  {
+    table: "CategsTrabseSoc",
+    columns: [
+      "SDK_CdiCategTrabeSoc",
+      "SDK_D1sCategTrabeSoc",
+      "SDK_CosCategTrabeSoc",
+      "SDK_OplVinculoEmpregaticio",
+    ],
+  },
+  {
+    table: "TiposRegimesTrabalhistas",
+    columns: [
+      "SDL_CdiTipoRegimeTrabalhista",
+      "SDL_D1sTipoRegimeTrabalhista",
+      "SDL_CosTipoRegimeTrabalhista",
+    ],
   },
   {
     table: "RamosAtividadesEmpresas",

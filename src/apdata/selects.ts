@@ -6,10 +6,10 @@
  *
  * CNPJ join (estabelecimento):
  *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
- *   Folhas.FOL_CdiLocal → Locais.LPC_CdiLocal
- *   Locais.LPC_CdiEmpresa → Empresas.EMP_CdiEmpresa
- *   CNPJ = EMP_NusCNPJPrefixo + LPC_NusCNPJSufixo
- *   Labels: EMP_DssEmpresa (razão) · LPC_D1sLocal (filial) · CNPJ
+ *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
+ *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
+ *   CNPJ = EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo
+ *   Labels: EMP_DssEmpresa (razão) · LOC_D1sLocal (filial) · CNPJ
  *   UI count: vínculos (COUNT contratados sit NOT IN 0/2/3/99), not folhas
  *
  * Ramos de serviço:
@@ -67,7 +67,7 @@ GROUP BY hj.HRI_CdiHorario`,
     id: 'C',
     title: 'C) Export agregado → CSV + filtro CNPJ (sem PII)',
     purpose:
-      `Agrega vínculos com CON_CdiSituacao NOT IN (${SIT_EXCL}) por cargo × CC × HMV × escala, filtráveis por estabelecimento (EMP_NusCNPJPrefixo + LPC_NusCNPJSufixo via Folhas→Locais→Empresas). Sem nomes de empresa/local/pessoa.`,
+      `Agrega vínculos com CON_CdiSituacao NOT IN (${SIT_EXCL}) por cargo × CC × HMV × escala, filtráveis por estabelecimento (EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo via Folhas→Locais→Empresas). Sem nomes de empresa/local/pessoa.`,
     sql: `;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
@@ -141,7 +141,7 @@ vt_cad AS (
 )
 SELECT
   emp.EMP_NusCNPJPrefixo                   AS cnpj_prefixo,
-  loc.LPC_NusCNPJSufixo                    AS cnpj_sufixo,
+  loc.LOC_NusCNPJSufixo                    AS cnpj_sufixo,
   car.CAR_D1sCargo                         AS cargo,
   AVG(NULLIF(con.CON_VlnSalario, 0))       AS salario,
   hmv.HMV_QtnQuantidadeHoraMes             AS carga_horaria_mensal,
@@ -163,8 +163,8 @@ SELECT
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
-JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -177,7 +177,7 @@ WHERE con.CON_CdiSituacao NOT IN (${SIT_EXCL})
   /* AND estabelecimento IN (@cnpjKeys) — runtime: filtro no cliente */
 GROUP BY
   emp.EMP_NusCNPJPrefixo,
-  loc.LPC_NusCNPJSufixo,
+  loc.LOC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,
@@ -193,20 +193,20 @@ GROUP BY
     id: 'F',
     title: 'F) Estabelecimentos (razão · filial · CNPJ + totais por vínculo)',
     purpose:
-      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LPC_D1sLocal · CNPJ + COUNT colaboradores agrupados por CON_CdiVinculo → Vinculos.VIN_D1sVinculo (sit NOT IN 0/2/3/99). Não é TiposContratos — Contratados não tem CON_CdiTipoContrato. Admin runtime OK; não hardcodar nomes em git.',
+      'Lista estabelecimentos via Folhas→Locais→Empresas. UI: EMP_DssEmpresa · LOC_D1sLocal · CNPJ + COUNT colaboradores agrupados por CON_CdiVinculo → Vinculos.VIN_D1sVinculo (sit NOT IN 0/2/3/99). Não é TiposContratos — Contratados não tem CON_CdiTipoContrato. Admin runtime OK; não hardcodar nomes em git.',
     sql: `SELECT emp.EMP_CdiEmpresa,
        emp.EMP_DssEmpresa,
        emp.EMP_NusCNPJPrefixo,
        emp.EMP_CdiRamoAtividadeEmpresa,
-       loc.LPC_CdiLocal,
-       loc.LPC_D1sLocal,
-       loc.LPC_NusCNPJSufixo,
+       loc.LOC_CdiLocal,
+       loc.LOC_D1sLocal,
+       loc.LOC_NusCNPJSufixo,
        con.CON_CdiVinculo,
        vin.VIN_D1sVinculo,
        COUNT(con.CON_CdiContratado) AS n_colaboradores
 FROM dbo.Folhas fol
-JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 LEFT JOIN dbo.Contratados con
   ON con.CON_CdiFolha = fol.FOL_CdiFolha
  AND con.CON_CdiSituacao NOT IN (${SIT_EXCL})
@@ -215,12 +215,12 @@ GROUP BY emp.EMP_CdiEmpresa,
          emp.EMP_DssEmpresa,
          emp.EMP_NusCNPJPrefixo,
          emp.EMP_CdiRamoAtividadeEmpresa,
-         loc.LPC_CdiLocal,
-         loc.LPC_D1sLocal,
-         loc.LPC_NusCNPJSufixo,
+         loc.LOC_CdiLocal,
+         loc.LOC_D1sLocal,
+         loc.LOC_NusCNPJSufixo,
          con.CON_CdiVinculo,
          vin.VIN_D1sVinculo
-ORDER BY emp.EMP_DssEmpresa, loc.LPC_D1sLocal, n_colaboradores DESC`,
+ORDER BY emp.EMP_DssEmpresa, loc.LOC_D1sLocal, n_colaboradores DESC`,
   },
   {
     id: 'G',
@@ -397,12 +397,12 @@ export const LIVE_SELECT_STEPS: {
     label: 'Locais (filial + CNPJ sufixo)',
     table: 'Locais',
     columns: [
-      'LPC_CdiLocal',
-      'LPC_CdiEmpresa',
-      'LPC_D1sLocal',
-      'LPC_NusCNPJSufixo',
+      'LOC_CdiLocal',
+      'LOC_CdiEmpresa',
+      'LOC_D1sLocal',
+      'LOC_NusCNPJSufixo',
     ],
-    note: 'LPC_D1sLocal = nome da filial; LPC_NusCNPJSufixo = sufixo CNPJ.',
+    note: 'LOC_D1sLocal = nome da filial; LOC_NusCNPJSufixo = sufixo CNPJ.',
   },
   {
     id: 'ramos',
@@ -434,12 +434,13 @@ export const LIVE_SELECT_STEPS: {
       'CON_CdiCentroCusto',
       'CON_CdiQuantidadeHoraMes',
       'CON_CdiHorario',
+      'CON_CdiVinculo',
       'CON_VlnSalario',
       'CON_VlnSalarioIntegral',
       'CON_CdiSituacao',
     ],
     whereNotIn: { CON_CdiSituacao: [...EXCLUDED_SITUACOES] },
-    note: 'Exclui sit 0/2/3/99. Inclui ativos + afastados. Sem nome/CPF.',
+    note: 'Exclui sit 0/2/3/99 (Premissas pode alterar). Inclui ativos + afastados. Sem nome/CPF.',
   },
   {
     id: 'cargos',

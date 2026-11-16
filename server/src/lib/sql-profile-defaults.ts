@@ -14,44 +14,44 @@ import type { SqlSlotId, SqlSlotQueries } from "./sql-profile-types.js";
 const ESTABELECIMENTOS_MSSQL = `
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_DssEmpresa, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS razao_social,
-    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(l.LPC_D1sLocal, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS nome_filial,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(l.LOC_D1sLocal, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS nome_filial,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     COUNT(c.CON_CdiContratado) AS qtd_ativos
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     e.EMP_DssEmpresa,
-    l.LPC_D1sLocal,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '')
+    l.LOC_D1sLocal,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '')
 ORDER BY razao_social, nome_filial
 `.trim();
 
 const ESTABELECIMENTOS_ORACLE = `
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(e.EMP_DssEmpresa, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS razao_social,
-    REPLACE(REPLACE(REPLACE(REPLACE(NVL(l.LPC_D1sLocal, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS nome_filial,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    REPLACE(REPLACE(REPLACE(REPLACE(NVL(l.LOC_D1sLocal, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS nome_filial,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     COUNT(c.CON_CdiContratado) AS qtd_ativos
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     e.EMP_DssEmpresa,
-    l.LPC_D1sLocal,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '')
+    l.LOC_D1sLocal,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '')
 ORDER BY razao_social, nome_filial
 `.trim();
 
@@ -68,8 +68,8 @@ WITH CTE_CICLO_HORARIO AS (
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20)) AS cod_cargo,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS desc_cargo,
@@ -94,8 +94,8 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_trabalho_mes_atual
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -103,8 +103,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''),
+    l.LOC_CdiLocal,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
     c.CON_CdiCargo,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '),
@@ -129,8 +129,8 @@ WITH CTE_CICLO_HORARIO AS (
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0)) AS cod_cargo,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS desc_cargo,
@@ -155,8 +155,8 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_trabalho_mes_atual
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -164,8 +164,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''),
+    l.LOC_CdiLocal,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
     c.CON_CdiCargo,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '),
@@ -218,7 +218,7 @@ CTE_VR AS (
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(AVG(ISNULL(vr.valor_dia, 0)) AS DECIMAL(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR(20)) AS modo_dias,
@@ -231,15 +231,15 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VR vr ON vr.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')
 `.trim();
 
@@ -284,7 +284,7 @@ CTE_VR AS (
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     CAST(AVG(NVL(vr.valor_dia, 0)) AS NUMBER(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR2(20)) AS modo_dias,
@@ -297,15 +297,15 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VR vr ON vr.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')
 `.trim();
 
@@ -346,7 +346,7 @@ CTE_VT AS (
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ') AS cod_cc,
     CAST(AVG(ISNULL(vt.valor_dia, 0)) AS DECIMAL(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR(20)) AS modo_dias,
@@ -359,15 +359,15 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VT vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')
 `.trim();
 
@@ -408,7 +408,7 @@ CTE_VT AS (
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ') AS cod_cc,
     CAST(AVG(NVL(vt.valor_dia, 0)) AS NUMBER(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR2(20)) AS modo_dias,
@@ -421,15 +421,15 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VT vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' ')
 `.trim();
 
@@ -474,7 +474,7 @@ CTE_VA AS (
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc,
     CAST(AVG(ISNULL(vr.valor_dia, 0)) AS DECIMAL(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR(20)) AS modo_dias,
@@ -487,15 +487,15 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VA vr ON vr.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')
 `.trim();
 
@@ -540,7 +540,7 @@ CTE_VA AS (
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ') AS cod_cc,
     CAST(AVG(NVL(vr.valor_dia, 0)) AS NUMBER(18,2)) AS valor_dia,
     CAST('ESCALA' AS VARCHAR2(20)) AS modo_dias,
@@ -553,15 +553,15 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_base_mes
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_VA vr ON vr.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_CICLO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')
 `.trim();
 
@@ -616,21 +616,21 @@ CTE_ODONTO_VAL AS (
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ') AS cod_cc,
     CAST(AVG(ISNULL(med.valor_mes, 0)) AS DECIMAL(18,2)) AS valor_mes_medica,
     CAST(AVG(ISNULL(od.valor_mes, 0)) AS DECIMAL(18,2)) AS valor_mes_odonto
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_MED_VAL med ON med.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_ODONTO_VAL od ON od.CBN_CdiContratado = c.CON_CdiContratado
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' ')
 `.trim();
 
@@ -685,21 +685,21 @@ CTE_ODONTO_VAL AS (
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ') AS cod_cc,
     CAST(AVG(NVL(med.valor_mes, 0)) AS NUMBER(18,2)) AS valor_mes_medica,
     CAST(AVG(NVL(od.valor_mes, 0)) AS NUMBER(18,2)) AS valor_mes_odonto
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN CTE_MED_VAL med ON med.CBN_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_ODONTO_VAL od ON od.CBN_CdiContratado = c.CON_CdiContratado
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
     e.EMP_CdiEmpresa,
-    l.LPC_CdiLocal,
+    l.LOC_CdiLocal,
     REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' ')
 `.trim();
 
@@ -707,33 +707,33 @@ GROUP BY
 const INDICES_MSSQL = `
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     CAST(20.0 AS DECIMAL(8,2)) AS inss_empresa_pct,
     CAST(2.0 AS DECIMAL(8,2)) AS rat_fap_pct,
     CAST(5.8 AS DECIMAL(8,2)) AS terceiros_pct,
     CAST(8.0 AS DECIMAL(8,2)) AS fgts_pct
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
-GROUP BY e.EMP_CdiEmpresa, l.LPC_CdiLocal
+GROUP BY e.EMP_CdiEmpresa, l.LOC_CdiLocal
 `.trim();
 
 const INDICES_ORACLE = `
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     CAST(20.0 AS NUMBER(8,2)) AS inss_empresa_pct,
     CAST(2.0 AS NUMBER(8,2)) AS rat_fap_pct,
     CAST(5.8 AS NUMBER(8,2)) AS terceiros_pct,
     CAST(8.0 AS NUMBER(8,2)) AS fgts_pct
 FROM Contratados c
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
-GROUP BY e.EMP_CdiEmpresa, l.LPC_CdiLocal
+GROUP BY e.EMP_CdiEmpresa, l.LOC_CdiLocal
 `.trim();
 
 export const FACTORY_PROFILE_ID = "factory-padrao-apdata-saas";

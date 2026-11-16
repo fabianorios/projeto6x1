@@ -4,7 +4,10 @@
    ============================================================================
    REGRAS APLICADAS:
    1. Zero PII: Nenhum nome, CPF, PIS ou matrícula individual é extraído.
-   2. Situação: Apenas vínculos ativos -> CON_CdiSituacao NOT IN (0, 2, 3, 99).
+   2. Situação: CON_CdiSituacao NOT IN (0, 2, 3, 99) por padrão; Premissas pode
+      excluir afastados (SIT_OplAfastamento=1) via toggle.
+   2b. Vínculo: JOIN Vinculos + CategsTrabseSoc (empregatícios) e
+      VIN_CdiTipoRegimeTrabalhista IN (1) CLT — Premissas ajusta categoria/regime.
    3. Benefícios: JOIN TiposBeneficios — todos ativos (PBV_DtdFim IS NULL)
       agregados em beneficios_agg (codigo|descricao|valor;…) sem duplicar
       headcount/salário. Classificação VARIAVEL_DIA / FIXO_MENSAL / IGNORAR
@@ -13,9 +16,9 @@
           (Ignora ConCalculoATransportes conforme regra canônica).
    5. Sanitização: Remove ';', TAB, '|', quebras de linha de textos
       para não deslocar colunas no export Aptools TXT (TAB) ou CSV.
-   6. Prefixos Aptools: Contratados=CON, Locais=LPC, HorariosJornadas=HRI,
+   6. Prefixos: Contratados=CON, Locais=LOC (não LPC), HorariosJornadas=HRI,
       TiposDiasPonto=TDP, ConATransportes=CAS, MeiosTransportesItens=MRI.
-      Estabelecimento: CON_CdiFolha → Folhas → Locais(LPC) → Empresas(EMP).
+      Estabelecimento: CON_CdiFolha → Folhas → Locais(LOC) → Empresas(EMP).
    ============================================================================
    Aptools: não prefixar com SET TRANSACTION — a ferramenta pode rejeitar.
    Isolation (READ UNCOMMITTED / READ ONLY) fica na conexão API/MCP.
@@ -66,8 +69,8 @@ CTE_BEN_CONTRATO AS (
 CTE_BEN_COM_CHAVES AS (
     SELECT
         e.EMP_CdiEmpresa,
-        l.LPC_CdiLocal,
-        ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+        l.LOC_CdiLocal,
+        ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS cod_cc,
         c.CON_CdiCargo,
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS desc_cargo,
@@ -81,31 +84,34 @@ CTE_BEN_COM_CHAVES AS (
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
     INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    INNER JOIN Vinculos v ON v.VIN_CdiVinculo = c.CON_CdiVinculo
+INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabeSoc AND ISNULL(cts.SDK_OplVinculoEmpregaticio, 0) = 1
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-    INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+    INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
     WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 ),
 CTE_BEN_GRUPO AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         STRING_AGG(
@@ -115,14 +121,14 @@ CTE_BENEFICIOS_AGG AS (
         ) WITHIN GROUP (ORDER BY cod_tipo) AS beneficios_agg
     FROM CTE_BEN_GRUPO
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
-    CAST(l.LPC_CdiLocal AS VARCHAR(20)) AS cod_filial,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS cod_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20)) AS cod_cargo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS desc_cargo,
@@ -149,9 +155,11 @@ SELECT
     ), 1) AS DECIMAL(10,1)) AS dias_trabalho_mes_atual,
     MAX(ben.beneficios_agg) AS beneficios_agg
 FROM Contratados c
+INNER JOIN Vinculos v ON v.VIN_CdiVinculo = c.CON_CdiVinculo
+INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabeSoc AND ISNULL(cts.SDK_OplVinculoEmpregaticio, 0) = 1
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -159,8 +167,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
-   AND ben.LPC_CdiLocal = l.LPC_CdiLocal
-   AND ben.cnpj_completo = ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, '')
+   AND ben.LOC_CdiLocal = l.LOC_CdiLocal
+   AND ben.cnpj_completo = ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '')
    AND ben.cod_cc = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ')
    AND ben.CON_CdiCargo = c.CON_CdiCargo
    AND ben.desc_cargo = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ')
@@ -170,9 +178,10 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND ISNULL(ben.work_days, -1) = ISNULL(cic.work_days, -1)
    AND ben.carga_semanal = ISNULL(h.HOR_QtnHorasSemanal, 44.0)
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
-    e.EMP_CdiEmpresa, l.LPC_CdiLocal,
-    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LPC_NusCNPJSufixo, ''),
+    e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     c.CON_CdiCargo, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,
@@ -225,8 +234,8 @@ CTE_BEN_CONTRATO AS (
 CTE_BEN_COM_CHAVES AS (
     SELECT
         e.EMP_CdiEmpresa,
-        l.LPC_CdiLocal,
-        NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+        l.LOC_CdiLocal,
+        NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS cod_cc,
         c.CON_CdiCargo,
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS desc_cargo,
@@ -240,31 +249,34 @@ CTE_BEN_COM_CHAVES AS (
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
     INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    INNER JOIN Vinculos v ON v.VIN_CdiVinculo = c.CON_CdiVinculo
+INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabeSoc AND NVL(cts.SDK_OplVinculoEmpregaticio, 0) = 1
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-    INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+    INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+    INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
     WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 ),
 CTE_BEN_GRUPO AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal,
         LISTAGG(
@@ -274,14 +286,14 @@ CTE_BENEFICIOS_AGG AS (
         ) WITHIN GROUP (ORDER BY cod_tipo) AS beneficios_agg
     FROM CTE_BEN_GRUPO
     GROUP BY
-        EMP_CdiEmpresa, LPC_CdiLocal, cnpj_completo, cod_cc,
+        EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
         cycle_len, work_days, carga_semanal
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
-    TO_CHAR(l.LPC_CdiLocal) AS cod_filial,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '') AS cnpj_completo,
+    TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS cod_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0)) AS cod_cargo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS desc_cargo,
@@ -308,9 +320,11 @@ SELECT
     ), 1) AS NUMBER(10,1)) AS dias_trabalho_mes_atual,
     MAX(ben.beneficios_agg) AS beneficios_agg
 FROM Contratados c
+INNER JOIN Vinculos v ON v.VIN_CdiVinculo = c.CON_CdiVinculo
+INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabeSoc AND NVL(cts.SDK_OplVinculoEmpregaticio, 0) = 1
 INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
-INNER JOIN Locais l ON l.LPC_CdiLocal = f.FOL_CdiLocal
-INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LPC_CdiEmpresa
+INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
+INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
@@ -318,8 +332,8 @@ LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
-   AND ben.LPC_CdiLocal = l.LPC_CdiLocal
-   AND ben.cnpj_completo = NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, '')
+   AND ben.LOC_CdiLocal = l.LOC_CdiLocal
+   AND ben.cnpj_completo = NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '')
    AND ben.cod_cc = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ')
    AND ben.CON_CdiCargo = c.CON_CdiCargo
    AND ben.desc_cargo = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ')
@@ -329,9 +343,10 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND NVL(ben.work_days, -1) = NVL(cic.work_days, -1)
    AND ben.carga_semanal = NVL(h.HOR_QtnHorasSemanal, 44.0)
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
+AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
-    e.EMP_CdiEmpresa, l.LPC_CdiLocal,
-    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LPC_NusCNPJSufixo, ''),
+    e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     c.CON_CdiCargo, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,

@@ -9,6 +9,11 @@ import {
   buildEstablishments,
   type Establishment,
 } from './cnpj'
+import type {
+  CategTrabeSocCatalogRow,
+  SituacaoCatalogRow,
+  TipoRegimeTrabalhistaCatalogRow,
+} from './extractFilters'
 import {
   activeRamos,
   buildRamos,
@@ -50,10 +55,10 @@ export function establishmentsFromEphemeralCatalog(
       ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
     })),
     locais.map((r) => ({
-      localId: num(r.LPC_CdiLocal) ?? 0,
-      empresaId: num(r.LPC_CdiEmpresa) ?? 0,
-      sufixo: str(r.LPC_NusCNPJSufixo),
-      nomeFilial: str(r.LPC_D1sLocal),
+      localId: num(r.LOC_CdiLocal) ?? 0,
+      empresaId: num(r.LOC_CdiEmpresa) ?? 0,
+      sufixo: str(r.LOC_NusCNPJSufixo),
+      nomeFilial: str(r.LOC_D1sLocal),
     })),
     folhas.map((r) => ({
       folhaId: num(r.FOL_CdiFolha) ?? 0,
@@ -89,3 +94,54 @@ export function ramosFromEphemeralCatalog(
 
 /** Situações excluded from headcount — kept for tests/docs parity. */
 export const EPHEMERAL_CATALOG_EXCLUDED_SITUACOES = EXCLUDED_SITUACOES
+
+function flag01(v: unknown): boolean {
+  const n = num(v)
+  return n === 1
+}
+
+export function situacoesFromEphemeralCatalog(
+  catalog: EphemeralCatalogResult,
+): SituacaoCatalogRow[] {
+  return tableRows(catalog, 'Situacoes')
+    .map((r) => ({
+      code: num(r.SIT_CdiSituacao) ?? 0,
+      label: str(r.SIT_D1sSituacao) || `Situação ${num(r.SIT_CdiSituacao) ?? ''}`,
+      oplAfastamento: flag01(r.SIT_OplAfastamento),
+      oplRemuneracao: flag01(r.SIT_OplRemuneracao),
+      oplDesativado: flag01(r.SIT_OplDesativado),
+    }))
+    .filter((r) => Number.isFinite(r.code))
+    .sort((a, b) => a.code - b.code)
+}
+
+export function categsTrabeSocFromEphemeralCatalog(
+  catalog: EphemeralCatalogResult,
+): CategTrabeSocCatalogRow[] {
+  return tableRows(catalog, 'CategsTrabseSoc')
+    .map((r) => ({
+      code: num(r.SDK_CdiCategTrabeSoc) ?? 0,
+      label:
+        str(r.SDK_D1sCategTrabeSoc) ||
+        `Categoria ${num(r.SDK_CdiCategTrabeSoc) ?? ''}`,
+      cos: str(r.SDK_CosCategTrabeSoc) || undefined,
+      oplVinculoEmpregaticio: flag01(r.SDK_OplVinculoEmpregaticio),
+    }))
+    .filter((r) => Number.isFinite(r.code))
+    .sort((a, b) => a.code - b.code)
+}
+
+export function tiposRegimeTrabalhistaFromEphemeralCatalog(
+  catalog: EphemeralCatalogResult,
+): TipoRegimeTrabalhistaCatalogRow[] {
+  return tableRows(catalog, 'TiposRegimesTrabalhistas')
+    .map((r) => ({
+      code: num(r.SDL_CdiTipoRegimeTrabalhista) ?? 0,
+      label:
+        str(r.SDL_D1sTipoRegimeTrabalhista) ||
+        `Regime ${num(r.SDL_CdiTipoRegimeTrabalhista) ?? ''}`,
+      cos: str(r.SDL_CosTipoRegimeTrabalhista) || undefined,
+    }))
+    .filter((r) => Number.isFinite(r.code))
+    .sort((a, b) => a.code - b.code)
+}

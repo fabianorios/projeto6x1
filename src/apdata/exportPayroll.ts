@@ -63,6 +63,12 @@ export type ExportOverrides = {
    * Empty / undefined → no ramo filter (all empresas).
    */
   selectedRamoIds?: number[]
+  /** Premissas: situações to exclude (default 0,2,3,99). */
+  excludeSituacoes?: number[]
+  /** Premissas: keep afastamentos (default true). */
+  incluirAfastados?: boolean
+  /** Allowed CON_CdiVinculo ids after regime/categoria resolve (optional). */
+  allowedVinculoIds?: number[]
 }
 
 export type ExportStats = {
@@ -135,7 +141,7 @@ function patchStep(
 
 /**
  * List establishments reachable via Folhas→Locais→Empresas.
- * Labels: EMP_DssEmpresa · LPC_D1sLocal · CNPJ (admin runtime OK).
+ * Labels: EMP_DssEmpresa · LOC_D1sLocal · CNPJ (admin runtime OK).
  * UI counts: colaboradores grouped by CON_CdiVinculo → VIN_D1sVinculo
  * (CON_CdiSituacao NOT IN (0,2,3,99)).
  */
@@ -161,10 +167,10 @@ export async function loadEstablishmentsFromApdata(opts: {
         ...envOpts,
         table: 'Locais',
         columns: [
-          'LPC_CdiLocal',
-          'LPC_CdiEmpresa',
-          'LPC_D1sLocal',
-          'LPC_NusCNPJSufixo',
+          'LOC_CdiLocal',
+          'LOC_CdiEmpresa',
+          'LOC_D1sLocal',
+          'LOC_NusCNPJSufixo',
         ],
       }),
       selectRows({
@@ -192,10 +198,10 @@ export async function loadEstablishmentsFromApdata(opts: {
       ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
     })),
     locaisRes.rows.map((r) => ({
-      localId: num(r.LPC_CdiLocal) ?? 0,
-      empresaId: num(r.LPC_CdiEmpresa) ?? 0,
-      sufixo: str(r.LPC_NusCNPJSufixo),
-      nomeFilial: str(r.LPC_D1sLocal),
+      localId: num(r.LOC_CdiLocal) ?? 0,
+      empresaId: num(r.LOC_CdiEmpresa) ?? 0,
+      sufixo: str(r.LOC_NusCNPJSufixo),
+      nomeFilial: str(r.LOC_D1sLocal),
     })),
     folhasRes.rows.map((r) => ({
       folhaId: num(r.FOL_CdiFolha) ?? 0,
@@ -259,6 +265,14 @@ export async function exportPayrollFromApdata(
   let steps = initialSteps()
   const issues: PayrollParseIssue[] = []
 
+  const excludeSituacoes =
+    overrides.excludeSituacoes?.length
+      ? overrides.excludeSituacoes
+      : [...EXCLUDED_SITUACOES]
+  const allowedVinculos = overrides.allowedVinculoIds?.length
+    ? new Set(overrides.allowedVinculoIds)
+    : null
+
   async function runStep(stepId: string) {
     const def = LIVE_SELECT_STEPS.find((s) => s.id === stepId)
     if (!def) throw new Error(`unknown step ${stepId}`)
@@ -268,12 +282,16 @@ export async function exportPayrollFromApdata(
       { status: 'running', detail: def.note },
       onProgress,
     )
+    const whereNotIn =
+      stepId === 'contratados'
+        ? { CON_CdiSituacao: excludeSituacoes }
+        : def.whereNotIn
     const result = await selectRows({
       ...envOpts,
       table: def.table,
       columns: def.columns,
       where: def.where,
-      whereNotIn: def.whereNotIn,
+      whereNotIn,
     })
     steps = patchStep(
       steps,
@@ -312,10 +330,10 @@ export async function exportPayrollFromApdata(
         ramoId: num(r.EMP_CdiRamoAtividadeEmpresa),
       })),
       locaisRes.rows.map((r) => ({
-        localId: num(r.LPC_CdiLocal) ?? 0,
-        empresaId: num(r.LPC_CdiEmpresa) ?? 0,
-        sufixo: str(r.LPC_NusCNPJSufixo),
-        nomeFilial: str(r.LPC_D1sLocal),
+        localId: num(r.LOC_CdiLocal) ?? 0,
+        empresaId: num(r.LOC_CdiEmpresa) ?? 0,
+        sufixo: str(r.LOC_NusCNPJSufixo),
+        nomeFilial: str(r.LOC_D1sLocal),
       })),
       folhasRes.rows.map((r) => ({
         folhaId: num(r.FOL_CdiFolha) ?? 0,
@@ -476,8 +494,62 @@ export async function exportPayrollFromApdata(
         ? overrides.vtValorDia
         : null
 
+    const afastamentoCodes =
+      overrides.incluirAfastados === false
+        ? (
+            await selectRows({
+              ...envOpts,
+              table: 'Situacoes',
+              columns: ['SIT_CdiSituacao', 'SIT_OplAfastamento'],
+            }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
+          ).rows
+            .filter((row) => num(row.SIT_OplAfastamento) === 1)
+            .map((row) => num(row.SIT_CdiSituacao))
+            .filter((n): n is number => n != null)
+        : undefined
+
+    let vinculoOk: Set<number> | null = allowedVinculos
+    if (!vinculoOk) {
+      try {
+        const vinRes = await selectRows({
+          ...envOpts,
+          table: 'Vinculos',
+          columns: [
+            'VIN_CdiVinculo',
+            'VIN_CdiCategTrabeSoc',
+            'VIN_CdiTipoRegimeTrabalhista',
+          ],
+        })
+        if (vinRes.rows.length === 0) {
+          vinculoOk = null
+        } else {
+          // Default CLT regime when caller did not resolve allowed ids.
+          const clt = vinRes.rows
+            .filter((row) => num(row.VIN_CdiTipoRegimeTrabalhista) === 1)
+            .map((row) => num(row.VIN_CdiVinculo))
+            .filter((n): n is number => n != null)
+          // If no row has regime=1 (column missing/legacy), do not block export.
+          vinculoOk = clt.length > 0 ? new Set(clt) : null
+        }
+      } catch {
+        vinculoOk = null
+      }
+    }
+
     for (const r of contratadosRes.rows) {
-      if (!isIncludedSituacao(num(r.CON_CdiSituacao))) continue
+      if (
+        !isIncludedSituacao(num(r.CON_CdiSituacao), {
+          excludeSituacoes,
+          incluirAfastados: overrides.incluirAfastados,
+          afastamentoCodes,
+        })
+      ) {
+        continue
+      }
+      if (vinculoOk) {
+        const vid = num(r.CON_CdiVinculo) ?? 0
+        if (!vinculoOk.has(vid)) continue
+      }
 
       const folhaId = num(r.CON_CdiFolha)
       const estKey = folhaId !== null ? folhaCnpj.get(folhaId) : undefined

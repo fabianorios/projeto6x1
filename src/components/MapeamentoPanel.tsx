@@ -218,7 +218,7 @@ vt_cad AS (
 )
 SELECT
   emp.EMP_NusCNPJPrefixo                   AS cnpj_prefixo,
-  loc.LPC_NusCNPJSufixo                    AS cnpj_sufixo,
+  loc.LOC_NusCNPJSufixo                    AS cnpj_sufixo,
   car.CAR_D1sCargo                         AS cargo,
   AVG(NULLIF(con.CON_VlnSalario, 0))       AS salario,
   hmv.HMV_QtnQuantidadeHoraMes             AS carga_horaria_mensal,
@@ -240,8 +240,8 @@ SELECT
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
-JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -253,7 +253,7 @@ LEFT JOIN vt_cad vt ON vt.CAS_CdiContratado = con.CON_CdiContratado
 WHERE con.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 GROUP BY
   emp.EMP_NusCNPJPrefixo,
-  loc.LPC_NusCNPJSufixo,
+  loc.LOC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,

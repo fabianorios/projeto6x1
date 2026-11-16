@@ -6,7 +6,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 
 **Verificado em:** 2026-11-14 · SQL Server 2022 CU28 · DB `apdata_6x1` ONLINE · engine compat 100.
 
-**Prefixos Aptools (fonte de verdade para SQL exportável):** tabela `Contratados` (não `Contratos`); `Locais` = `LPC_*` (não `LOC_*`); `HorariosJornadas` = `HRI_*`; `TiposDiasPonto` = `TDP_*` (TEMP historicamente usava `TIP_*` — preferir `TDP_*` no extrator/Studio); `ConATransportes` = `CAS_*`; `MeiosTransportesItens` = `MRI_*`. Estabelecimento: `CON_CdiFolha` → `Folhas` → `Locais` → `Empresas`.
+**Prefixos Aptools (fonte de verdade para SQL exportável):** tabela `Contratados` (não `Contratos`); `Locais` = `LOC_*` (não `LPC_*`); `HorariosJornadas` = `HRI_*`; `TiposDiasPonto` = `TDP_*` (TEMP historicamente usava `TIP_*` — preferir `TDP_*` no extrator/Studio); `ConATransportes` = `CAS_*`; `MeiosTransportesItens` = `MRI_*`. Estabelecimento: `CON_CdiFolha` → `Folhas` → `Locais` → `Empresas`.
 
 ## Inventário verificado (TEMP)
 
@@ -21,7 +21,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `Cargos` | 2 225 | `CAR_D1sCargo` → `cargo` |
 | `CentrosCustos` | 2 000 | `CCU_D1sCentroCusto` / `CCU_CosEstrutura` → `centro_custo` |
 | `Folhas` | 437 | Ponte `CON_CdiFolha` → local (filtro CNPJ) |
-| `Locais` | — | `LPC_CdiEmpresa` + `LPC_NusCNPJSufixo` + `LPC_D1sLocal` (filial) |
+| `Locais` | — | `LOC_CdiEmpresa` + `LOC_NusCNPJSufixo` + `LOC_D1sLocal` (filial) |
 | `Empresas` | — | `EMP_NusCNPJPrefixo` + `EMP_DssEmpresa` (razão) + `EMP_CdiRamoAtividadeEmpresa` |
 | `Vinculos` | — | `VIN_D1sVinculo` ← tipo de vínculo (`CON_CdiVinculo`) |
 | `RamosAtividadesEmpresas` | — | `RAE_D1sRamoAtividadeEmpresa` ← ramos de serviço |
@@ -43,7 +43,7 @@ Adapter SELECT-only: base TEMP `apdata_6x1` no container `mssql-apdata-6x1` (VPS
 | `CON_DtdRescisao IS NULL` | 3 289 | Inclui afastados / outros |
 | `CON_CdiSituacao = 2` (demitido meses ant.) | 63 798 | Excluído (junto com 0, 3, 99) |
 
-**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LPC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LPC_NusCNPJSufixo`. UI: `EMP_DssEmpresa` · `LPC_D1sLocal` · CNPJ formatado + **totais de colaboradores por tipo de vínculo** (`CON_CdiVinculo` → `Vinculos.VIN_D1sVinculo`, sit `NOT IN (0,2,3,99)`). Não usar `TiposContratos` / `CON_CdiTipoContrato` (coluna inexistente em `Contratados`). Admin runtime OK; não hardcodar nomes em git.
+**CNPJ estabelecimento:** `CON_CdiFolha` → `FOL_CdiLocal` → `LOC_CdiEmpresa` → `EMP_NusCNPJPrefixo` + `LOC_NusCNPJSufixo`. UI: `EMP_DssEmpresa` · `LOC_D1sLocal` · CNPJ formatado + **totais de colaboradores por tipo de vínculo** (`CON_CdiVinculo` → `Vinculos.VIN_D1sVinculo`, sit `NOT IN (0,2,3,99)`). Não usar `TiposContratos` / `CON_CdiTipoContrato` (coluna inexistente em `Contratados`). Admin runtime OK; não hardcodar nomes em git.
 
 **Ramos de serviço:** `Empresas.EMP_CdiRamoAtividadeEmpresa` → `RamosAtividadesEmpresas.RAE_CdiRamoAtividadeEmpresa` (`RAE_D1sRamoAtividadeEmpresa`). Lista data-driven no fluxo Apdata→Simular; keywords mapeiam para `SectorId` (varejo / hospital / construção / locação) para atrito.
 
@@ -204,8 +204,8 @@ SELECT
   COUNT(*)                                 AS quantidade
 FROM dbo.Contratados con
 JOIN dbo.Folhas fol ON fol.FOL_CdiFolha = con.CON_CdiFolha
-JOIN dbo.Locais loc ON loc.LPC_CdiLocal = fol.FOL_CdiLocal
-JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LPC_CdiEmpresa
+JOIN dbo.Locais loc ON loc.LOC_CdiLocal = fol.FOL_CdiLocal
+JOIN dbo.Empresas emp ON emp.EMP_CdiEmpresa = loc.LOC_CdiEmpresa
 JOIN dbo.Cargos car ON car.CAR_CdiCargo = con.CON_CdiCargo
 JOIN dbo.CentrosCustos ccu ON ccu.CCU_CdiCentroCusto = con.CON_CdiCentroCusto
 LEFT JOIN dbo.QuantidadesHorasMes hmv
@@ -213,10 +213,10 @@ LEFT JOIN dbo.QuantidadesHorasMes hmv
 LEFT JOIN dbo.Horarios hor ON hor.HOR_CdiHorario = con.CON_CdiHorario
 LEFT JOIN class cl ON cl.HRI_CdiHorario = con.CON_CdiHorario
 WHERE con.CON_CdiSituacao NOT IN (0, 2, 3, 99)
-  -- AND estabelecimento (EMP_NusCNPJPrefixo + LPC_NusCNPJSufixo) IN (…)
+  -- AND estabelecimento (EMP_NusCNPJPrefixo + LOC_NusCNPJSufixo) IN (…)
 GROUP BY
   emp.EMP_NusCNPJPrefixo,
-  loc.LPC_NusCNPJSufixo,
+  loc.LOC_NusCNPJSufixo,
   car.CAR_D1sCargo,
   hmv.HMV_QtnQuantidadeHoraMes,
   hmv.HMV_QtnHorasSemanal,

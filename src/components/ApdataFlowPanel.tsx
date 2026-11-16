@@ -18,9 +18,17 @@ import {
 import { listSqlProfiles } from '../api/sql-profiles'
 import { cnpjDigits, type Establishment } from '../apdata/cnpj'
 import {
+  categsTrabeSocFromEphemeralCatalog,
   establishmentsFromEphemeralCatalog,
   ramosFromEphemeralCatalog,
+  situacoesFromEphemeralCatalog,
+  tiposRegimeTrabalhistaFromEphemeralCatalog,
 } from '../apdata/ephemeralCatalog'
+import type {
+  CategTrabeSocCatalogRow,
+  SituacaoCatalogRow,
+  TipoRegimeTrabalhistaCatalogRow,
+} from '../apdata/extractFilters'
 import {
   exportResultFromEphemeralRows,
   exportResultFromPayrollRows,
@@ -72,6 +80,11 @@ import {
   type ExtractedBenefit,
 } from '../apdata/classifyBenefit'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
+import {
+  ExtractFiltersPanel,
+  defaultExtractFiltersState,
+  type ExtractFiltersState,
+} from './ExtractFiltersPanel'
 import { BenefitMappingTable } from './BenefitMappingTable'
 import {
   DEFAULT_EPHEMERAL_CREDS_FORM,
@@ -179,6 +192,18 @@ export function ApdataFlowPanel({
     useState<EphemeralSessionCreds | null>(null)
   const [directConnecting, setDirectConnecting] = useState(false)
   const [directConnected, setDirectConnected] = useState(false)
+  const [extractFilters, setExtractFilters] = useState<ExtractFiltersState>(
+    () => defaultExtractFiltersState(),
+  )
+  const [situacaoCatalog, setSituacaoCatalog] = useState<SituacaoCatalogRow[]>(
+    [],
+  )
+  const [regimeCatalog, setRegimeCatalog] = useState<
+    TipoRegimeTrabalhistaCatalogRow[]
+  >([])
+  const [categCatalog, setCategCatalog] = useState<CategTrabeSocCatalogRow[]>(
+    [],
+  )
 
   const filteredEstablishments = useMemo(() => {
     const q = escopoSearch.trim().toLowerCase()
@@ -194,6 +219,10 @@ export function ApdataFlowPanel({
     setSelectedCnpjKeys([])
     setRamos([])
     setSelectedRamoIds([])
+    setSituacaoCatalog([])
+    setRegimeCatalog([])
+    setCategCatalog([])
+    setExtractFilters(defaultExtractFiltersState())
   }, [])
 
   const applyCatalog = useCallback(
@@ -331,6 +360,13 @@ export function ApdataFlowPanel({
       const catalog = await postEphemeralCatalog(creds)
       const list = establishmentsFromEphemeralCatalog(catalog)
       const ramoList = ramosFromEphemeralCatalog(catalog)
+      const sits = situacoesFromEphemeralCatalog(catalog)
+      const regimes = tiposRegimeTrabalhistaFromEphemeralCatalog(catalog)
+      const categs = categsTrabeSocFromEphemeralCatalog(catalog)
+      setSituacaoCatalog(sits)
+      setRegimeCatalog(regimes)
+      setCategCatalog(categs)
+      setExtractFilters(defaultExtractFiltersState(categs))
       applyCatalog(list, ramoList)
       // Keep password only in React state for the export step.
       setEphemeralCreds(creds)
@@ -342,7 +378,14 @@ export function ApdataFlowPanel({
           .map((e) => cnpjDigits(e.key))
           .filter(Boolean)
           .slice(0, 32)
-        const extracted = await postEphemeralExtract(creds, { cnpjs })
+        const extracted = await postEphemeralExtract(creds, {
+          cnpjs,
+          excludeSituacoes: extractFilters.excludeSituacoes,
+          incluirAfastados: extractFilters.incluirAfastados,
+          tipoRegimeTrabalhistaIds: extractFilters.tipoRegimeTrabalhistaIds,
+          categTrabeSocIds: extractFilters.categTrabeSocIds,
+          somenteEmpregaticios: extractFilters.somenteEmpregaticios,
+        })
         const out = exportResultFromEphemeralRows(
           extracted.rows,
           {
@@ -443,6 +486,8 @@ export function ApdataFlowPanel({
         selectedCnpjKeys.length > 0 ? selectedCnpjKeys : undefined,
       selectedRamoIds:
         selectedRamoIds.length > 0 ? selectedRamoIds : undefined,
+      excludeSituacoes: extractFilters.excludeSituacoes,
+      incluirAfastados: extractFilters.incluirAfastados,
     }
     try {
       if (ambMode === 'direct') {
@@ -466,6 +511,11 @@ export function ApdataFlowPanel({
           .slice(0, 32)
         const extracted = await postEphemeralExtract(ephemeralCreds, {
           cnpjs,
+          excludeSituacoes: extractFilters.excludeSituacoes,
+          incluirAfastados: extractFilters.incluirAfastados,
+          tipoRegimeTrabalhistaIds: extractFilters.tipoRegimeTrabalhistaIds,
+          categTrabeSocIds: extractFilters.categTrabeSocIds,
+          somenteEmpregaticios: extractFilters.somenteEmpregaticios,
         })
         steps = [
           {
@@ -1096,6 +1146,15 @@ export function ApdataFlowPanel({
                     </ul>
                   </div>
                 )}
+                <ExtractFiltersPanel
+                  value={extractFilters}
+                  onChange={setExtractFilters}
+                  situacoes={situacaoCatalog}
+                  regimes={regimeCatalog}
+                  categs={categCatalog}
+                  compact
+                />
+
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -1166,6 +1225,14 @@ export function ApdataFlowPanel({
                     />
                   </div>
                 )}
+
+                <ExtractFiltersPanel
+                  value={extractFilters}
+                  onChange={setExtractFilters}
+                  situacoes={situacaoCatalog}
+                  regimes={regimeCatalog}
+                  categs={categCatalog}
+                />
 
                 <div className="space-y-2">
                   <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
