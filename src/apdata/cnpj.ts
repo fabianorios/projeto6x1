@@ -3,9 +3,9 @@
  *
  * Join path:
  *   Contratados.CON_CdiFolha → Folhas.FOL_CdiFolha
- *   Folhas.FOL_CdiLocal → Locais.LPC_CdiLocal
- *   Locais.LPC_CdiEmpresa → Empresas.EMP_CdiEmpresa
- *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LPC_NusCNPJSufixo
+ *   Folhas.FOL_CdiLocal → Locais.LOC_CdiLocal
+ *   Locais.LOC_CdiEmpresa → Empresas.EMP_CdiEmpresa
+ *   CNPJ = Empresas.EMP_NusCNPJPrefixo + Locais.LOC_NusCNPJSufixo
  *
  * Tipo de vínculo (employment link type — not TiposContratos):
  *   Contratados.CON_CdiVinculo → Vinculos.VIN_CdiVinculo
@@ -14,21 +14,28 @@
  *
  * UI labels (admin runtime OK — LGPD):
  *   Empresas.EMP_DssEmpresa  → razão social
- *   Locais.LPC_D1sLocal      → nome da filial
+ *   Locais.LOC_D1sLocal      → nome da filial
  *   Display: `Razão · Filial · CNPJ formatado`
  *   Under each CNPJ: VIN_D1sVinculo + COUNT colaboradores
  *
  * Do not hardcode real client names in git / fixtures / docs.
  */
 
+import {
+  DEFAULT_EXCLUDED_SITUACOES,
+  isIncludedSituacao as isIncludedSituacaoFiltered,
+} from './extractFilters'
+
 /** Situações excluídas do headcount / export (user rule). */
-export const EXCLUDED_SITUACOES = [0, 2, 3, 99] as const
+export const EXCLUDED_SITUACOES = DEFAULT_EXCLUDED_SITUACOES
 
 export type ExcludedSituacao = (typeof EXCLUDED_SITUACOES)[number]
 
-export function isIncludedSituacao(sit: number | null | undefined): boolean {
-  if (sit === null || sit === undefined || !Number.isFinite(sit)) return false
-  return !(EXCLUDED_SITUACOES as readonly number[]).includes(sit)
+export function isIncludedSituacao(
+  sit: number | null | undefined,
+  opts?: Parameters<typeof isIncludedSituacaoFiltered>[1],
+): boolean {
+  return isIncludedSituacaoFiltered(sit, opts)
 }
 
 /** Strip punctuation / spaces → digits only. */

@@ -53,16 +53,33 @@ describe("extractor SQL", () => {
     const mssql = getAptoolsExtractorScript("mssql");
     const oracle = getAptoolsExtractorScript("oracle");
     assert.match(mssql, /FROM\s+Contratados\b/i);
-    assert.match(mssql, /LPC_CdiLocal/);
+    assert.match(mssql, /LOC_CdiLocal/);
     assert.match(mssql, /CAS_CdiContratado/);
     assert.match(mssql, /TDP_OplTrabalho/);
     assert.match(mssql, /beneficios_agg/);
     assert.ok(!/SET\s+TRANSACTION/i.test(mssql));
     assert.ok(!/SET\s+TRANSACTION/i.test(oracle));
     assert.ok(!/\bContratos\b/i.test(mssql));
-    assert.ok(!/\bLOC_/i.test(mssql));
+    assert.ok(!/\bLPC_/i.test(mssql));
+    assert.match(mssql, /Vinculos\b/);
+    assert.match(mssql, /VIN_CdiTipoRegimeTrabalhista/);
+    assert.match(mssql, /CategsTrabseSoc/);
+    assert.match(mssql, /NOT IN \(0, 2, 3, 99\)/);
+    assert.ok(!mssql.includes("__VINCULO_JOINS__"));
     assert.match(mssql, /CHAR\(9\)/);
     assert.match(oracle, /CHR\(9\)/);
+  });
+
+  it("applies incluirAfastados=false and custom regime/categoria", () => {
+    const { sql } = buildExtractorQuery("mssql", {
+      incluirAfastados: false,
+      tipoRegimeTrabalhistaIds: [1],
+      categTrabeSocIds: [101],
+      somenteEmpregaticios: true,
+    });
+    assert.match(sql, /SIT_OplAfastamento/);
+    assert.match(sql, /VIN_CdiCategTrabeSoc IN \(101\)/);
+    assert.ok(!sql.includes("SDK_OplVinculoEmpregaticio"));
   });
 });
 

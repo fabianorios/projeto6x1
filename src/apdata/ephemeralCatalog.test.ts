@@ -38,10 +38,10 @@ describe('ephemeralCatalog', () => {
         rowCount: 1,
         rows: [
           {
-            LPC_CdiLocal: 2,
-            LPC_CdiEmpresa: 1,
-            LPC_D1sLocal: 'Matriz',
-            LPC_NusCNPJSufixo: '000199',
+            LOC_CdiLocal: 2,
+            LOC_CdiEmpresa: 1,
+            LOC_D1sLocal: 'Matriz',
+            LOC_NusCNPJSufixo: '000199',
           },
         ],
       },

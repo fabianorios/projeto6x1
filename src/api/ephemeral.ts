@@ -116,10 +116,19 @@ export function postEphemeralCatalog(creds: EphemeralSessionCreds) {
   })
 }
 
+export type EphemeralExtractFilters = {
+  cnpjs?: string[]
+  excludeSituacoes?: number[]
+  incluirAfastados?: boolean
+  tipoRegimeTrabalhistaIds?: number[]
+  categTrabeSocIds?: number[]
+  somenteEmpregaticios?: boolean
+}
+
 /** Official extractor → aggregate rows (payroll path). */
 export function postEphemeralExtract(
   creds: EphemeralSessionCreds,
-  filters?: { cnpjs?: string[] },
+  filters?: EphemeralExtractFilters,
 ) {
   return postEphemeral<EphemeralExtractResult>({
     ...ephemeralCredsBody(creds),

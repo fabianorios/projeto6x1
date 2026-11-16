@@ -140,7 +140,7 @@ describe("API routes", () => {
     const body = await res.json();
     assert.equal(body.engine, "mssql");
     assert.match(String(body.sql), /Contratados/i);
-    assert.match(String(body.sql), /LPC_CdiLocal/);
+    assert.match(String(body.sql), /LOC_CdiLocal/);
     assert.ok(!/SET\s+TRANSACTION/i.test(String(body.sql)));
     assert.ok(!JSON.stringify(body).toLowerCase().includes("password"));
   });

@@ -52,6 +52,12 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Empresas",
   /** Tipo de vínculo CLT etc. (CON_CdiVinculo → VIN_*) */
   "Vinculos",
+  /** Situações (CON_CdiSituacao → SIT_*) — Premissas exclude / afastados */
+  "Situacoes",
+  /** Categoria trabalhador eSocial (VIN_CdiCategTrabeSoc → SDK_*) */
+  "CategsTrabseSoc",
+  /** Tipo regime trabalhista (VIN_CdiTipoRegimeTrabalhista → SDL_*) */
+  "TiposRegimesTrabalhistas",
   /** Ramos de atividade (EMP_CdiRamoAtividadeEmpresa → RAE_*) */
   "RamosAtividadesEmpresas",
   "HorariosTiposDiasAT",
