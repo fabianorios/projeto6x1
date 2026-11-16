@@ -3,6 +3,7 @@ import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
   clearCalibrationHistory,
+  defaultApdataDataInicio,
   downloadCalibrationJson,
   formatShiftRange,
   getSectorDisplayLabel,
@@ -22,6 +23,7 @@ import {
 } from '../engine'
 import { getTemplate } from '../templates'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
+import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
 import { PrintableReport } from './PrintableReport'
 import { ScheduleBuilderView } from './ScheduleBuilderView'
@@ -139,6 +141,9 @@ export function ResultsView({
     {},
   )
   const [detailOpen, setDetailOpen] = useState(false)
+  const [apdataDataInicio, setApdataDataInicio] = useState(() =>
+    defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
+  )
 
   function handleSelectBest(scenarioId: ScenarioId | null) {
     const next = setBestScenario(scenarioId, basket)
@@ -231,7 +236,9 @@ export function ResultsView({
             </button>
             <button
               type="button"
-              onClick={() => downloadAhrHandoff(result)}
+              onClick={() =>
+                downloadAhrHandoff(result, { dataInicio: apdataDataInicio })
+              }
               className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
             >
               Exportar Gerador AHR JSON
@@ -408,6 +415,13 @@ export function ResultsView({
 
         {/* Escala Atual (De) × Escala Proposta (Para) */}
         <ScheduleBuilderView result={result} />
+
+        {/* Apdata cadastral tree — fiel da balança ERP */}
+        <ApdataHierarchyView
+          result={result}
+          dataInicio={apdataDataInicio}
+          onDataInicioChange={setApdataDataInicio}
+        />
 
         {/* distribuicao_turmas (resumo agregado) */}
         <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">

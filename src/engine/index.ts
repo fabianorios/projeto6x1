@@ -62,6 +62,26 @@ export {
 } from './crew-distribution'
 export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
 export {
+  APDATA_HIERARCHY_SCHEMA_VERSION,
+  buildApdataHierarchy,
+  buildJornadaSteps,
+  defaultApdataDataInicio,
+} from './apdata-hierarchy'
+export type {
+  ApdataCicloDia,
+  ApdataCicloHorario,
+  ApdataGradeTipo,
+  ApdataGradeTurma,
+  ApdataHierarchyCenter,
+  ApdataHierarchyNode,
+  ApdataHierarchyTree,
+  ApdataHorario,
+  ApdataJornada,
+  ApdataJornadaStep,
+  ApdataStepTipo,
+  BuildApdataHierarchyOptions,
+} from './apdata-hierarchy'
+export {
   COVERAGE_WEEKDAYS,
   COVERAGE_WEEKDAY_LABELS,
   coberturaPropostaFromCrews,
