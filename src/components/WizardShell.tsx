@@ -12,6 +12,7 @@ import {
   type ScenarioId,
   type TaxRegime,
 } from '../engine'
+import type { BenefitSessionOverrides } from '../apdata/classifyBenefit'
 import { AmbientesPanel } from './AmbientesPanel'
 import { ApdataFlowPanel } from './ApdataFlowPanel'
 import { SqlStudioPanel } from './SqlStudioPanel'
@@ -65,6 +66,9 @@ export const initialWizardForm: WizardFormState = {
 export function WizardShell() {
   const [sqlStudioOpen, setSqlStudioOpen] = useState(false)
   const [ambientesOpen, setAmbientesOpen] = useState(false)
+  /** Session-local only — Studio + Passo 4; never written to sql-profiles.json. */
+  const [benefitSessionOverrides, setBenefitSessionOverrides] =
+    useState<BenefitSessionOverrides>({})
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -108,12 +112,16 @@ export function WizardShell() {
           embedded
           onClose={() => undefined}
           onOpenAmbientes={() => setAmbientesOpen(true)}
+          benefitSessionOverrides={benefitSessionOverrides}
+          onBenefitSessionOverridesChange={setBenefitSessionOverrides}
         />
       </div>
 
       <SqlStudioPanel
         open={sqlStudioOpen}
         onClose={() => setSqlStudioOpen(false)}
+        benefitSessionOverrides={benefitSessionOverrides}
+        onBenefitSessionOverridesChange={setBenefitSessionOverrides}
       />
       <AmbientesPanel
         open={ambientesOpen}

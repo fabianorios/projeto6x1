@@ -29,6 +29,17 @@ const VARIAVEL_DIA_KEYWORDS = [
   'alimentação diária',
   'alimentacao diária',
   'alimentação diaria',
+  // Vale-combustível follows VR pipeline (not VT/transport).
+  'combustivel',
+  'combustível',
+  'vale-combustivel',
+  'vale-combustível',
+  'vale combustivel',
+  'vale combustível',
+  'auxilio combustivel',
+  'auxílio combustível',
+  'auxilio-combustivel',
+  'auxílio-combustível',
 ] as const
 
 /** Keywords → fixo mensal (per life × new HC). */
@@ -82,9 +93,10 @@ function hasKeyword(hay: string, keywords: readonly string[]): boolean {
 }
 
 /**
- * Classify by TPB_D1sTipoBeneficio keywords.
- * VARIAVEL_DIA checked first (refeição / VR) so "alimentação diária" wins
- * over generic "alimentação" → FIXO_MENSAL.
+ * Classify by TBE_D1sTipoBeneficio keywords.
+ * VARIAVEL_DIA checked first (refeição / VR / combustível) so "alimentação
+ * diária" wins over generic "alimentação" → FIXO_MENSAL. Combustível is
+ * VR-like (not VT); consultants may override to FIXO_MENSAL in Studio / Passo 4.
  */
 export function classifyBenefitByDescription(descricao: string): BenefitClass {
   const hay = normalizeDesc(descricao || '')
@@ -92,6 +104,40 @@ export function classifyBenefitByDescription(descricao: string): BenefitClass {
   if (hasKeyword(hay, VARIAVEL_DIA_KEYWORDS)) return 'VARIAVEL_DIA'
   if (hasKeyword(hay, FIXO_MENSAL_KEYWORDS)) return 'FIXO_MENSAL'
   return 'IGNORAR'
+}
+
+/** Session-local override (Studio + Passo 4) — not persisted to SqlProfile. */
+export type BenefitSessionOverride = {
+  classificacao?: BenefitClass
+  valorMedio?: number
+}
+
+export type BenefitSessionOverrides = Record<string, BenefitSessionOverride>
+
+export function benefitKey(b: Pick<ExtractedBenefit, 'codigo' | 'descricao'>): string {
+  return `${b.codigo}::${b.descricao}`
+}
+
+/** Merge a partial override into the session map. */
+export function mergeBenefitSessionOverride(
+  prev: BenefitSessionOverrides,
+  key: string,
+  patch: BenefitSessionOverride,
+): BenefitSessionOverrides {
+  const cur = prev[key] ?? {}
+  const next: BenefitSessionOverride = { ...cur }
+  if (patch.classificacao !== undefined) next.classificacao = patch.classificacao
+  if (patch.valorMedio !== undefined) {
+    next.valorMedio = Number.isFinite(patch.valorMedio)
+      ? patch.valorMedio
+      : undefined
+  }
+  if (next.classificacao === undefined && next.valorMedio === undefined) {
+    const { [key]: _drop, ...rest } = prev
+    void _drop
+    return rest
+  }
+  return { ...prev, [key]: next }
 }
 
 /** Sanitize text for Aptools TAB/; export (no `;`, TAB, `|`, newlines). */
@@ -204,14 +250,64 @@ export function collectUniqueBenefits(
   )
 }
 
-/** Apply user classification overrides keyed by `codigo::descricao`. */
+/**
+ * Apply session overrides keyed by `codigo::descricao`.
+ * Accepts legacy `Record<string, BenefitClass>` or rich session patches
+ * (classification and/or valorMedio).
+ */
 export function applyBenefitOverrides(
   benefits: ExtractedBenefit[],
-  overrides: Record<string, BenefitClass>,
+  overrides: BenefitSessionOverrides | Record<string, BenefitClass>,
 ): ExtractedBenefit[] {
   return benefits.map((b) => {
-    const key = `${b.codigo}::${b.descricao}`
-    const over = overrides[key]
-    return over ? { ...b, classificacao: over } : b
+    const key = benefitKey(b)
+    const raw = overrides[key]
+    if (raw == null) return b
+    if (typeof raw === 'string') {
+      return { ...b, classificacao: raw }
+    }
+    return {
+      ...b,
+      classificacao: raw.classificacao ?? b.classificacao,
+      valorMedio:
+        raw.valorMedio != null && Number.isFinite(raw.valorMedio)
+          ? raw.valorMedio
+          : b.valorMedio,
+    }
   })
+}
+
+function rowCell(
+  row: Record<string, unknown>,
+  ...names: string[]
+): string {
+  for (const n of names) {
+    const v = row[n] ?? row[n.toUpperCase()] ?? row[n.toLowerCase()]
+    if (v != null && String(v).trim() !== '') return String(v).trim()
+  }
+  return ''
+}
+
+/**
+ * Map Studio TIPOS_BENEFICIOS test-slot rows → ExtractedBenefit for the
+ * inline edit grid (cod_tipo / desc_tipo / valor_medio).
+ */
+export function benefitsFromTiposRows(
+  rows: Record<string, unknown>[],
+): ExtractedBenefit[] {
+  const out: ExtractedBenefit[] = []
+  for (const row of rows) {
+    const codigo = rowCell(row, 'cod_tipo', 'codigo')
+    const descricao = rowCell(row, 'desc_tipo', 'descricao')
+    const valorRaw = rowCell(row, 'valor_medio', 'valorMedio').replace(',', '.')
+    const valorMedio = Number(valorRaw)
+    if (!codigo || !descricao || !Number.isFinite(valorMedio)) continue
+    out.push({
+      codigo,
+      descricao,
+      valorMedio,
+      classificacao: classifyBenefitByDescription(descricao),
+    })
+  }
+  return out
 }

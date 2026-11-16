@@ -7,8 +7,10 @@ import {
   type PayrollRow,
 } from '../engine'
 import {
+  applyBenefitOverrides,
   benefitsToPayrollScalars,
   parseBeneficiosAgg,
+  type BenefitSessionOverrides,
   type ExtractedBenefit,
 } from './classifyBenefit'
 
@@ -51,6 +53,7 @@ export type PayrollRowWithBenefits = PayrollRow & {
 /** Convert LGPD-safe extractor rows into engine PayrollRow[]. */
 export function mapExtractorAggregatesToPayroll(
   rows: ExtractorAggregate[],
+  sessionOverrides: BenefitSessionOverrides = {},
 ): PayrollRowWithBenefits[] {
   return rows.map((r, i) => {
     const qty = Math.max(0, num(r.qtd_colaboradores, 0))
@@ -58,7 +61,10 @@ export function mapExtractorAggregatesToPayroll(
     const salario = qty > 0 ? massa / qty : massa
     const cargaSemanal = num(r.carga_semanal_atual, 44)
     const dias = num(r.dias_trabalho_mes_atual, 22)
-    const benefits = parseBeneficiosAgg(r.beneficios_agg)
+    const benefits = applyBenefitOverrides(
+      parseBeneficiosAgg(r.beneficios_agg),
+      sessionOverrides,
+    )
     const fromAgg = benefitsToPayrollScalars(benefits)
 
     // Prefer dynamic agg classification; fall back to legacy scalar columns.
