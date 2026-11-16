@@ -3,8 +3,13 @@
  * Used by Aptools copy UI and by mapping ephemeral API rows → PayrollRow[].
  * No SET TRANSACTION in Aptools paste — Aptools may reject it.
  *
- * Benefits: JOIN TiposBeneficios — all active (PBV_DtdFim IS NULL) as
- * `beneficios_agg` (codigo|descricao|valor;…) without duplicating HC/salary.
+ * Escalas: TiposDiasPonto TIP_* (validated live 2026-11-16); escala_atual =
+ * work_days + 'x' + off_days. Active jornadas: HRI_OplDesativado=0 and
+ * HOR_OplDesativado=0.
+ *
+ * Benefits: ConBeneficios → PlanosBeneficios → PlanosBeneficiosValores
+ * (MAX PBV_DtdInicio) → TiposBeneficiosEntsBens → TiposBeneficios (TBE_*);
+ * active CBN_DtdFim IS NULL → beneficios_agg (codigo|descricao|valor;…).
  * Locais: LOC_* (TEMP/dicionário). Situação/vínculo: Premissas extract filters.
  */
 
@@ -26,6 +31,38 @@ const SANITIZE_MSSQL = (expr: string, fallback: string) =>
 const SANITIZE_ORACLE = (expr: string, fallback: string) =>
   `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(${expr}, '${fallback}'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ')`
 
+const MSSQL_PBV_LATEST = `
+    SELECT
+        p.PBV_CdiPlanoBeneficio,
+        p.PBV_VlnBeneficio
+    FROM PlanosBeneficiosValores p
+    INNER JOIN (
+        SELECT
+            PBV_CdiPlanoBeneficio,
+            MAX(PBV_DtdInicio) AS max_inicio
+        FROM PlanosBeneficiosValores
+        GROUP BY PBV_CdiPlanoBeneficio
+    ) u
+        ON u.PBV_CdiPlanoBeneficio = p.PBV_CdiPlanoBeneficio
+       AND u.max_inicio = p.PBV_DtdInicio
+`.trim()
+
+const ORACLE_PBV_LATEST = `
+    SELECT
+        p.PBV_CdiPlanoBeneficio,
+        p.PBV_VlnBeneficio
+    FROM PlanosBeneficiosValores p
+    INNER JOIN (
+        SELECT
+            PBV_CdiPlanoBeneficio,
+            MAX(PBV_DtdInicio) AS max_inicio
+        FROM PlanosBeneficiosValores
+        GROUP BY PBV_CdiPlanoBeneficio
+    ) u
+        ON u.PBV_CdiPlanoBeneficio = p.PBV_CdiPlanoBeneficio
+       AND u.max_inicio = p.PBV_DtdInicio
+`.trim()
+
 const MSSQL_BODY = `
 WITH CTE_VT_DIARIO AS (
     SELECT
@@ -42,27 +79,39 @@ CTE_CICLO_HORARIO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN ISNULL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days,
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 0 THEN 1 ELSE 0 END) AS off_days
     FROM HorariosJornadas hj
     INNER JOIN TiposDiasPonto tdp
-        ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+        ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN Horarios hciclo
+        ON hciclo.HOR_CdiHorario = hj.HRI_CdiHorario
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
+      AND ISNULL(hciclo.HOR_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
 CTE_BEN_CONTRATO AS (
     SELECT
-        pbv.PBV_CdiContratado,
-        tpb.TPB_CdiTipoBeneficio AS cod_tipo,
-        ${SANITIZE_MSSQL('tpb.TPB_D1sTipoBeneficio', 'SEM_DESC')} AS desc_tipo,
+        cbn.CBN_CdiContratado,
+        tbe.TBE_CdiTipoBeneficio AS cod_tipo,
+        ${SANITIZE_MSSQL('tbe.TBE_D1sTipoBeneficio', 'SEM_DESC')} AS desc_tipo,
         AVG(CAST(ISNULL(pbv.PBV_VlnBeneficio, 0) AS DECIMAL(18,4))) AS valor_medio
-    FROM PlanosBeneficiosValores pbv
-    INNER JOIN TiposBeneficios tpb
-        ON tpb.TPB_CdiTipoBeneficio = pbv.TPB_CdiTipoBeneficio
-    WHERE pbv.PBV_DtdFim IS NULL
+    FROM ConBeneficios cbn
+    INNER JOIN PlanosBeneficios plb
+        ON plb.PLB_CdiPlanoBeneficio = cbn.CBN_CdiPlanoBeneficio
+    INNER JOIN (
+${MSSQL_PBV_LATEST}
+    ) pbv
+        ON pbv.PBV_CdiPlanoBeneficio = plb.PLB_CdiPlanoBeneficio
+    INNER JOIN TiposBeneficiosEntsBens ebt
+        ON ebt.EBT_CdiTipoBeneficioEntBen = plb.PLB_CdiTipoBeneficioEntBen
+    INNER JOIN TiposBeneficios tbe
+        ON tbe.TBE_CdiTipoBeneficio = ebt.EBT_CdiTipoBeneficio
+    WHERE cbn.CBN_DtdFim IS NULL
     GROUP BY
-        pbv.PBV_CdiContratado,
-        tpb.TPB_CdiTipoBeneficio,
-        ${SANITIZE_MSSQL('tpb.TPB_D1sTipoBeneficio', 'SEM_DESC')}
+        cbn.CBN_CdiContratado,
+        tbe.TBE_CdiTipoBeneficio,
+        ${SANITIZE_MSSQL('tbe.TBE_D1sTipoBeneficio', 'SEM_DESC')}
 ),
 CTE_BEN_COM_CHAVES AS (
     SELECT
@@ -76,12 +125,13 @@ CTE_BEN_COM_CHAVES AS (
         c.CON_CdiHorario,
         cic.cycle_len,
         cic.work_days,
+        cic.off_days,
         ISNULL(h.HOR_QtnHorasSemanal, 44.0) AS carga_semanal,
         b.cod_tipo,
         b.desc_tipo,
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
-    INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    INNER JOIN Contratados c ON c.CON_CdiContratado = b.CBN_CdiContratado
     __VINCULO_JOINS__
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
     INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
@@ -97,20 +147,20 @@ CTE_BEN_GRUPO AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
+        cycle_len, work_days, off_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal,
         STRING_AGG(
             CAST(cod_tipo AS VARCHAR(20)) + '|' + desc_tipo + '|' +
             CAST(CAST(valor_medio AS DECIMAL(18,2)) AS VARCHAR(40)),
@@ -120,7 +170,7 @@ CTE_BENEFICIOS_AGG AS (
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal
+        cycle_len, work_days, off_days, carga_semanal
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
@@ -131,13 +181,10 @@ SELECT
     ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20)) AS cod_vinculo,
     CAST(ISNULL(c.CON_CdiHorario, 0) AS VARCHAR(20)) AS cod_horario_atual,
-    CASE
-        WHEN cic.cycle_len = 7 AND cic.work_days = 6 THEN '6x1'
-        WHEN cic.cycle_len = 7 AND cic.work_days = 5 THEN '5x2'
-        WHEN cic.cycle_len = 7 AND cic.work_days = 4 THEN '4x3'
-        WHEN cic.cycle_len = 2 AND cic.work_days = 1 THEN '12x36'
-        ELSE 'other'
-    END AS escala_atual,
+    ISNULL(
+        CAST(cic.work_days AS VARCHAR(10)) + 'x' + CAST(cic.off_days AS VARCHAR(10)),
+        'other'
+    ) AS escala_atual,
     CAST(ISNULL(h.HOR_QtnHorasSemanal, 44.0) AS DECIMAL(10,2)) AS carga_semanal_atual,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(ISNULL(c.CON_VlnSalario, 0)) AS DECIMAL(18,2)) AS massa_salarial_base,
@@ -172,6 +219,7 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND ben.CON_CdiHorario = c.CON_CdiHorario
    AND ISNULL(ben.cycle_len, -1) = ISNULL(cic.cycle_len, -1)
    AND ISNULL(ben.work_days, -1) = ISNULL(cic.work_days, -1)
+   AND ISNULL(ben.off_days, -1) = ISNULL(cic.off_days, -1)
    AND ben.carga_semanal = ISNULL(h.HOR_QtnHorasSemanal, 44.0)
 WHERE __SITUACAO_PREDICATE__
 AND __VINCULO_PREDICATE__
@@ -180,7 +228,7 @@ GROUP BY
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')},
     c.CON_CdiCargo, ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
-    c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,
+    c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     ISNULL(h.HOR_QtnHorasSemanal, 44.0)
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()
@@ -201,27 +249,39 @@ CTE_CICLO_HORARIO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN NVL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days,
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 0 THEN 1 ELSE 0 END) AS off_days
     FROM HorariosJornadas hj
     INNER JOIN TiposDiasPonto tdp
-        ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+        ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN Horarios hciclo
+        ON hciclo.HOR_CdiHorario = hj.HRI_CdiHorario
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
+      AND NVL(hciclo.HOR_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
 CTE_BEN_CONTRATO AS (
     SELECT
-        pbv.PBV_CdiContratado,
-        tpb.TPB_CdiTipoBeneficio AS cod_tipo,
-        ${SANITIZE_ORACLE('tpb.TPB_D1sTipoBeneficio', 'SEM_DESC')} AS desc_tipo,
+        cbn.CBN_CdiContratado,
+        tbe.TBE_CdiTipoBeneficio AS cod_tipo,
+        ${SANITIZE_ORACLE('tbe.TBE_D1sTipoBeneficio', 'SEM_DESC')} AS desc_tipo,
         AVG(CAST(NVL(pbv.PBV_VlnBeneficio, 0) AS NUMBER(18,4))) AS valor_medio
-    FROM PlanosBeneficiosValores pbv
-    INNER JOIN TiposBeneficios tpb
-        ON tpb.TPB_CdiTipoBeneficio = pbv.TPB_CdiTipoBeneficio
-    WHERE pbv.PBV_DtdFim IS NULL
+    FROM ConBeneficios cbn
+    INNER JOIN PlanosBeneficios plb
+        ON plb.PLB_CdiPlanoBeneficio = cbn.CBN_CdiPlanoBeneficio
+    INNER JOIN (
+${ORACLE_PBV_LATEST}
+    ) pbv
+        ON pbv.PBV_CdiPlanoBeneficio = plb.PLB_CdiPlanoBeneficio
+    INNER JOIN TiposBeneficiosEntsBens ebt
+        ON ebt.EBT_CdiTipoBeneficioEntBen = plb.PLB_CdiTipoBeneficioEntBen
+    INNER JOIN TiposBeneficios tbe
+        ON tbe.TBE_CdiTipoBeneficio = ebt.EBT_CdiTipoBeneficio
+    WHERE cbn.CBN_DtdFim IS NULL
     GROUP BY
-        pbv.PBV_CdiContratado,
-        tpb.TPB_CdiTipoBeneficio,
-        ${SANITIZE_ORACLE('tpb.TPB_D1sTipoBeneficio', 'SEM_DESC')}
+        cbn.CBN_CdiContratado,
+        tbe.TBE_CdiTipoBeneficio,
+        ${SANITIZE_ORACLE('tbe.TBE_D1sTipoBeneficio', 'SEM_DESC')}
 ),
 CTE_BEN_COM_CHAVES AS (
     SELECT
@@ -235,12 +295,13 @@ CTE_BEN_COM_CHAVES AS (
         c.CON_CdiHorario,
         cic.cycle_len,
         cic.work_days,
+        cic.off_days,
         NVL(h.HOR_QtnHorasSemanal, 44.0) AS carga_semanal,
         b.cod_tipo,
         b.desc_tipo,
         b.valor_medio
     FROM CTE_BEN_CONTRATO b
-    INNER JOIN Contratados c ON c.CON_CdiContratado = b.PBV_CdiContratado
+    INNER JOIN Contratados c ON c.CON_CdiContratado = b.CBN_CdiContratado
     __VINCULO_JOINS__
     INNER JOIN Folhas f ON f.FOL_CdiFolha = c.CON_CdiFolha
     INNER JOIN Locais l ON l.LOC_CdiLocal = f.FOL_CdiLocal
@@ -256,20 +317,20 @@ CTE_BEN_GRUPO AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal, cod_tipo, desc_tipo
+        cycle_len, work_days, off_days, carga_semanal, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal,
         LISTAGG(
             TO_CHAR(cod_tipo) || '|' || desc_tipo || '|' ||
             TO_CHAR(CAST(valor_medio AS NUMBER(18,2))),
@@ -279,7 +340,7 @@ CTE_BENEFICIOS_AGG AS (
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, carga_semanal
+        cycle_len, work_days, off_days, carga_semanal
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
@@ -290,13 +351,10 @@ SELECT
     ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0)) AS cod_vinculo,
     TO_CHAR(NVL(c.CON_CdiHorario, 0)) AS cod_horario_atual,
-    CASE
-        WHEN cic.cycle_len = 7 AND cic.work_days = 6 THEN '6x1'
-        WHEN cic.cycle_len = 7 AND cic.work_days = 5 THEN '5x2'
-        WHEN cic.cycle_len = 7 AND cic.work_days = 4 THEN '4x3'
-        WHEN cic.cycle_len = 2 AND cic.work_days = 1 THEN '12x36'
-        ELSE 'other'
-    END AS escala_atual,
+    NVL(
+        TO_CHAR(cic.work_days) || 'x' || TO_CHAR(cic.off_days),
+        'other'
+    ) AS escala_atual,
     CAST(NVL(h.HOR_QtnHorasSemanal, 44.0) AS NUMBER(10,2)) AS carga_semanal_atual,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(NVL(c.CON_VlnSalario, 0)) AS NUMBER(18,2)) AS massa_salarial_base,
@@ -331,6 +389,7 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND ben.CON_CdiHorario = c.CON_CdiHorario
    AND NVL(ben.cycle_len, -1) = NVL(cic.cycle_len, -1)
    AND NVL(ben.work_days, -1) = NVL(cic.work_days, -1)
+   AND NVL(ben.off_days, -1) = NVL(cic.off_days, -1)
    AND ben.carga_semanal = NVL(h.HOR_QtnHorasSemanal, 44.0)
 WHERE __SITUACAO_PREDICATE__
 AND __VINCULO_PREDICATE__
@@ -339,7 +398,7 @@ GROUP BY
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')},
     c.CON_CdiCargo, ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
-    c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days,
+    c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     NVL(h.HOR_QtnHorasSemanal, 44.0)
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()

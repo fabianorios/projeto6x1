@@ -32,21 +32,52 @@ describe("extractor SQL", () => {
     assert.ok(!Object.keys(params).some((k) => k.startsWith("tipo")));
   });
 
-  it("emits beneficios_agg via TiposBeneficios (no hard-coded tipo)", () => {
+  it("emits beneficios_agg via ConBeneficios → TBE_* (no hard-coded tipo)", () => {
     const { sql, params } = buildExtractorQuery("mssql");
+    assert.ok(sql.includes("ConBeneficios"));
+    assert.ok(sql.includes("PlanosBeneficios"));
+    assert.ok(sql.includes("TiposBeneficiosEntsBens"));
     assert.ok(sql.includes("TiposBeneficios"));
+    assert.ok(sql.includes("TBE_CdiTipoBeneficio"));
+    assert.ok(sql.includes("TBE_D1sTipoBeneficio"));
+    assert.ok(sql.includes("MAX(PBV_DtdInicio)"));
+    assert.ok(sql.includes("CBN_DtdFim IS NULL"));
     assert.ok(sql.includes("beneficios_agg"));
-    assert.ok(sql.includes("PBV_DtdFim IS NULL"));
     assert.ok(sql.includes("STRING_AGG"));
-    assert.ok(!/TPB_CdiTipoBeneficio\s*=\s*53/.test(sql));
+    assert.ok(!sql.includes("PBV_DtdFim IS NULL"));
+    assert.ok(!sql.includes("CBN_OplDesativado"));
+    assert.ok(!sql.includes("TPB_CdiTipoBeneficio"));
+    assert.ok(!/TBE_CdiTipoBeneficio\s*=\s*53/.test(sql));
     assert.ok(!sql.includes("@tipoVr"));
-    assert.ok(!sql.includes("ConBeneficios"));
-    assert.ok(!sql.includes("TiposBeneficiosEntsBens"));
     assert.deepEqual(params, {});
 
     const oracle = buildExtractorQuery("oracle").sql;
     assert.ok(oracle.includes("LISTAGG"));
+    assert.ok(oracle.includes("ConBeneficios"));
+    assert.ok(oracle.includes("TBE_CdiTipoBeneficio"));
     assert.ok(oracle.includes("beneficios_agg"));
+  });
+
+  it("uses TIP_* escalas with work_days x off_days concat", () => {
+    const mssql = getAptoolsExtractorScript("mssql");
+    const oracle = getAptoolsExtractorScript("oracle");
+    assert.match(mssql, /TIP_OplTrabalho/);
+    assert.match(mssql, /TIP_CdiTipoDiaPonto/);
+    assert.ok(!mssql.includes("TDP_OplTrabalho"));
+    assert.ok(!mssql.includes("TDP_CdiTipoDiaPonto"));
+    assert.match(mssql, /HOR_OplDesativado/);
+    assert.match(
+      mssql,
+      /CAST\(cic\.work_days AS VARCHAR\(10\)\) \+ 'x' \+ CAST\(cic\.off_days AS VARCHAR\(10\)\)/,
+    );
+    assert.ok(
+      !/WHEN cic\.cycle_len = 7 AND cic\.work_days = 6 THEN '6x1'/.test(mssql),
+    );
+    assert.match(oracle, /TIP_OplTrabalho/);
+    assert.match(
+      oracle,
+      /TO_CHAR\(cic\.work_days\) \|\| 'x' \|\| TO_CHAR\(cic\.off_days\)/,
+    );
   });
 
   it("Aptools script is SELECT-only without SET TRANSACTION", () => {
@@ -55,7 +86,7 @@ describe("extractor SQL", () => {
     assert.match(mssql, /FROM\s+Contratados\b/i);
     assert.match(mssql, /LOC_CdiLocal/);
     assert.match(mssql, /CAS_CdiContratado/);
-    assert.match(mssql, /TDP_OplTrabalho/);
+    assert.match(mssql, /TIP_OplTrabalho/);
     assert.match(mssql, /beneficios_agg/);
     assert.ok(!/SET\s+TRANSACTION/i.test(mssql));
     assert.ok(!/SET\s+TRANSACTION/i.test(oracle));
