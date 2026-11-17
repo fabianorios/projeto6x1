@@ -145,8 +145,8 @@ export function ResultsView({
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
   )
 
-  function handleEnviaParaApdata() {
-    downloadAhrHandoff(result, { dataInicio: apdataDataInicio })
+  /** Scroll to guided Apdata wizard — does not download/send JSON to ERP. */
+  function handleIrParaEstruturaApdata() {
     const section = document.getElementById('hierarquia-apdata')
     if (section) {
       section.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -245,21 +245,34 @@ export function ResultsView({
             </button>
             <button
               type="button"
-              onClick={() =>
-                downloadAhrHandoff(result, { dataInicio: apdataDataInicio })
-              }
-              className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
-            >
-              Exportar Gerador AHR JSON
-            </button>
-            <button
-              type="button"
-              title="Exporta hierarquia Jornada→Grade para carga Apdata"
-              onClick={handleEnviaParaApdata}
+              title="Abre o assistente Jornadas → Horários (não envia ao ERP)"
+              onClick={handleIrParaEstruturaApdata}
               className="min-h-11 border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--color-ink)]"
             >
-              Envia para Apdata
+              Estrutura Apdata
             </button>
+            <details className="relative">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
+                Exportação avançada
+              </summary>
+              <div className="absolute left-0 z-30 mt-1 w-64 border border-[var(--color-line)] bg-white p-3 shadow-sm">
+                <p className="text-[11px] text-[var(--color-muted)]">
+                  JSON de handoff para Gerador AHR / carga offline. Não envia
+                  dados ao ERP.
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    downloadAhrHandoff(result, {
+                      dataInicio: apdataDataInicio,
+                    })
+                  }
+                  className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+                >
+                  Baixar JSON (avançado)
+                </button>
+              </div>
+            </details>
             <button
               type="button"
               onClick={onRestart}

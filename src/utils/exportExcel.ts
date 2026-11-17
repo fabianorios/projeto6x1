@@ -304,7 +304,7 @@ function hierarchySheetRows(tree: ApdataHierarchyTree): string[] {
         row([
           cell(center.centroCustoCodigo),
           cell(g?.turma ?? ''),
-          cell(node.jornada.codigo),
+          cell(node.jornadas.map((j) => j.codigo).join(', ') || node.jornada.codigo),
           cell(node.horario.codigo),
           cell(node.ciclo.codigo),
           cell(node.ciclo.dataInicio),
