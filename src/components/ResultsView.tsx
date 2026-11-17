@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
@@ -23,6 +23,14 @@ import {
 } from '../engine'
 import { getTemplate } from '../templates'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
+import {
+  DEFAULT_DOSSIER_OPEN,
+  collapseAllDossier,
+  executiveImpactSummary,
+  expandAllDossier,
+  type DossierOpenState,
+  type DossierSectionId,
+} from '../utils/resultsDossier'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
 import { PrintableReport } from './PrintableReport'
@@ -50,6 +58,24 @@ const ABSORCAO_OPTIONS: { id: EstrategiaAbsorcao; label: string }[] = [
   { id: 'HORA_EXTRA_MAXIMA', label: 'Hora extra máxima (cap 44h/mês)' },
   { id: 'HIBRIDO_INTERMITENTE', label: 'Híbrido / intermitente' },
 ]
+
+const DOSSIER_META: Record<
+  DossierSectionId,
+  { title: string; hint: string }
+> = {
+  executivo: {
+    title: 'Bloco Executivo (C-Level)',
+    hint: 'KPIs macro + estratégia de absorção',
+  },
+  operacional: {
+    title: 'Bloco Operacional (Escalas & Turnos)',
+    hint: 'Calendário Atual × Proposto · turmas com faixas OH',
+  },
+  cadastral: {
+    title: 'Bloco Cadastral — Estrutura Apdata',
+    hint: 'Jornadas → Horários → árvore · filtros Filial/CNPJ e CC',
+  },
+}
 
 function suggestionKey(s: ScheduleSuggestion): string {
   return `${s.centroCusto}::${s.code}`
@@ -99,6 +125,68 @@ function deltaDirection(n: number): {
   return { arrow: '→', label: 'sem variação', tone: 'flat' }
 }
 
+/** Accordion panel that keeps children mounted (state survives collapse). */
+function DossierSection({
+  sectionId,
+  open,
+  onToggle,
+  collapsedSummary,
+  children,
+}: {
+  sectionId: DossierSectionId
+  open: boolean
+  onToggle: () => void
+  collapsedSummary?: string | null
+  children: ReactNode
+}) {
+  const meta = DOSSIER_META[sectionId]
+  const panelId = `dossier-panel-${sectionId}`
+  return (
+    <div className="border border-[var(--color-line)] bg-white/80">
+      <h3 className="m-0">
+        <button
+          type="button"
+          id={`dossier-trigger-${sectionId}`}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-[var(--color-ink)]">
+              {meta.title}
+            </span>
+            <span className="mt-0.5 block text-xs font-normal text-[var(--color-muted)]">
+              {meta.hint}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            {open ? 'Recolher' : 'Expandir'}
+          </span>
+        </button>
+      </h3>
+      {!open && collapsedSummary ? (
+        <p className="border-t border-[var(--color-line)] px-4 py-2.5 text-xs text-[var(--color-ink)]">
+          {collapsedSummary}
+        </p>
+      ) : null}
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={`dossier-trigger-${sectionId}`}
+        className={
+          open
+            ? 'space-y-6 border-t border-[var(--color-line)] px-4 py-4'
+            : 'hidden'
+        }
+        aria-hidden={!open}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function ResultsView({
   result,
   basket,
@@ -144,14 +232,22 @@ export function ResultsView({
   const [apdataDataInicio, setApdataDataInicio] = useState(() =>
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
   )
+  const [dossier, setDossier] = useState<DossierOpenState>(DEFAULT_DOSSIER_OPEN)
 
-  /** Scroll to guided Apdata wizard — does not download/send JSON to ERP. */
+  function toggleSection(id: DossierSectionId) {
+    setDossier((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  /** Open cadastral (if needed) then smooth-scroll — does not download/send JSON. */
   function handleIrParaEstruturaApdata() {
-    const section = document.getElementById('hierarquia-apdata')
-    if (section) {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      section.focus({ preventScroll: true })
-    }
+    setDossier((prev) => ({ ...prev, cadastral: true }))
+    window.setTimeout(() => {
+      const section = document.getElementById('hierarquia-apdata')
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        section.focus({ preventScroll: true })
+      }
+    }, 40)
   }
 
   function handleSelectBest(scenarioId: ScenarioId | null) {
@@ -220,6 +316,18 @@ export function ResultsView({
         ? 'text-[var(--color-accent)]'
         : 'text-[var(--color-ink)]'
 
+  const absorcaoLabel =
+    ABSORCAO_OPTIONS.find((o) => o.id === estrategiaAbsorcao)?.label ??
+    estrategiaAbsorcao
+  const execSummary = executiveImpactSummary({
+    monthlyDelta: cost.monthlyDelta,
+    annualDelta: cost.annualDelta,
+    currentHeadcount: coverage.currentHeadcount,
+    requiredHeadcount: coverage.requiredHeadcount,
+    absorcaoLabel,
+    formatSignedBrl: signedBrl,
+  })
+
   return (
     <>
       <section className="no-print space-y-6 pb-24">
@@ -234,31 +342,31 @@ export function ResultsView({
               onClick={onBack}
               className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
             >
-              Voltar
+              ◀ Voltar
             </button>
             <button
               type="button"
               onClick={() => window.print()}
               className="min-h-11 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white"
             >
-              Imprimir PDF
+              🖨️ Imprimir PDF
             </button>
             <button
               type="button"
-              title="Abre o assistente Jornadas → Horários (não envia ao ERP)"
+              title="Rola até o Bloco Cadastral (não envia ao ERP)"
               onClick={handleIrParaEstruturaApdata}
               className="min-h-11 border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--color-ink)]"
             >
-              Estrutura Apdata
+              ⚙️ Ir para Estrutura Apdata
             </button>
             <details className="relative">
               <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
-                Exportação avançada
+                📥 Exportação Avançada
               </summary>
-              <div className="absolute left-0 z-30 mt-1 w-64 border border-[var(--color-line)] bg-white p-3 shadow-sm">
+              <div className="absolute left-0 z-30 mt-1 w-72 border border-[var(--color-line)] bg-white p-3 shadow-sm">
                 <p className="text-[11px] text-[var(--color-muted)]">
-                  JSON de handoff para Gerador AHR / carga offline. Não envia
-                  dados ao ERP.
+                  JSON Handoff AHR offline. Não envia dados ao ERP — só download
+                  local para carga manual / Gerador AHR.
                 </p>
                 <button
                   type="button"
@@ -269,7 +377,7 @@ export function ResultsView({
                   }
                   className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
                 >
-                  Baixar JSON (avançado)
+                  Baixar JSON Handoff (offline)
                 </button>
               </div>
             </details>
@@ -278,529 +386,561 @@ export function ResultsView({
               onClick={onRestart}
               className="min-h-11 px-4 py-2.5 text-sm text-[var(--color-muted)] underline"
             >
-              Nova simulação
+              🔄 Nova Simulação
             </button>
           </div>
         </div>
 
-        <div>
-          <h2 className="text-xl font-semibold">Resultados da simulação</h2>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">
-            {template?.resultBlurb ??
-              'Estimativas do motor com hipóteses explícitas.'}
-{' '}
-            Números são heurísticas — não parecer jurídico.
-          </p>
-          <p className="mt-2 text-sm">
-            <span className="text-[var(--color-muted)]">Cenário:</span>{' '}
-            <strong>{ruleVersion.label}</strong>
-            <span className="ml-2 font-mono text-xs text-[var(--color-muted)]">
-              {ruleVersion.id}
-            </span>
-          </p>
-          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {sectorDisplay} · escala {input.currentScale} ·{' '}
-            {input.headcount} pessoas
-            {usedPayrollImport ? ' · folha importada' : ''}
-            {input.sectorBufferPct != null
-              ? ` · buffer ${input.sectorBufferPct}%`
-              : ''}
-          </p>
-        </div>
-
-        {/* 4 top KPIs */}
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div
-            className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-4 py-4"
-            aria-labelledby="folha-delta-hero"
-          >
-            <dt
-              id="folha-delta-hero"
-              className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase"
-            >
-              Δ folha / mês
-            </dt>
-            <dd
-              className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl ${folhaToneClass}`}
-            >
-              <span aria-hidden="true" className="mr-1">
-                {folhaDir.arrow}
-              </span>
-              {signedBrl(cost.monthlyDelta)}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              {folhaDir.label} · anual {signedBrl(cost.annualDelta)}
-            </dd>
-          </div>
-          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
-              Headcount
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {coverage.currentHeadcount} → {coverage.requiredHeadcount}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              +{coverage.additionalHeadcount} adicional
-            </dd>
-          </div>
-          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
-              Δ VR / mês
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {vr ? signedBrl(vr.monthlyDelta) : '—'}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              {vr
-                ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
-                : 'Sem VR na folha'}
-            </dd>
-          </div>
-          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-            <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
-              Δ VT / mês
-            </dt>
-            <dd className="mt-2 text-2xl font-semibold tabular-nums">
-              {vt ? signedBrl(vt.monthlyDelta) : '—'}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              {vt
-                ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
-                : 'Sem VT na folha'}
-            </dd>
-          </div>
-        </dl>
-
-        {/* Absorption strategy tabs */}
-        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-          <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-            Estratégia de absorção
-          </p>
-          <div className="flex flex-wrap gap-2" role="tablist">
-            {ABSORCAO_OPTIONS.map((o) => {
-              const selected = estrategiaAbsorcao === o.id
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  onClick={() => onEstrategiaChange(o.id)}
-                  className={[
-                    'border px-3 py-1.5 text-sm',
-                    selected
-                      ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
-                      : 'border-[var(--color-line)] text-[var(--color-muted)]',
-                  ].join(' ')}
-                >
-                  {o.label}
-                </button>
-              )
-            })}
-          </div>
-          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-            <label className="block text-sm sr-only">
-              Estratégia de absorção
-              <select
-                value={estrategiaAbsorcao}
-                onChange={(e) =>
-                  onEstrategiaChange(e.target.value as EstrategiaAbsorcao)
-                }
-                className="border border-[var(--color-line)] bg-white px-3 py-2"
-              >
-                {ABSORCAO_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={
-                  absorption.heCapReached
-                    ? 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-1 text-[11px] font-semibold tracking-wide text-amber-950 uppercase'
-                    : 'inline-block border border-[var(--color-line)] bg-white px-2 py-1 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase'
-                }
-                title="Teto legal simulado de HE (44h/mês × HC atual)"
-              >
-                HE cap{' '}
-                {absorption.heCapReached ? 'atingido' : 'ok'} ·{' '}
-                {absorption.heHoursUsed.toFixed(0)}/
-                {absorption.heCapHours.toFixed(0)} h
-              </span>
-              <span className="text-xs text-[var(--color-muted)]">
-                Encargos {charges.taxRegime} · divisor{' '}
-                {heCascade.baselineDivisor}→{heCascade.scenarioDivisor}
-              </span>
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-[var(--color-muted)]">
-            Hires {absorption.hiresHeadcount} · intermitente{' '}
-            {absorption.intermittentHeadcount} · custo HE absorção{' '}
-            {brl(absorption.heAbsorptionCost)} · Δ HE por divisor{' '}
-            {brl(heCascade.heCostDelta)}
-          </p>
-        </div>
-
-        {/* Escala Atual (De) × Escala Proposta (Para) */}
-        <ScheduleBuilderView result={result} />
-
-        {/* Apdata cadastral tree — fiel da balança ERP */}
-        <ApdataHierarchyView
-          result={result}
-          dataInicio={apdataDataInicio}
-          onDataInicioChange={setApdataDataInicio}
-        />
-
-        {/* distribuicao_turmas (resumo agregado) */}
-        <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-          <h3 className="text-sm font-semibold text-[var(--color-ink)]">
-            Distribuição de turmas (agregado)
-          </h3>
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
-            {distribuicaoTurmas.crewCount} turma(s) · cobertura diária{' '}
-            {distribuicaoTurmas.dailyCoverageNeed} · HC total{' '}
-            {distribuicaoTurmas.totalHeadcount}
-          </p>
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            {distribuicaoTurmas.note}
-          </p>
-        </div>
-
-        {/* (2) Atual × Proposto: basket when ≥2 proposals; panel when 0–1 */}
-        {showMultiBasket && basket ? (
-          <ScenarioBasketCompare
-            basket={basket}
-            onSelectBest={handleSelectBest}
-            onRemoveProposed={handleRemoveProposed}
-            onClear={onClearBasket}
-          />
-        ) : null}
-
-        {showSidePanel ? (
-          <ScenarioComparePanel
-            current={compareSides.current}
-            proposed={compareSides.proposed}
-            footerNote={`${ruleVersion.summary} · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)}. Detalhe do cenário ativo (${ruleVersion.label}).`}
-          />
-        ) : (
-          <details className="border border-[var(--color-line)] bg-white/70 px-4 py-3">
-            <summary className="cursor-pointer text-sm font-semibold text-[var(--color-ink)]">
-              Detalhe Atual × Proposto (cenário ativo)
-            </summary>
-            <div className="mt-3">
-              <ScenarioComparePanel
-                current={compareSides.current}
-                proposed={compareSides.proposed}
-                footerNote={`${ruleVersion.summary} · cenário ativo: ${ruleVersion.label}.`}
-              />
-            </div>
-          </details>
-        )}
-
-        {/* Secondary KPIs (non-hero) */}
-        <dl className="grid gap-3 sm:grid-cols-2">
-          {vr ? (
-            <div className="border border-[var(--color-line)] bg-white/70 p-4">
-              <dt className="text-sm text-[var(--color-muted)]">
-                Delta mensal VR
-              </dt>
-              <dd className="mt-1 text-xl font-semibold tabular-nums">
-                {signedBrl(vr.monthlyDelta)}
-              </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
-                {brl(vr.currentMonthly)} → {brl(vr.proposedMonthly)} (~
-                {vr.proposedDaysPerMonth} dias/mês na escala-alvo)
-              </dd>
-            </div>
-          ) : null}
-          {vt ? (
-            <div className="border border-[var(--color-line)] bg-white/70 p-4">
-              <dt className="text-sm text-[var(--color-muted)]">
-                Delta mensal VT
-              </dt>
-              <dd className="mt-1 text-xl font-semibold tabular-nums">
-                {signedBrl(vt.monthlyDelta)}
-              </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
-                {brl(vt.currentMonthly)} → {brl(vt.proposedMonthly)} (~
-                {vt.proposedDaysPerMonth} dias/mês na escala-alvo)
-              </dd>
-            </div>
-          ) : null}
-          <div className="border border-[var(--color-line)] bg-white/70 p-4">
-            <dt className="text-sm text-[var(--color-muted)]">
-              Headcount adicional estimado
-            </dt>
-            <dd className="mt-1 text-xl font-semibold tabular-nums">
-              +{coverage.additionalHeadcount}
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              {coverage.currentHeadcount} → {coverage.requiredHeadcount}{' '}
-              (fator {coverage.headcountFactor.toFixed(3)})
-            </dd>
-          </div>
-          <div className="border border-[var(--color-line)] bg-white/70 p-4">
-            <dt className="text-sm text-[var(--color-muted)]">
-              Gap de cobertura (se não contratar)
-            </dt>
-            <dd className="mt-1 text-xl font-semibold tabular-nums">
-              {coverage.uncoveredShiftHoursPerWeek.toFixed(0)} h/sem
-            </dd>
-            <dd className="mt-1 text-xs text-[var(--color-muted)]">
-              Razão trabalho {(coverage.currentWorkRatio * 100).toFixed(1)}% →{' '}
-              {(coverage.targetWorkRatio * 100).toFixed(1)}%
-            </dd>
-          </div>
-        </dl>
-
-        {excludedScheduleNotice ? (
-          <div
-            className={
-              excludedScheduleNotice.severity === 'soft'
-                ? 'border border-[var(--color-line)] bg-white/80 px-4 py-3 text-sm text-[var(--color-ink)]'
-                : 'border border-amber-700/40 bg-amber-50 px-4 py-3 text-sm text-amber-950'
-            }
-            role="status"
-          >
-            <p className="flex flex-wrap items-center gap-2">
-              <span
-                className={
-                  excludedScheduleNotice.severity === 'soft'
-                    ? 'inline-block border border-[var(--color-line)] bg-white px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
-                    : 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
-                }
-              >
-                {excludedScheduleNotice.badge}
-              </span>
-              <span className="font-medium">{excludedScheduleNotice.label}</span>
-            </p>
-            <p
-              className={
-                excludedScheduleNotice.severity === 'soft'
-                  ? 'mt-1.5 text-xs leading-relaxed text-[var(--color-muted)]'
-                  : 'mt-1.5 text-xs leading-relaxed text-amber-900/90'
-              }
-            >
-              {excludedScheduleNotice.reason}{' '}
-              {excludedScheduleNotice.severity === 'soft'
-                ? 'Permanece no lado Atual; as candidatas abaixo são só 5×2, turnos 8h e (se o cenário admitir) 4×3.'
-                : 'Esta escala não é recomendada pelo motor; as candidatas abaixo respeitam a lista de exclusão (docs/schedule-policy.md).'}
-            </p>
-          </div>
-        ) : null}
-
-        {scheduleSuggestions.length > 0 ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-              Escalas sugeridas
-            </h3>
-            <p className="mt-1 text-xs text-[var(--color-muted)]">
-              1–2 candidatas por centro (horário início/fim, HC por turno) com
-              custo estimado folha + VR/VT vs atual. Nunca inclui 6×1, 12×36,
-              24×48 nem jornada diária &gt; 10h.
+            <h2 className="text-xl font-semibold">Resultados da simulação</h2>
+            <p className="mt-1 text-sm text-[var(--color-muted)]">
+              {template?.resultBlurb ??
+                'Estimativas do motor com hipóteses explícitas.'}{' '}
+              Números são heurísticas — não parecer jurídico.
             </p>
-            <div className="mt-3 space-y-4">
-              {suggestionsByCenter.map(([centro, items]) => (
-                <div
-                  key={centro}
-                  className="border border-[var(--color-line)] bg-white/70 p-4"
+            <p className="mt-2 text-sm">
+              <span className="text-[var(--color-muted)]">Cenário:</span>{' '}
+              <strong>{ruleVersion.label}</strong>
+              <span className="ml-2 font-mono text-xs text-[var(--color-muted)]">
+                {ruleVersion.id}
+              </span>
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {sectorDisplay} · escala {input.currentScale} ·{' '}
+              {input.headcount} pessoas
+              {usedPayrollImport ? ' · folha importada' : ''}
+              {input.sectorBufferPct != null
+                ? ` · buffer ${input.sectorBufferPct}%`
+                : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setDossier(expandAllDossier())}
+              className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
+            >
+              Expandir Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setDossier(collapseAllDossier())}
+              className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
+            >
+              Recolher Todos
+            </button>
+          </div>
+        </div>
+
+        <DossierSection
+          sectionId="executivo"
+          open={dossier.executivo}
+          onToggle={() => toggleSection('executivo')}
+          collapsedSummary={execSummary}
+        >
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div
+              className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-4 py-4"
+              aria-labelledby="folha-delta-hero"
+            >
+              <dt
+                id="folha-delta-hero"
+                className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase"
+              >
+                Δ folha / mês
+              </dt>
+              <dd
+                className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl ${folhaToneClass}`}
+              >
+                <span aria-hidden="true" className="mr-1">
+                  {folhaDir.arrow}
+                </span>
+                {signedBrl(cost.monthlyDelta)}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                {folhaDir.label} · anual {signedBrl(cost.annualDelta)}
+              </dd>
+            </div>
+            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+              <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+                Headcount
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold tabular-nums">
+                {coverage.currentHeadcount} → {coverage.requiredHeadcount}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                +{coverage.additionalHeadcount} adicional
+              </dd>
+            </div>
+            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+              <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+                Δ VR / mês
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold tabular-nums">
+                {vr ? signedBrl(vr.monthlyDelta) : '—'}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                {vr
+                  ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
+                  : 'Sem VR na folha'}
+              </dd>
+            </div>
+            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+              <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
+                Δ VT / mês
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold tabular-nums">
+                {vt ? signedBrl(vt.monthlyDelta) : '—'}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                {vt
+                  ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
+                  : 'Sem VT na folha'}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+              Estratégia de absorção
+            </p>
+            <div className="flex flex-wrap gap-2" role="tablist">
+              {ABSORCAO_OPTIONS.map((o) => {
+                const selected = estrategiaAbsorcao === o.id
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => onEstrategiaChange(o.id)}
+                    className={[
+                      'border px-3 py-1.5 text-sm',
+                      selected
+                        ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                        : 'border-[var(--color-line)] text-[var(--color-muted)]',
+                    ].join(' ')}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+              <label className="block text-sm sr-only">
+                Estratégia de absorção
+                <select
+                  value={estrategiaAbsorcao}
+                  onChange={(e) =>
+                    onEstrategiaChange(e.target.value as EstrategiaAbsorcao)
+                  }
+                  className="border border-[var(--color-line)] bg-white px-3 py-2"
                 >
-                  <p className="text-sm font-medium">{centro}</p>
-                  <ul className="mt-3 space-y-3">
-                    {items.map((s) => (
+                  {ABSORCAO_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={
+                    absorption.heCapReached
+                      ? 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-1 text-[11px] font-semibold tracking-wide text-amber-950 uppercase'
+                      : 'inline-block border border-[var(--color-line)] bg-white px-2 py-1 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase'
+                  }
+                  title="Teto legal simulado de HE (44h/mês × HC atual)"
+                >
+                  HE cap{' '}
+                  {absorption.heCapReached ? 'atingido' : 'ok'} ·{' '}
+                  {absorption.heHoursUsed.toFixed(0)}/
+                  {absorption.heCapHours.toFixed(0)} h
+                </span>
+                <span className="text-xs text-[var(--color-muted)]">
+                  Encargos {charges.taxRegime} · divisor{' '}
+                  {heCascade.baselineDivisor}→{heCascade.scenarioDivisor}
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-[var(--color-muted)]">
+              Hires {absorption.hiresHeadcount} · intermitente{' '}
+              {absorption.intermittentHeadcount} · custo HE absorção{' '}
+              {brl(absorption.heAbsorptionCost)} · Δ HE por divisor{' '}
+              {brl(heCascade.heCostDelta)}
+            </p>
+          </div>
+
+          {showMultiBasket && basket ? (
+            <ScenarioBasketCompare
+              basket={basket}
+              onSelectBest={handleSelectBest}
+              onRemoveProposed={handleRemoveProposed}
+              onClear={onClearBasket}
+            />
+          ) : null}
+
+          {showSidePanel ? (
+            <ScenarioComparePanel
+              current={compareSides.current}
+              proposed={compareSides.proposed}
+              footerNote={`${ruleVersion.summary} · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)}. Detalhe do cenário ativo (${ruleVersion.label}).`}
+            />
+          ) : (
+            <details className="border border-[var(--color-line)] bg-white/70 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-[var(--color-ink)]">
+                Detalhe Atual × Proposto (cenário ativo)
+              </summary>
+              <div className="mt-3">
+                <ScenarioComparePanel
+                  current={compareSides.current}
+                  proposed={compareSides.proposed}
+                  footerNote={`${ruleVersion.summary} · cenário ativo: ${ruleVersion.label}.`}
+                />
+              </div>
+            </details>
+          )}
+
+          <dl className="grid gap-3 sm:grid-cols-2">
+            {vr ? (
+              <div className="border border-[var(--color-line)] bg-white/70 p-4">
+                <dt className="text-sm text-[var(--color-muted)]">
+                  Delta mensal VR
+                </dt>
+                <dd className="mt-1 text-xl font-semibold tabular-nums">
+                  {signedBrl(vr.monthlyDelta)}
+                </dd>
+                <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                  {brl(vr.currentMonthly)} → {brl(vr.proposedMonthly)} (~
+                  {vr.proposedDaysPerMonth} dias/mês na escala-alvo)
+                </dd>
+              </div>
+            ) : null}
+            {vt ? (
+              <div className="border border-[var(--color-line)] bg-white/70 p-4">
+                <dt className="text-sm text-[var(--color-muted)]">
+                  Delta mensal VT
+                </dt>
+                <dd className="mt-1 text-xl font-semibold tabular-nums">
+                  {signedBrl(vt.monthlyDelta)}
+                </dd>
+                <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                  {brl(vt.currentMonthly)} → {brl(vt.proposedMonthly)} (~
+                  {vt.proposedDaysPerMonth} dias/mês na escala-alvo)
+                </dd>
+              </div>
+            ) : null}
+            <div className="border border-[var(--color-line)] bg-white/70 p-4">
+              <dt className="text-sm text-[var(--color-muted)]">
+                Headcount adicional estimado
+              </dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                +{coverage.additionalHeadcount}
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                {coverage.currentHeadcount} → {coverage.requiredHeadcount}{' '}
+                (fator {coverage.headcountFactor.toFixed(3)})
+              </dd>
+            </div>
+            <div className="border border-[var(--color-line)] bg-white/70 p-4">
+              <dt className="text-sm text-[var(--color-muted)]">
+                Gap de cobertura (se não contratar)
+              </dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {coverage.uncoveredShiftHoursPerWeek.toFixed(0)} h/sem
+              </dd>
+              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+                Razão trabalho {(coverage.currentWorkRatio * 100).toFixed(1)}% →{' '}
+                {(coverage.targetWorkRatio * 100).toFixed(1)}%
+              </dd>
+            </div>
+          </dl>
+
+          <div className="border border-[var(--color-line)] bg-white/70">
+            <button
+              type="button"
+              aria-expanded={detailOpen}
+              onClick={() => setDetailOpen((v) => !v)}
+              className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold"
+            >
+              <span>Detalhe técnico</span>
+              <span className="text-xs font-normal text-[var(--color-muted)]">
+                {detailOpen ? 'Ocultar' : 'Mostrar'} · calibração, centros,
+                linhas do motor
+              </span>
+            </button>
+            {detailOpen ? (
+              <div className="space-y-6 border-t border-[var(--color-line)] px-4 py-4">
+                <CalibrationHistory
+                  entries={history}
+                  onClear={() => {
+                    clearCalibrationHistory()
+                    setHistory([])
+                    setRecorded({})
+                  }}
+                />
+
+                {history.length > 0 ? (
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Snapshot completo (cenário + feedback) fica no histórico
+                    local. Use <strong>Baixar JSON</strong> para exportar o
+                    dataset da Fase A.
+                    {history[0] ? (
+                      <>
+                        {' '}
+                        Último:{' '}
+                        <button
+                          type="button"
+                          className="underline"
+                          onClick={() =>
+                            downloadCalibrationJson(
+                              [history[0]],
+                              `projeto6x1-feedback-${history[0].id.slice(0, 8)}.json`,
+                            )
+                          }
+                        >
+                          baixar só o último registro
+                        </button>
+                        .
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+
+                {byCostCenter.length > 0 ? (
+                  <div>
+                    <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                      Por centro de custo
+                    </h4>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      Salários e VR/VT agregados da folha importada, com HC
+                      adicional proporcional ao fator de escala.
+                    </p>
+                    <div className="mt-3 overflow-x-auto border border-[var(--color-line)] bg-white">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-[var(--color-line)] text-[var(--color-muted)]">
+                            <th className="px-3 py-2 font-normal">Centro</th>
+                            <th className="px-3 py-2 font-normal">HC</th>
+                            <th className="px-3 py-2 font-normal">Δ Folha</th>
+                            <th className="px-3 py-2 font-normal">Δ VR</th>
+                            <th className="px-3 py-2 font-normal">Δ VT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {byCostCenter.map((c) => (
+                            <tr
+                              key={c.centroCusto}
+                              className="border-b border-[var(--color-line)]"
+                            >
+                              <td className="px-3 py-2 font-medium">
+                                {c.centroCusto}
+                              </td>
+                              <td className="px-3 py-2 tabular-nums">
+                                {c.currentHeadcount} → {c.requiredHeadcount}
+                              </td>
+                              <td className="px-3 py-2 tabular-nums">
+                                {brl(c.payrollMonthlyDelta)}
+                              </td>
+                              <td className="px-3 py-2 tabular-nums">
+                                {brl(c.vr.monthlyDelta)}
+                              </td>
+                              <td className="px-3 py-2 tabular-nums">
+                                {brl(c.vt.monthlyDelta)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div>
+                  <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                    Linhas explicáveis do motor
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    Cada linha aponta a hipótese ou fórmula usada no cálculo.
+                  </p>
+                  <ul className="mt-3 divide-y divide-[var(--color-line)] border border-[var(--color-line)] bg-white">
+                    {lineItems.map((item) => (
                       <li
-                        key={`${s.centroCusto}-${s.code}`}
-                        className="border-t border-[var(--color-line)] pt-3 first:border-t-0 first:pt-0"
+                        key={item.id}
+                        className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
                       >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <p className="text-sm font-semibold">{s.label}</p>
-                          <p className="text-sm tabular-nums">
-                            Δ total {brl(s.monthlyDeltaVsCurrent)}/mês
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{item.label}</p>
+                          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                            {item.detail}
                           </p>
                         </div>
-                        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                          {s.description}
+                        <p className="shrink-0 text-sm font-semibold tabular-nums">
+                          {formatLineAmount(item)}
                         </p>
-                        <p className="mt-2 text-xs text-[var(--color-muted)]">
-                          HC {s.totalHeadcount} · ~{s.workDaysPerMonth} dias/mês
-                          · folha {brl(s.estimated.monthlyPayroll)}
-                          {s.estimated.monthlyVr != null
-                            ? ` · VR ${brl(s.estimated.monthlyVr)}`
-                            : ''}
-                          {s.estimated.monthlyVt != null
-                            ? ` · VT ${brl(s.estimated.monthlyVt)}`
-                            : ''}
-                        </p>
-                        <ul className="mt-2 flex flex-wrap gap-2 text-xs">
-                          {s.shifts.map((w) => (
-                            <li
-                              key={`${s.code}-${w.label}`}
-                              className="border border-[var(--color-line)] bg-white px-2 py-1"
-                            >
-                              <span className="font-medium">{w.label}</span>{' '}
-                              {formatShiftRange(w)} · {w.hours}h · {w.headcount}{' '}
-                              pess.
-                            </li>
-                          ))}
-                        </ul>
-                        <SuggestionFeedbackControls
-                          suggestion={s}
-                          recordedAction={recorded[suggestionKey(s)] ?? null}
-                          onAccept={() => recordFeedback(s, 'accepted')}
-                          onReject={() => recordFeedback(s, 'rejected')}
-                          onEditSave={(shifts) =>
-                            recordFeedback(s, 'edited', shifts)
-                          }
-                        />
                       </li>
                     ))}
                   </ul>
                 </div>
-              ))}
-            </div>
-            <p className="mt-3 border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
-              {scheduleSuggestionDisclaimer}
+
+                <p className="border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
+                  {disclaimer}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </DossierSection>
+
+        <DossierSection
+          sectionId="operacional"
+          open={dossier.operacional}
+          onToggle={() => toggleSection('operacional')}
+          collapsedSummary={`${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`}
+        >
+          <ScheduleBuilderView result={result} />
+
+          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <h4 className="text-sm font-semibold text-[var(--color-ink)]">
+              Distribuição de turmas (agregado)
+            </h4>
+            <p className="mt-1 text-xs text-[var(--color-muted)]">
+              {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
+              {distribuicaoTurmas.crewCount} turma(s) · cobertura diária{' '}
+              {distribuicaoTurmas.dailyCoverageNeed} · HC total{' '}
+              {distribuicaoTurmas.totalHeadcount}
+            </p>
+            <p className="mt-1 text-xs text-[var(--color-muted)]">
+              {distribuicaoTurmas.note}
             </p>
           </div>
-        ) : null}
 
-        {/* (3) Technical detail collapsible */}
-        <div className="border border-[var(--color-line)] bg-white/70">
-          <button
-            type="button"
-            aria-expanded={detailOpen}
-            onClick={() => setDetailOpen((v) => !v)}
-            className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold"
-          >
-            <span>Detalhe técnico</span>
-            <span className="text-xs font-normal text-[var(--color-muted)]">
-              {detailOpen ? 'Ocultar' : 'Mostrar'} · calibração, centros, linhas
-              do motor
-            </span>
-          </button>
-          {detailOpen ? (
-            <div className="space-y-6 border-t border-[var(--color-line)] px-4 py-4">
-              <CalibrationHistory
-                entries={history}
-                onClear={() => {
-                  clearCalibrationHistory()
-                  setHistory([])
-                  setRecorded({})
-                }}
-              />
-
-              {history.length > 0 ? (
-                <p className="text-xs text-[var(--color-muted)]">
-                  Snapshot completo (cenário + feedback) fica no histórico local.
-                  Use <strong>Baixar JSON</strong> para exportar o dataset da Fase
-                  A.
-                  {history[0] ? (
-                    <>
-                      {' '}
-                      Último:{' '}
-                      <button
-                        type="button"
-                        className="underline"
-                        onClick={() =>
-                          downloadCalibrationJson(
-                            [history[0]],
-                            `projeto6x1-feedback-${history[0].id.slice(0, 8)}.json`,
-                          )
-                        }
-                      >
-                        baixar só o último registro
-                      </button>
-                      .
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
-
-              {byCostCenter.length > 0 ? (
-                <div>
-                  <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                    Por centro de custo
-                  </h3>
-                  <p className="mt-1 text-xs text-[var(--color-muted)]">
-                    Salários e VR/VT agregados da folha importada, com HC
-                    adicional proporcional ao fator de escala.
-                  </p>
-                  <div className="mt-3 overflow-x-auto border border-[var(--color-line)] bg-white">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-[var(--color-line)] text-[var(--color-muted)]">
-                          <th className="px-3 py-2 font-normal">Centro</th>
-                          <th className="px-3 py-2 font-normal">HC</th>
-                          <th className="px-3 py-2 font-normal">Δ Folha</th>
-                          <th className="px-3 py-2 font-normal">Δ VR</th>
-                          <th className="px-3 py-2 font-normal">Δ VT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {byCostCenter.map((c) => (
-                          <tr
-                            key={c.centroCusto}
-                            className="border-b border-[var(--color-line)]"
-                          >
-                            <td className="px-3 py-2 font-medium">
-                              {c.centroCusto}
-                            </td>
-                            <td className="px-3 py-2 tabular-nums">
-                              {c.currentHeadcount} → {c.requiredHeadcount}
-                            </td>
-                            <td className="px-3 py-2 tabular-nums">
-                              {brl(c.payrollMonthlyDelta)}
-                            </td>
-                            <td className="px-3 py-2 tabular-nums">
-                              {brl(c.vr.monthlyDelta)}
-                            </td>
-                            <td className="px-3 py-2 tabular-nums">
-                              {brl(c.vt.monthlyDelta)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null}
-
-              <div>
-                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                  Linhas explicáveis do motor
-                </h3>
-                <p className="mt-1 text-xs text-[var(--color-muted)]">
-                  Cada linha aponta a hipótese ou fórmula usada no cálculo.
-                </p>
-                <ul className="mt-3 divide-y divide-[var(--color-line)] border border-[var(--color-line)] bg-white">
-                  {lineItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{item.label}</p>
-                        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                          {item.detail}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums">
-                        {formatLineAmount(item)}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <p className="border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
-                {disclaimer}
+          {excludedScheduleNotice ? (
+            <div
+              className={
+                excludedScheduleNotice.severity === 'soft'
+                  ? 'border border-[var(--color-line)] bg-white/80 px-4 py-3 text-sm text-[var(--color-ink)]'
+                  : 'border border-amber-700/40 bg-amber-50 px-4 py-3 text-sm text-amber-950'
+              }
+              role="status"
+            >
+              <p className="flex flex-wrap items-center gap-2">
+                <span
+                  className={
+                    excludedScheduleNotice.severity === 'soft'
+                      ? 'inline-block border border-[var(--color-line)] bg-white px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
+                      : 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
+                  }
+                >
+                  {excludedScheduleNotice.badge}
+                </span>
+                <span className="font-medium">
+                  {excludedScheduleNotice.label}
+                </span>
+              </p>
+              <p
+                className={
+                  excludedScheduleNotice.severity === 'soft'
+                    ? 'mt-1.5 text-xs leading-relaxed text-[var(--color-muted)]'
+                    : 'mt-1.5 text-xs leading-relaxed text-amber-900/90'
+                }
+              >
+                {excludedScheduleNotice.reason}{' '}
+                {excludedScheduleNotice.severity === 'soft'
+                  ? 'Permanece no lado Atual; as candidatas abaixo são só 5×2, turnos 8h e (se o cenário admitir) 4×3.'
+                  : 'Esta escala não é recomendada pelo motor; as candidatas abaixo respeitam a lista de exclusão (docs/schedule-policy.md).'}
               </p>
             </div>
           ) : null}
-        </div>
+
+          {scheduleSuggestions.length > 0 ? (
+            <div>
+              <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                Escalas sugeridas
+              </h4>
+              <p className="mt-1 text-xs text-[var(--color-muted)]">
+                1–2 candidatas por centro (horário início/fim, HC por turno) com
+                custo estimado folha + VR/VT vs atual. Nunca inclui 6×1, 12×36,
+                24×48 nem jornada diária &gt; 10h.
+              </p>
+              <div className="mt-3 space-y-4">
+                {suggestionsByCenter.map(([centro, items]) => (
+                  <div
+                    key={centro}
+                    className="border border-[var(--color-line)] bg-white/70 p-4"
+                  >
+                    <p className="text-sm font-medium">{centro}</p>
+                    <ul className="mt-3 space-y-3">
+                      {items.map((s) => (
+                        <li
+                          key={`${s.centroCusto}-${s.code}`}
+                          className="border-t border-[var(--color-line)] pt-3 first:border-t-0 first:pt-0"
+                        >
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <p className="text-sm font-semibold">{s.label}</p>
+                            <p className="text-sm tabular-nums">
+                              Δ total {brl(s.monthlyDeltaVsCurrent)}/mês
+                            </p>
+                          </div>
+                          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                            {s.description}
+                          </p>
+                          <p className="mt-2 text-xs text-[var(--color-muted)]">
+                            HC {s.totalHeadcount} · ~{s.workDaysPerMonth}{' '}
+                            dias/mês · folha {brl(s.estimated.monthlyPayroll)}
+                            {s.estimated.monthlyVr != null
+                              ? ` · VR ${brl(s.estimated.monthlyVr)}`
+                              : ''}
+                            {s.estimated.monthlyVt != null
+                              ? ` · VT ${brl(s.estimated.monthlyVt)}`
+                              : ''}
+                          </p>
+                          <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {s.shifts.map((w) => (
+                              <li
+                                key={`${s.code}-${w.label}`}
+                                className="border border-[var(--color-line)] bg-white px-2 py-1"
+                              >
+                                <span className="font-medium">{w.label}</span>{' '}
+                                {formatShiftRange(w)} · {w.hours}h ·{' '}
+                                {w.headcount} pess.
+                              </li>
+                            ))}
+                          </ul>
+                          <SuggestionFeedbackControls
+                            suggestion={s}
+                            recordedAction={recorded[suggestionKey(s)] ?? null}
+                            onAccept={() => recordFeedback(s, 'accepted')}
+                            onReject={() => recordFeedback(s, 'rejected')}
+                            onEditSave={(shifts) =>
+                              recordFeedback(s, 'edited', shifts)
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
+                {scheduleSuggestionDisclaimer}
+              </p>
+            </div>
+          ) : null}
+        </DossierSection>
+
+        <DossierSection
+          sectionId="cadastral"
+          open={dossier.cadastral}
+          onToggle={() => toggleSection('cadastral')}
+          collapsedSummary="Assistente Jornadas → Horários → Estrutura (fechado). Use “Ir para Estrutura Apdata” ou Expandir."
+        >
+          <ApdataHierarchyView
+            result={result}
+            dataInicio={apdataDataInicio}
+            onDataInicioChange={setApdataDataInicio}
+          />
+        </DossierSection>
       </section>
 
       <PrintableReport result={result} basket={basket} />
