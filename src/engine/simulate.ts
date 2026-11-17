@@ -5,6 +5,8 @@ import {
 import { computeChargeBreakdown } from './charges'
 import {
   distributeCrews,
+  fixedOffTargetCoversOperatingDays,
+  requiredHeadcountAfterFactor,
   resolveRegime,
 } from './crew-distribution'
 import { deriveCoberturaAtualPorDia } from './coverage-days'
@@ -47,6 +49,7 @@ import {
  * 1. Parse current scale → workRatio_current
  * 2. Resolve target scale from scenario (or preserve current for status quo)
  * 3. headcountFactor = workRatio_current / workRatio_target × buffer × friction
+ *    (waived when folga fixa already covers regime operating days — SEG_SEX→5×2)
  * 4. Gap absorption via estrategia (contratação / HE cap / híbrido)
  * 5. Folha + encargos por regime tributário CNPJ + provisões 13º/férias
  * 6. HE cascade when salary divisor drops (220→210/200/180)
@@ -104,12 +107,29 @@ export function simulate(input: SimulationInput): SimulationResult {
     safeTargetRatio > 0 ? currentWorkRatio / safeTargetRatio : 1
 
   const bufferMultiplier = 1 + params.coverageBuffer
-  const headcountFactor =
+  const rawHeadcountFactor =
     scaleFactor * bufferMultiplier * sector.staffingFriction
 
-  const requiredIdeal = Math.max(
+  const defaultRegime = resolveRegime(
+    input.defaultRegimeFuncionamento ??
+      payrollRows?.find((r) => r.regimeFuncionamento)?.regimeFuncionamento,
+  )
+  // Folga fixa + alvo que já cobre os dias do regime (ex. SEG_SEX→5×2):
+  // não aplicar fator de person-days — cobertura diária já fecha com o HC atual.
+  const waiveScaleInflation =
+    !params.preserveCurrentScale &&
+    fixedOffTargetCoversOperatingDays(defaultRegime, targetScale.workDays)
+
+  const headcountFactor = waiveScaleInflation ? 1 : rawHeadcountFactor
+
+  const requiredIdeal = requiredHeadcountAfterFactor(
     headcount,
-    Math.ceil(headcount * headcountFactor),
+    rawHeadcountFactor,
+    {
+      preserveCurrentScale: params.preserveCurrentScale,
+      regime: defaultRegime,
+      targetWorkDays: targetScale.workDays,
+    },
   )
   const gapHeadcount = params.preserveCurrentScale
     ? 0
@@ -182,10 +202,6 @@ export function simulate(input: SimulationInput): SimulationResult {
 
   const proposedDaysPerMonth = estimateWorkDaysPerMonth(targetScale)
 
-  const defaultRegime = resolveRegime(
-    input.defaultRegimeFuncionamento ??
-      payrollRows?.find((r) => r.regimeFuncionamento)?.regimeFuncionamento,
-  )
   const distribuicaoTurmas = distributeCrews(defaultRegime, effectiveRequired)
 
   let byCostCenter: CostCenterResult[] = []
@@ -201,7 +217,7 @@ export function simulate(input: SimulationInput): SimulationResult {
       (row) =>
         row.escalaAtual ? parseScale(row.escalaAtual) : currentScale,
       targetScale,
-      headcountFactor,
+      rawHeadcountFactor,
       params.preserveCurrentScale,
       proposedDaysPerMonth,
       input,
@@ -249,8 +265,9 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Fator de escala (razão atual ÷ alvo)',
       amount: scaleFactor,
       unit: 'factor',
-      detail:
-        'Mantém os mesmos person-days de cobertura ao reduzir a fração de dias trabalhados por pessoa.',
+      detail: waiveScaleInflation
+        ? `Razão bruta ${formatRatio(scaleFactor)}, mas regime ${defaultRegime} com folga fixa já cobre os dias de operação com o HC atual — fator de person-days não infla o quadro.`
+        : 'Mantém os mesmos person-days de cobertura ao reduzir a fração de dias trabalhados por pessoa.',
     },
     {
       id: 'factor-buffer',
@@ -258,7 +275,9 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Buffer de cobertura',
       amount: params.coverageBuffer,
       unit: 'factor',
-      detail: `${pct(params.coverageBuffer)} sobre o headcount após o fator de escala (folgas/atritos de escala).`,
+      detail: waiveScaleInflation
+        ? 'Buffer do cenário não soma vaga extra quando a cobertura diária do regime já fecha com o quadro atual (folga fixa).'
+        : `${pct(params.coverageBuffer)} sobre o headcount após o fator de escala (folgas/atritos de escala).`,
     },
     {
       id: 'factor-sector',
@@ -524,6 +543,7 @@ export function simulate(input: SimulationInput): SimulationResult {
           avgVtValorDia: avgVt,
           currentMonthlyVr: c.vr.currentMonthly > 0 ? c.vr.currentMonthly : null,
           currentMonthlyVt: c.vt.currentMonthly > 0 ? c.vt.currentMonthly : null,
+          regimeFuncionamento: c.regimeFuncionamento,
         }
       })
     : undefined
@@ -614,9 +634,19 @@ function buildCostCenterResults(
   const aggs = aggregateByCostCenter(rows, resolveScale, targetScale)
 
   const centers: CostCenterResult[] = aggs.map((agg) => {
-    const requiredIdeal = Math.max(
+    const regime = resolveRegime(
+      input.regimeFuncionamentoByCc?.[agg.centroCusto] ??
+        agg.regimeFuncionamento ??
+        input.defaultRegimeFuncionamento,
+    )
+    const requiredIdeal = requiredHeadcountAfterFactor(
       agg.headcount,
-      Math.ceil(agg.headcount * headcountFactor),
+      headcountFactor,
+      {
+        preserveCurrentScale,
+        regime,
+        targetWorkDays: targetScale.workDays,
+      },
     )
     const gap = preserveCurrentScale
       ? 0
@@ -691,11 +721,6 @@ function buildCostCenterResults(
       agg.avgAssistOdontoMes * effectiveRequired,
     )
 
-    const regime = resolveRegime(
-      input.regimeFuncionamentoByCc?.[agg.centroCusto] ??
-        agg.regimeFuncionamento ??
-        input.defaultRegimeFuncionamento,
-    )
     const distribuicaoTurmas = distributeCrews(regime, effectiveRequired)
     const escalaLabel = agg.escalaAtual ?? input.currentScale
     const escalaCycle = parseScale(escalaLabel)

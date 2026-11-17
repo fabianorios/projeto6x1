@@ -59,6 +59,8 @@ export {
   continuo7dRosterFactor,
   crewsWithTotalHeadcount,
   distributeCrews,
+  fixedOffTargetCoversOperatingDays,
+  requiredHeadcountAfterFactor,
   resolveRegime,
 } from './crew-distribution'
 export type { TurmaCrew, TurmaDistribution } from './crew-distribution'

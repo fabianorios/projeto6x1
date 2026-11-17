@@ -4,7 +4,11 @@ import {
   cascadeHeOnDivisor,
   planAbsorption,
 } from './absorption'
-import { distributeCrews } from './crew-distribution'
+import {
+  distributeCrews,
+  fixedOffTargetCoversOperatingDays,
+  requiredHeadcountAfterFactor,
+} from './crew-distribution'
 import { parsePayrollCsv } from './payroll'
 import {
   RULE_VERSIONS,
@@ -158,6 +162,28 @@ describe('crew distribution', () => {
     assert.equal(d8.crews.filter((c) => c.headcount === 2).length, 1)
     assert.equal(d8.dailyCoverageNeed, Math.round((8 * 5) / 7))
   })
+
+  it('fixed-off SEG_SEX→5×2 waives scale factor; CONTINUO keeps it', () => {
+    assert.equal(fixedOffTargetCoversOperatingDays('SEG_SEX', 5), true)
+    assert.equal(fixedOffTargetCoversOperatingDays('SEG_SEX', 4), false)
+    assert.equal(fixedOffTargetCoversOperatingDays('CONTINUO_7D', 5), false)
+    assert.equal(
+      requiredHeadcountAfterFactor(1, 1.26, {
+        preserveCurrentScale: false,
+        regime: 'SEG_SEX',
+        targetWorkDays: 5,
+      }),
+      1,
+    )
+    assert.equal(
+      requiredHeadcountAfterFactor(1, 1.26, {
+        preserveCurrentScale: false,
+        regime: 'CONTINUO_7D',
+        targetWorkDays: 5,
+      }),
+      2,
+    )
+  })
 })
 
 describe('payroll CSV backward-compat + extractor columns', () => {
@@ -201,11 +227,30 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.ruleVersion.params.salaryDivisor, 220)
   })
 
-  it('fase1 increases HC and uses divisor 210', () => {
-    const r = simulate(baseInput({ scenarioId: 'fase1_2026_42h' }))
+  it('fase1 increases HC on CONTINUO_7D and uses divisor 210', () => {
+    const r = simulate(
+      baseInput({
+        scenarioId: 'fase1_2026_42h',
+        defaultRegimeFuncionamento: 'CONTINUO_7D',
+      }),
+    )
     assert.ok(r.coverage.additionalHeadcount > 0)
     assert.equal(r.heCascade.scenarioDivisor, 210)
     assert.equal(r.charges.taxRegime, 'LUCRO_PRESUMIDO')
+  })
+
+  it('fase1 SEG_SEX folga fixa keeps HC (no ceil 1.2 invent)', () => {
+    const r = simulate(
+      baseInput({
+        scenarioId: 'fase1_2026_42h',
+        headcount: 1,
+        defaultRegimeFuncionamento: 'SEG_SEX',
+      }),
+    )
+    assert.equal(r.coverage.currentHeadcount, 1)
+    assert.equal(r.coverage.requiredHeadcount, 1)
+    assert.equal(r.coverage.additionalHeadcount, 0)
+    assert.equal(r.coverage.headcountFactor, 1)
   })
 
   it('HORA_EXTRA_MAXIMA can show heCap badge state', () => {

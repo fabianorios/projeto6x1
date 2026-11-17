@@ -78,6 +78,10 @@ export function buildScenarioWhyBullets(
     bullets.push(
       `Escala: mantém ${currentScale}. Neste cenário a gente não mexe no ciclo — o quadro atual é a referência.`,
     )
+  } else if (coverage.additionalHeadcount <= 0) {
+    bullets.push(
+      `Escala: de ${currentScale} para ${proposedScale}. Com folga fixa no mesmo horário de operação, o ciclo muda sem pedir gente a mais.`,
+    )
   } else {
     bullets.push(
       `Escala: de ${currentScale} para ${proposedScale}. Cada pessoa trabalha menos dias no ciclo; para manter o posto coberto, o HC sobe.`,
@@ -87,7 +91,9 @@ export function buildScenarioWhyBullets(
   // HC + cobertura mínima
   if (coverage.additionalHeadcount <= 0) {
     bullets.push(
-      `HC: fica em ${coverage.currentHeadcount}. Não há vaga adicional neste recorte — cobertura mínima já está ok com o quadro atual.`,
+      scaleChanged
+        ? `HC: fica em ${coverage.currentHeadcount}. Mesmo horário e folga fixa já cobrem os dias de funcionamento — não precisa de segunda pessoa só por causa do fator 6×1→5×2.`
+        : `HC: fica em ${coverage.currentHeadcount}. Não há vaga adicional neste recorte — cobertura mínima já está ok com o quadro atual.`,
     )
   } else {
     bullets.push(
