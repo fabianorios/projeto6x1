@@ -20,7 +20,13 @@ import {
   resolveMealWindow,
   workdayKey,
 } from './apdata-hierarchy'
-import { resolveShiftWindows } from './operating-hours'
+import {
+  parseHorarioTrabalhoPeriods,
+  resolveBaselineShiftWindows,
+  resolveShiftWindows,
+} from './operating-hours'
+import { baselineCrewsForCalendar } from './monthly-calendar'
+import { distributeCrews } from './crew-distribution'
 
 describe('apdata-hierarchy naming', () => {
   it('formatWorkdayAbbrev collapses consecutive days and dots gaps', () => {
@@ -109,6 +115,91 @@ describe('apdata-hierarchy naming', () => {
     assert.equal(short.length, 1)
     assert.equal(short[0]?.startHour, 8)
     assert.equal(short[0]?.endHour, 16)
+  })
+})
+
+describe('Quadro Atual Folha horario vs OH tiles', () => {
+  it('parseHorarioTrabalhoPeriods reads single, multi-period, skips intervalo', () => {
+    assert.deepEqual(parseHorarioTrabalhoPeriods('06:00-14:12'), [
+      { startHour: 6, endHour: 14.2, hours: 8.2 },
+    ])
+    assert.deepEqual(
+      parseHorarioTrabalhoPeriods(
+        '08:00-12:00 / intervalo 60min / 13:00-17:48',
+      ),
+      [
+        { startHour: 8, endHour: 12, hours: 4 },
+        { startHour: 13, endHour: 17.8, hours: 4.8 },
+      ],
+    )
+    assert.deepEqual(
+      parseHorarioTrabalhoPeriods('08:00-12:00 / 13:00-17:48'),
+      [
+        { startHour: 8, endHour: 12, hours: 4 },
+        { startHour: 13, endHour: 17.8, hours: 4.8 },
+      ],
+    )
+    assert.deepEqual(parseHorarioTrabalhoPeriods(null), [])
+    assert.deepEqual(parseHorarioTrabalhoPeriods(''), [])
+  })
+
+  it('Folha 06:00-14:12 → Atual labels use 06–14 not OH 09–17', () => {
+    const oh = DEFAULT_OPERATING_HOURS // 09–21 → tiles 09–17 / 13–21
+    const ohTiles = resolveShiftWindows(oh, 1)
+    assert.ok(ohTiles.length >= 2)
+    assert.equal(ohTiles[0]?.startHour, 9)
+
+    const baseline = resolveBaselineShiftWindows('06:00-14:12', oh, 1)
+    assert.equal(baseline.length, 1)
+    assert.equal(baseline[0]?.startHour, 6)
+    assert.equal(baseline[0]?.endHour, 14.2)
+
+    const labeled = applyTurmaHourLabels(
+      [
+        {
+          turmaIndex: 1,
+          label: 'Baseline 4x2',
+          escala: '4x2',
+          workDays: ['seg', 'ter', 'qua', 'qui'],
+          restDays: ['sex', 'sab', 'dom'],
+          headcount: 1,
+        },
+      ],
+      baseline,
+      '10ANDAR',
+    )
+    assert.equal(labeled[0]?.label, '06:00–14:12 · T1 · 10ANDAR')
+    assert.ok(!/09:00–17:00/.test(labeled[0]!.label))
+  })
+
+  it('missing Folha falls back to OH tiles for Atual', () => {
+    const oh = DEFAULT_OPERATING_HOURS
+    const baseline = resolveBaselineShiftWindows(null, oh, 1)
+    const ohTiles = resolveShiftWindows(oh, 1)
+    assert.deepEqual(baseline, ohTiles)
+  })
+
+  it('CONTINUO HC=1 + Folha window: all T1–T7 use Folha clocks (not OH 09/13)', () => {
+    const oh = DEFAULT_OPERATING_HOURS
+    const crews = baselineCrewsForCalendar({
+      currentHeadcount: 1,
+      escalaAtual: '4x2',
+      regime: 'CONTINUO_7D',
+    })
+    assert.equal(crews.length, 7)
+    assert.equal(
+      crews.reduce((s, c) => s + c.headcount, 0),
+      1,
+    )
+    const windows = resolveBaselineShiftWindows('06:00-14:12', oh, 1)
+    const dist = distributeCrews('CONTINUO_7D', 1)
+    const labeled = applyTurmaHourLabels(crews, windows, '10ANDAR', {
+      dailyCoverageNeed: dist.dailyCoverageNeed,
+    })
+    for (const c of labeled) {
+      assert.match(c.label, /^06:00–14:12 · T\d+ · 10ANDAR$/)
+      assert.ok(!/09:00–17:00|13:00–21:00/.test(c.label))
+    }
   })
 })
 

@@ -19,6 +19,7 @@ import {
   formatTurmaLabel,
   hourToTimeInputValue,
   parseScale,
+  resolveBaselineShiftWindows,
   resolveShiftWindows,
   timeInputToHour,
   type CoberturaPorDia,
@@ -660,13 +661,20 @@ function CostCenterScheduleCard({
       escalaAtual: cc.escalaAtual,
       regime,
     })
-    const windows = resolveShiftWindows(operatingHours, shiftsPerDay)
+    // Atual only: Folha horario_trabalho_atual when present; OH tiles as fallback.
+    // Proposto keeps resolveShiftWindows / crewsToEditable (OH redesign).
+    const windows = resolveBaselineShiftWindows(
+      cc.horarioTrabalhoAtual,
+      operatingHours,
+      shiftsPerDay,
+    )
     return applyTurmaHourLabels(raw, windows, cc.centroCusto, {
       dailyCoverageNeed: dist.dailyCoverageNeed,
     })
   }, [
     cc.currentHeadcount,
     cc.escalaAtual,
+    cc.horarioTrabalhoAtual,
     cc.centroCusto,
     regime,
     operatingHours,

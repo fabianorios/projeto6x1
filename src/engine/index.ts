@@ -164,6 +164,8 @@ export {
   formatOperatingWindow,
   hourToTimeInputValue,
   hoursForWeekday,
+  parseHorarioTrabalhoPeriods,
+  resolveBaselineShiftWindows,
   resolveShiftWindows,
   summarizeOperatingHours,
   tileCoverageWindow,

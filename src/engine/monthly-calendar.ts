@@ -274,8 +274,9 @@ export function buildMonthCalendarMatrix(args: {
  * Otherwise → single pool from escala atual (5×2 / 6×1 weekdays).
  *
  * Labels stay generic here (`Baseline …` / `Turma N`); callers that show
- * Quadro Atual should apply `formatTurmaLabel` / `applyTurmaHourLabels` so
- * Atual matches Proposto (`09:00–17:00 · T1 · CC`).
+ * Quadro Atual should apply `formatTurmaLabel` / `applyTurmaHourLabels` with
+ * `resolveBaselineShiftWindows` (Folha `horario_trabalho_atual` when present,
+ * else OH tiles) — Proposto may keep OH tiles separately.
  */
 export function baselineCrewsForCalendar(args: {
   currentHeadcount: number
