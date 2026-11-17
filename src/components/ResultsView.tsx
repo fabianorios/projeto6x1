@@ -145,6 +145,15 @@ export function ResultsView({
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
   )
 
+  function handleEnviaParaApdata() {
+    downloadAhrHandoff(result, { dataInicio: apdataDataInicio })
+    const section = document.getElementById('hierarquia-apdata')
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      section.focus({ preventScroll: true })
+    }
+  }
+
   function handleSelectBest(scenarioId: ScenarioId | null) {
     const next = setBestScenario(scenarioId, basket)
     onBasketChange(next)
@@ -242,6 +251,14 @@ export function ResultsView({
               className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
             >
               Exportar Gerador AHR JSON
+            </button>
+            <button
+              type="button"
+              title="Exporta hierarquia Jornada→Grade para carga Apdata"
+              onClick={handleEnviaParaApdata}
+              className="min-h-11 border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--color-ink)]"
+            >
+              Envia para Apdata
             </button>
             <button
               type="button"
