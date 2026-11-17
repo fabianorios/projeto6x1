@@ -22,6 +22,12 @@ import {
   type SimulationResult,
 } from '../engine'
 import { getTemplate } from '../templates'
+import {
+  EXECUTIVE_KPI_CARD_HERO_CLASS,
+  EXECUTIVE_KPI_CARD_PLAIN_CLASS,
+  EXECUTIVE_KPI_HINT_CLASS,
+  executiveKpiValueClass,
+} from '../utils/executiveKpi'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
 import {
   DEFAULT_DOSSIER_OPEN,
@@ -315,6 +321,17 @@ export function ResultsView({
       : folhaDir.tone === 'down'
         ? 'text-[var(--color-accent)]'
         : 'text-[var(--color-ink)]'
+  const folhaValue = signedBrl(cost.monthlyDelta)
+  const folhaHint = `${folhaDir.label} · anual ${signedBrl(cost.annualDelta)}`
+  const hcValue = `${coverage.currentHeadcount} → ${coverage.requiredHeadcount}`
+  const vrValue = vr ? signedBrl(vr.monthlyDelta) : '—'
+  const vrHint = vr
+    ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
+    : 'Sem VR na folha'
+  const vtValue = vt ? signedBrl(vt.monthlyDelta) : '—'
+  const vtHint = vt
+    ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
+    : 'Sem VT na folha'
 
   const absorcaoLabel =
     ABSORCAO_OPTIONS.find((o) => o.id === estrategiaAbsorcao)?.label ??
@@ -441,7 +458,7 @@ export function ResultsView({
         >
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div
-              className="border-2 border-[var(--color-accent)] bg-[var(--color-accent-soft)]/60 px-4 py-4"
+              className={EXECUTIVE_KPI_CARD_HERO_CLASS}
               aria-labelledby="folha-delta-hero"
             >
               <dt
@@ -451,52 +468,49 @@ export function ResultsView({
                 Δ folha / mês
               </dt>
               <dd
-                className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl ${folhaToneClass}`}
+                className={executiveKpiValueClass(folhaValue, folhaToneClass)}
+                title={`${folhaDir.arrow} ${folhaValue}`}
               >
                 <span aria-hidden="true" className="mr-1">
                   {folhaDir.arrow}
                 </span>
-                {signedBrl(cost.monthlyDelta)}
+                {folhaValue}
               </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
-                {folhaDir.label} · anual {signedBrl(cost.annualDelta)}
+              <dd className={EXECUTIVE_KPI_HINT_CLASS} title={folhaHint}>
+                {folhaHint}
               </dd>
             </div>
-            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <div className={EXECUTIVE_KPI_CARD_PLAIN_CLASS}>
               <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
                 Headcount
               </dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums">
-                {coverage.currentHeadcount} → {coverage.requiredHeadcount}
+              <dd className={executiveKpiValueClass(hcValue)} title={hcValue}>
+                {hcValue}
               </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
+              <dd className={EXECUTIVE_KPI_HINT_CLASS}>
                 +{coverage.additionalHeadcount} adicional
               </dd>
             </div>
-            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <div className={EXECUTIVE_KPI_CARD_PLAIN_CLASS}>
               <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
                 Δ VR / mês
               </dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums">
-                {vr ? signedBrl(vr.monthlyDelta) : '—'}
+              <dd className={executiveKpiValueClass(vrValue)} title={vrValue}>
+                {vrValue}
               </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
-                {vr
-                  ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
-                  : 'Sem VR na folha'}
+              <dd className={EXECUTIVE_KPI_HINT_CLASS} title={vrHint}>
+                {vrHint}
               </dd>
             </div>
-            <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+            <div className={EXECUTIVE_KPI_CARD_PLAIN_CLASS}>
               <dt className="text-xs font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase">
                 Δ VT / mês
               </dt>
-              <dd className="mt-2 text-2xl font-semibold tabular-nums">
-                {vt ? signedBrl(vt.monthlyDelta) : '—'}
+              <dd className={executiveKpiValueClass(vtValue)} title={vtValue}>
+                {vtValue}
               </dd>
-              <dd className="mt-1 text-xs text-[var(--color-muted)]">
-                {vt
-                  ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
-                  : 'Sem VT na folha'}
+              <dd className={EXECUTIVE_KPI_HINT_CLASS} title={vtHint}>
+                {vtHint}
               </dd>
             </div>
           </dl>
