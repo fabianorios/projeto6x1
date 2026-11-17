@@ -39,16 +39,25 @@ export function AptoolsExtractModal({
 
   useEffect(() => {
     let cancelled = false
+    // Sync dialect immediately so Copiar never ships the previous engine's SQL
+    // while the API refresh is in flight (Oracle tab + MSSQL body → Aptools errors).
+    setSql(getAptoolsExtractorScript(dialect))
     async function load() {
       try {
         const res = await fetch(
           `${API_BASE}/api/query/extractor-sql?engine=${dialect}`,
         )
         if (!res.ok) throw new Error('api')
-        const body = (await res.json()) as { sql?: string }
-        if (!cancelled && body.sql) setSql(body.sql)
+        const body = (await res.json()) as { sql?: string; engine?: string }
+        if (
+          !cancelled &&
+          body.sql &&
+          (body.engine === undefined || body.engine === dialect)
+        ) {
+          setSql(body.sql)
+        }
       } catch {
-        if (!cancelled) setSql(getAptoolsExtractorScript(dialect))
+        // Client fallback already applied above.
       }
     }
     void load()
@@ -156,6 +165,7 @@ export function AptoolsExtractModal({
                     aria-selected={selected}
                     onClick={() => {
                       setDialect(id)
+                      setSql(getAptoolsExtractorScript(id))
                       setCopied(false)
                       setCopyError(null)
                     }}
@@ -179,7 +189,11 @@ export function AptoolsExtractModal({
                 {copied ? 'Copiado!' : 'Copiar'}
               </button>
               <span className="text-xs text-[var(--color-muted)]">
-                Fonte:{' '}
+                Dialeto ativo:{' '}
+                <strong className="font-medium text-[var(--color-ink)]">
+                  {dialect === 'oracle' ? 'Oracle (NVL / LISTAGG / ||)' : 'MSSQL (ISNULL / STRING_AGG / +)'}
+                </strong>
+                {' · '}fonte{' '}
                 <code className="text-[11px]">docs/apdata-extractor.sql</code>
                 {' · '}tipos fábrica VR=53 / VA=52 (editáveis no Studio)
               </span>

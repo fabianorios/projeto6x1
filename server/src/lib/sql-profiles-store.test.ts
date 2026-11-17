@@ -64,6 +64,27 @@ describe("SqlProfilesStore", () => {
     }
   });
 
+  it("factory Oracle Folha uses NVL/CHR/|| and not MSSQL ISNULL/STRING_AGG/CHAR", () => {
+    const slots = factoryDefaultSlots();
+    for (const id of SQL_SLOT_IDS) {
+      const oracle = slots[id].oracle;
+      const mssql = slots[id].mssql;
+      assert.ok(!/\bISNULL\s*\(/i.test(oracle), `${id}/oracle has ISNULL`);
+      assert.ok(!/\bSTRING_AGG\s*\(/i.test(oracle), `${id}/oracle has STRING_AGG`);
+      assert.ok(!/\bCHAR\s*\(/i.test(oracle), `${id}/oracle has CHAR(`);
+      if (/\bISNULL\s*\(/i.test(mssql)) {
+        assert.match(oracle, /\bNVL\s*\(/, `${id}/oracle missing NVL`);
+      }
+      if (/\bCHAR\s*\(/i.test(mssql)) {
+        assert.match(oracle, /\bCHR\s*\(/, `${id}/oracle missing CHR`);
+      }
+    }
+    assert.match(slots.FOLHA_E_ESCALAS.oracle, /\bNVL\s*\(/);
+    assert.match(slots.FOLHA_E_ESCALAS.oracle, /\|\|/);
+    assert.match(slots.FOLHA_E_ESCALAS.oracle, /cnpj_completo/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /\bISNULL\s*\(/);
+  });
+
   it("factory SQL passes SELECT-only for every slot/dialect", () => {
     const slots = factoryDefaultSlots();
     for (const id of SQL_SLOT_IDS) {
