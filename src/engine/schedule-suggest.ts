@@ -24,6 +24,7 @@ import {
   type ExclusionHit,
 } from './schedule-policy'
 import {
+  distributeExactCounts,
   requiredHeadcountAfterFactor,
   resolveRegime,
 } from './crew-distribution'
@@ -154,19 +155,18 @@ export function buildShiftWindows(
     return []
   }
 
-  const base = Math.floor(totalHeadcount / tiles.length)
-  let rem = totalHeadcount - base * tiles.length
+  // Preserve exact roster across tiles — never Math.max(1) pad (HC=1 +
+  // 09–21 → 2 tiles used to invent a 2nd person).
+  const counts = distributeExactCounts(totalHeadcount, tiles.length)
   const windowLabel = formatOperatingWindow(day)
 
   return tiles.map((t, i) => {
-    const extra = rem > 0 ? 1 : 0
-    if (rem > 0) rem -= 1
     return {
       label: tiles.length === 1 ? `Cobertura (${windowLabel})` : SHIFT_LABELS[i] ?? `Turno ${i + 1}`,
       startHour: t.startHour,
       endHour: t.endHour,
       hours: Math.min(t.hours, MAX_SUGGESTED_DAILY_HOURS),
-      headcount: Math.max(1, base + extra),
+      headcount: counts[i] ?? 0,
     }
   })
 }
@@ -269,9 +269,10 @@ function suggestForCenter(
     demand.regimeFuncionamento ?? input.defaultRegimeFuncionamento,
   )
 
-  // Coverage need: prefer units×shifts as posts; fall back to HC.
-  const posts = Math.max(1, input.units * input.shiftsPerDay)
-  const coverageHc = Math.max(demand.headcount, posts)
+  // Roster base = demand HC only. units×shifts/dia is informative in simulate
+  // (see docs/engine-assumptions.md) — do not use it as a second HC floor
+  // (shiftsPerDay=2 used to invent people before the scale factor).
+  const coverageHc = Math.max(0, Math.round(demand.headcount))
 
   const built: ScheduleSuggestion[] = []
 
@@ -292,7 +293,7 @@ function suggestForCenter(
 
     const shifts = buildShiftWindows(code, input.operatingHours, hc)
     if (shifts.length === 0) continue
-    // Reconcile total to sum of windows (ceil distribution may bump slightly).
+    // Exact split — Σ shift HC === required roster (no invent pad).
     const totalHeadcount = shifts.reduce((s, w) => s + w.headcount, 0)
     const window = formatOperatingWindow(widestCoverageDay(input.operatingHours))
 
