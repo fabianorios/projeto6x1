@@ -358,4 +358,23 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.ok(tree.jornadas.some((j) => j.codigo.includes('0900')))
     assert.ok(tree.jornadas.some((j) => j.codigo.includes('2100') || j.codigo.includes('1300')))
   })
+
+  it('does not double HC across OH tiles (Σ grades === required)', () => {
+    const result = simulate({
+      sector: 'varejo',
+      headcount: 10,
+      currentScale: '6x1',
+      averageMonthlySalary: 2000,
+      units: 1,
+      shiftsPerDay: 2,
+      scenarioId: 'fase1_2026_42h',
+      operatingHours: DEFAULT_OPERATING_HOURS,
+      defaultRegimeFuncionamento: 'SEG_SEX',
+    })
+    assert.equal(result.coverage.requiredHeadcount, 10)
+    const tree = buildApdataHierarchy(result)
+    assert.ok(tree.grades.length >= 2)
+    const sum = tree.grades.reduce((s, g) => s + g.headcountProposto, 0)
+    assert.equal(sum, result.coverage.requiredHeadcount)
+  })
 })

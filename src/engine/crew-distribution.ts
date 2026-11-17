@@ -66,6 +66,29 @@ export function resolveRegime(
 }
 
 /**
+ * Split `total` people across `binCount` buckets (floor + remainder on the
+ * first buckets). Never invents heads: Σ result === round(total).
+ * Used by turmas, shift tiles, and Apdata grades so multi-window paths
+ * cannot pad with Math.max(1, …).
+ */
+export function distributeExactCounts(
+  total: number,
+  binCount: number,
+): number[] {
+  const n = Math.max(0, Math.floor(binCount))
+  if (n === 0) return []
+  const target = Math.max(0, Math.round(total))
+  if (target === 0) return Array.from({ length: n }, () => 0)
+  const base = Math.floor(target / n)
+  let rem = target - base * n
+  return Array.from({ length: n }, () => {
+    const extra = rem > 0 ? 1 : 0
+    if (rem > 0) rem -= 1
+    return base + extra
+  })
+}
+
+/**
  * Re-balance crews so Σ headcount === `total` (keep N turmas / rest pattern).
  * Spreads remainder +1 across the first crews — never invents heads beyond `total`.
  */
@@ -73,17 +96,9 @@ export function crewsWithTotalHeadcount(
   crews: TurmaCrew[],
   total: number,
 ): TurmaCrew[] {
-  const n = crews.length
-  if (n === 0) return crews
-  const target = Math.max(0, Math.round(total))
-  if (target === 0) return crews.map((c) => ({ ...c, headcount: 0 }))
-  const base = Math.floor(target / n)
-  let rem = target - base * n
-  return crews.map((c) => {
-    const extra = rem > 0 ? 1 : 0
-    if (rem > 0) rem -= 1
-    return { ...c, headcount: base + extra }
-  })
+  const counts = distributeExactCounts(total, crews.length)
+  if (counts.length === 0) return crews
+  return crews.map((c, i) => ({ ...c, headcount: counts[i]! }))
 }
 
 /**

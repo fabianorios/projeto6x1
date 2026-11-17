@@ -59,6 +59,7 @@ export {
   continuo7dRosterFactor,
   crewsWithTotalHeadcount,
   distributeCrews,
+  distributeExactCounts,
   fixedOffTargetCoversOperatingDays,
   requiredHeadcountAfterFactor,
   resolveRegime,

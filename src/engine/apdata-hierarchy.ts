@@ -19,6 +19,7 @@ import {
 } from './coverage-days'
 import {
   distributeCrews,
+  distributeExactCounts,
   type TurmaCrew,
   type TurmaDistribution,
 } from './crew-distribution'
@@ -796,6 +797,25 @@ export function buildApdataHierarchy(
       result.distribuicaoTurmas,
     )
 
+    // How many selected horários (tiles) each turma appears on — used to
+    // split roster so Σ headcountProposto === required (not HC × tiles).
+    const tileCountByTurma = new Map<number, number>()
+    for (const cand of ccHorarios) {
+      for (const idx of cand.turmaIndexes) {
+        tileCountByTurma.set(idx, (tileCountByTurma.get(idx) ?? 0) + 1)
+      }
+    }
+    // Remaining per-tile allotment iterators (same order as ccHorarios).
+    const tileHcLeftByTurma = new Map<number, number[]>()
+    for (const crew of distAll.crews) {
+      const n = tileCountByTurma.get(crew.turmaIndex) ?? 0
+      if (n <= 0) continue
+      tileHcLeftByTurma.set(
+        crew.turmaIndex,
+        distributeExactCounts(crew.headcount, n),
+      )
+    }
+
     for (const cand of ccHorarios) {
       const candHours = shiftHours(cand.startHour, cand.endHour)
       if (!horariosByCode.has(cand.codigo)) {
@@ -849,12 +869,18 @@ export function buildApdataHierarchy(
           ciclo.dataInicio = dataInicio
         }
 
+        const allotment = tileHcLeftByTurma.get(crew.turmaIndex)
+        const splitHc =
+          allotment && allotment.length > 0
+            ? allotment.shift()!
+            : Math.max(0, Math.round(crew.headcount))
+
         const grade: ApdataGradeTurma = {
           turma: `T${crew.turmaIndex}`,
           turmaIndex: crew.turmaIndex,
           cicloCodigo,
           centroCustoCodigo: lead.centroCusto,
-          headcountProposto: Math.max(0, Math.round(crew.headcount)),
+          headcountProposto: splitHc,
           tipoGrade,
           label: formatTurmaLabel(
             cand.startHour,

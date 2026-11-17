@@ -6,6 +6,7 @@ import {
 } from './absorption'
 import {
   distributeCrews,
+  distributeExactCounts,
   fixedOffTargetCoversOperatingDays,
   requiredHeadcountAfterFactor,
 } from './crew-distribution'
@@ -161,6 +162,16 @@ describe('crew distribution', () => {
     assert.ok(d8.crews.every((c) => c.headcount <= 2))
     assert.equal(d8.crews.filter((c) => c.headcount === 2).length, 1)
     assert.equal(d8.dailyCoverageNeed, Math.round((8 * 5) / 7))
+  })
+
+  it('distributeExactCounts never invents beyond total', () => {
+    assert.deepEqual(distributeExactCounts(1, 2), [1, 0])
+    assert.deepEqual(distributeExactCounts(10, 2), [5, 5])
+    assert.deepEqual(distributeExactCounts(8, 7), [2, 1, 1, 1, 1, 1, 1])
+    assert.equal(
+      distributeExactCounts(3, 4).reduce((a, b) => a + b, 0),
+      3,
+    )
   })
 
   it('fixed-off SEG_SEX→5×2 waives scale factor; CONTINUO keeps it', () => {
