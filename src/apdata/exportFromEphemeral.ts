@@ -58,22 +58,45 @@ function filterByCnpj(
   })
 }
 
+/**
+ * Apply Premissas salary / VR / VT overrides on already-mapped PayrollRow[]
+ * (server P3 path — no client aggregate→payroll map).
+ */
+export function applyEphemeralPayrollOverrides(
+  rows: ReturnType<typeof mapExtractorAggregatesToPayroll>,
+  overrides: EphemeralExportOverrides = {},
+): {
+  rows: ReturnType<typeof mapExtractorAggregatesToPayroll>
+  salariosZerados: number
+  comVtCadastro: number
+} {
+  const filtered = filterByCnpj(rows, overrides.selectedCnpjKeys)
+  return applyOverrides(filtered, overrides)
+}
+
 /** Build ExportResult stats from already-mapped payroll rows. */
 export function exportResultFromPayrollRows(
   payrollRows: ReturnType<typeof mapExtractorAggregatesToPayroll>,
   parseIssues: PayrollParseIssue[] = [],
   steps?: ExportProgressStep[],
   emptyMessage = 'Nenhuma linha válida após o parse.',
+  overrides?: EphemeralExportOverrides,
 ): ExportResult {
+  const applied = overrides
+    ? applyEphemeralPayrollOverrides(payrollRows, overrides)
+    : {
+        rows: payrollRows,
+        salariosZerados: payrollRows.filter((r) => !(r.salario > 0)).length,
+        comVtCadastro: payrollRows.filter(
+          (r) => r.vtValorDia != null && r.vtValorDia > 0,
+        ).length,
+      }
+  const rows = applied.rows
   const escalaCounts: Record<string, number> = {}
   let contratadosAtivos = 0
-  let salariosZerados = 0
-  let comVtCadastro = 0
   const cnpjs = new Set<string>()
-  for (const r of payrollRows) {
+  for (const r of rows) {
     contratadosAtivos += r.quantidade
-    if (!(r.salario > 0)) salariosZerados += 1
-    if (r.vtValorDia != null && r.vtValorDia > 0) comVtCadastro += 1
     const esc = r.escalaAtual || 'NA'
     escalaCounts[esc] = (escalaCounts[esc] ?? 0) + r.quantidade
     const dig = cnpjDigits(r.cnpjCompleto ?? '')
@@ -81,7 +104,7 @@ export function exportResultFromPayrollRows(
   }
 
   const issues = [...parseIssues]
-  if (payrollRows.length === 0) {
+  if (rows.length === 0) {
     issues.push({ line: 0, message: emptyMessage })
   }
 
@@ -90,21 +113,21 @@ export function exportResultFromPayrollRows(
       id: 'aptools-csv',
       label: 'CSV Aptools (parse servidor)',
       status: 'done',
-      detail: `${payrollRows.length} linha(s)`,
+      detail: `${rows.length} linha(s)`,
     },
   ]
 
   return {
-    rows: payrollRows,
+    rows,
     issues,
     stats: {
       contratadosAtivos,
-      linhasAgregadas: payrollRows.length,
-      salariosZerados,
-      comVtCadastro,
+      linhasAgregadas: rows.length,
+      salariosZerados: applied.salariosZerados,
+      comVtCadastro: applied.comVtCadastro,
       estabelecimentosFiltrados: cnpjs.size,
       escalaCounts,
-      sample: payrollRows.slice(0, 8).map((r) => ({
+      sample: rows.slice(0, 8).map((r) => ({
         cargo: r.cargo,
         centroCusto: r.centroCusto,
         escala: r.escalaAtual || '—',
