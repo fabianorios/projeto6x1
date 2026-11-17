@@ -54,7 +54,9 @@ export function AptoolsExtractModal({
           body.sql &&
           (body.engine === undefined || body.engine === dialect)
         ) {
-          setSql(body.sql)
+          const next =
+            dialect === 'oracle' ? body.sql.replace(/;\s*$/, '') : body.sql
+          setSql(next)
         }
       } catch {
         // Client fallback already applied above.
@@ -69,7 +71,11 @@ export function AptoolsExtractModal({
   async function copySql() {
     setCopyError(null)
     try {
-      await navigator.clipboard.writeText(sql)
+      // Oracle Aptools rejects trailing `;` (ORA-00933). Strip on copy even if
+      // a stale API/cache still appends one.
+      const text =
+        dialect === 'oracle' ? sql.replace(/;\s*$/, '') : sql
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {

@@ -80,6 +80,24 @@ describe("extractor SQL", () => {
     assert.ok(!/\bLISTAGG\s*\(/i.test(mssql));
   });
 
+  it("Oracle Aptools Folha must not end with ; (ORA-00933) and LISTAGG parses", () => {
+    const oracle = getAptoolsExtractorScript("oracle");
+    const mssql = getAptoolsExtractorScript("mssql");
+    assert.ok(
+      !/;\s*$/.test(oracle),
+      "Oracle Aptools SQL must not end with semicolon (ORA-00933)",
+    );
+    assert.ok(!oracle.trimEnd().endsWith(";"));
+    assert.match(
+      oracle,
+      /LISTAGG\s*\(\s*[\s\S]*?,\s*CHR\s*\(\s*59\s*\)\s*\)\s*WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+cod_tipo\s*\)/i,
+    );
+    assert.ok(!/\bISNULL\s*\(/i.test(oracle));
+    assert.ok(!/\bSTRING_AGG\s*\(/i.test(oracle));
+    assert.ok(!/\bCHAR\s*\(/i.test(oracle));
+    assert.ok(/;\s*$/.test(mssql), "MSSQL Aptools may keep trailing ;");
+  });
+
   it("uses TIP_* escalas with work_days x off_days concat", () => {
     const mssql = getAptoolsExtractorScript("mssql");
     const oracle = getAptoolsExtractorScript("oracle");

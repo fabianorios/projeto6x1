@@ -501,11 +501,12 @@ export function buildExtractorQuery(
 /**
  * Aptools-ready SELECT (no SET TRANSACTION — Aptools may reject it).
  * Parity with SPA `src/apdata/extractorSql.ts` (beneficios_agg).
+ * Oracle: no trailing `;` (ORA-00933 in Aptools). MSSQL keeps `;`.
  */
 export function getAptoolsExtractorScript(
   dialect: ExtractorDialect,
   filters: ExtractorFilters = {},
 ): string {
   const { sql } = buildExtractorQuery(dialect, filters);
-  return sql + ";\n";
+  return dialect === "oracle" ? `${sql}\n` : `${sql};\n`;
 }

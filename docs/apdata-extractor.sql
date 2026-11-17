@@ -25,6 +25,8 @@
    ============================================================================
    Aptools: não prefixar com SET TRANSACTION — a ferramenta pode rejeitar.
    Isolation (READ UNCOMMITTED / READ ONLY) fica na conexão API/MCP.
+   Oracle Aptools: NÃO terminar o SELECT com `;` (ORA-00933). MSSQL pode
+   manter o terminador. O produto (aba Oracle) já omite o `;`.
    ============================================================================ */
 
 
@@ -221,6 +223,7 @@ ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo;
    [DIALETO 2] ORACLE DATABASE (APDATA SAAS ORACLE)
    Run ONLY this block on Oracle. Uses NVL / CHR / VARCHAR2-via-TO_CHAR /
    NUMBER / || / LISTAGG(... ) WITHIN GROUP — never ISNULL / CHAR / STRING_AGG / +.
+   Do NOT end with `;` (Aptools → ORA-00933). Product UI omits the terminator.
    Product UI: Extrair via Aptools → tab Oracle (SQL switches immediately).
    ---------------------------------------------------------------------------- */
 
@@ -404,9 +407,9 @@ GROUP BY
     c.CON_CdiCargo, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     NVL(h.HOR_QtnHorasSemanal, 44.0)
-ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo;
+ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 
 
 /* NOTE: Run ONE dialect per session (MSSQL *or* Oracle). Do not paste SET
    TRANSACTION into Aptools — isolation is applied by the ephemeral API /
-   MCP connection separately from the SELECT body. */
+   MCP connection separately from the SELECT body. Oracle: no trailing `;`. */
