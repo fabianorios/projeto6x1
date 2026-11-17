@@ -215,6 +215,13 @@ export function groupOperacionalByCnpj(opts: {
   return groups
 }
 
+/** True when Seção 2 should render per-filial accordion (≥1 real CNPJ). */
+export function shouldShowFilialAccordion(
+  groups: OperacionalFilialGroup[],
+): boolean {
+  return groups.some((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY)
+}
+
 /** Compact turma/jornada summary for one filial group (or whole sim). */
 export function summarizeOperacionalTurmas(
   centers: CostCenterResult[],

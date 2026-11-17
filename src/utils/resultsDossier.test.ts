@@ -11,6 +11,7 @@ import {
   groupOperacionalByCnpj,
   OPERACIONAL_SEM_CNPJ_KEY,
   resolveVisibleCentroCustos,
+  shouldShowFilialAccordion,
   summarizeOperacionalTurmas,
 } from './resultsDossier'
 import type { CostCenterResult } from '../engine/types'
@@ -238,5 +239,29 @@ describe('resultsDossier helpers', () => {
     const sum = summarizeOperacionalTurmas(groups[0]!.centers)
     assert.equal(sum.crewCount, 2)
     assert.equal(sum.totalHeadcount, 10)
+    assert.equal(shouldShowFilialAccordion(groups), true)
+    assert.equal(
+      shouldShowFilialAccordion([
+        {
+          key: OPERACIONAL_SEM_CNPJ_KEY,
+          label: 'Sem CNPJ / filial',
+          centroCustos: ['X'],
+          centers: [],
+        },
+      ]),
+      false,
+    )
+    // Single real CNPJ still gets accordion (not only when 2+)
+    assert.equal(
+      shouldShowFilialAccordion([
+        {
+          key: '12345678000190',
+          label: 'Filial 01 · 12.345.678/0001-90',
+          centroCustos: ['CC-A'],
+          centers: [],
+        },
+      ]),
+      true,
+    )
   })
 })
