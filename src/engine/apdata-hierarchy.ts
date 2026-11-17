@@ -334,6 +334,31 @@ export function formatTurmaLabel(
   return `${range} · T${turmaIndex} · ${cc}`
 }
 
+/**
+ * Apply the same `09:00–17:00 · T# · CC` prefix used on Quadro Proposto to any
+ * crew list (incl. Quadro Atual / baseline). Windows cycle when there are more
+ * turmas than shift tiles (same rule as ScheduleBuilder editable rows).
+ */
+export function applyTurmaHourLabels(
+  crews: TurmaCrew[],
+  windows: readonly { startHour: number; endHour: number }[],
+  centroCustoCodigo: string,
+): TurmaCrew[] {
+  if (windows.length === 0) return crews
+  return crews.map((c, i) => {
+    const win = windows[i % windows.length] ?? windows[0]!
+    return {
+      ...c,
+      label: formatTurmaLabel(
+        win.startHour,
+        win.endHour,
+        c.turmaIndex,
+        centroCustoCodigo,
+      ),
+    }
+  })
+}
+
 export function jornadaCodigoFor(
   startHour: number,
   endHour: number,

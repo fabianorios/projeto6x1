@@ -4,6 +4,7 @@ import {
   COVERAGE_WEEKDAY_LABELS,
   MONTH_LABELS_PT,
   REGIME_FUNCIONAMENTO_LABELS,
+  applyTurmaHourLabels,
   baselineCrewsForCalendar,
   buildMonthCalendarMatrix,
   coberturaPropostaFromCrews,
@@ -597,15 +598,22 @@ function CostCenterScheduleCard({
 
   const proposto = useMemo(() => coberturaPropostaFromCrews(rows), [rows])
 
-  const atualCrews = useMemo(
-    () =>
-      baselineCrewsForCalendar({
-        currentHeadcount: cc.currentHeadcount,
-        escalaAtual: cc.escalaAtual,
-        regime,
-      }),
-    [cc.currentHeadcount, cc.escalaAtual, regime],
-  )
+  const atualCrews = useMemo(() => {
+    const raw = baselineCrewsForCalendar({
+      currentHeadcount: cc.currentHeadcount,
+      escalaAtual: cc.escalaAtual,
+      regime,
+    })
+    const windows = resolveShiftWindows(operatingHours, shiftsPerDay)
+    return applyTurmaHourLabels(raw, windows, cc.centroCusto)
+  }, [
+    cc.currentHeadcount,
+    cc.escalaAtual,
+    cc.centroCusto,
+    regime,
+    operatingHours,
+    shiftsPerDay,
+  ])
 
   const matrix = useMemo(() => {
     const crews =

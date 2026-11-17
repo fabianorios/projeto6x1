@@ -8,9 +8,11 @@
 
 import {
   MONTH_LABELS_PT,
+  applyTurmaHourLabels,
   buildApdataHierarchy,
   buildMonthCalendarMatrix,
   baselineCrewsForCalendar,
+  resolveShiftWindows,
   type ApdataHierarchyTree,
   type MonthCalendarMatrix,
 } from '../engine'
@@ -18,6 +20,7 @@ import { distributeCrews } from '../engine/crew-distribution'
 import type { CostCenterResult, SimulationResult } from '../engine/types'
 import { parseScale } from '../engine/scale'
 import { deriveCoberturaAtualPorDia } from '../engine/coverage-days'
+import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
 
 export interface EscalasExcelExportOptions {
   /** Data Início for Ciclos (YYYY-MM-DD). */
@@ -118,7 +121,7 @@ function matrixToBlock(
   for (const r of matrix.rows) {
     lines.push(
       row([
-        cell(`T${r.turmaIndex}`),
+        cell(r.label?.trim() || `T${r.turmaIndex}`),
         cell(r.headcount, 'Number'),
         cell(r.escala),
         ...r.marks.map((m) => cell(m)),
@@ -336,6 +339,11 @@ export function buildEscalasTurmasSpreadsheetXml(
   )
   body.push(row([cell('')]))
 
+  const operatingHours =
+    result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
+  const shiftsPerDay = Math.max(1, result.input.shiftsPerDay || 1)
+  const shiftWindows = resolveShiftWindows(operatingHours, shiftsPerDay)
+
   for (const cc of centers) {
     const regime =
       cc.regimeFuncionamento ??
@@ -353,11 +361,15 @@ export function buildEscalasTurmasSpreadsheetXml(
       ]),
     )
 
-    const atualCrews = baselineCrewsForCalendar({
-      currentHeadcount: cc.currentHeadcount,
-      escalaAtual: cc.escalaAtual,
-      regime,
-    })
+    const atualCrews = applyTurmaHourLabels(
+      baselineCrewsForCalendar({
+        currentHeadcount: cc.currentHeadcount,
+        escalaAtual: cc.escalaAtual,
+        regime,
+      }),
+      shiftWindows,
+      cc.centroCusto,
+    )
     const atualMatrix = buildMonthCalendarMatrix({
       year: period.year,
       month: period.month,
@@ -368,10 +380,15 @@ export function buildEscalasTurmasSpreadsheetXml(
     })
     body.push(...matrixToBlock('Quadro Atual (Baseline)', atualMatrix))
 
+    const propostoCrews = applyTurmaHourLabels(
+      dist.crews,
+      shiftWindows,
+      cc.centroCusto,
+    )
     const propostoMatrix = buildMonthCalendarMatrix({
       year: period.year,
       month: period.month,
-      crews: dist.crews,
+      crews: propostoCrews,
       regime,
       dailyCoverageNeed: dist.dailyCoverageNeed,
       rotateWeekly: regime === 'CONTINUO_7D',

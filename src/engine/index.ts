@@ -57,12 +57,14 @@ export type {
 } from './schedule-policy'
 export {
   continuo7dRosterFactor,
+  crewsWithTotalHeadcount,
   distributeCrews,
   resolveRegime,
 } from './crew-distribution'
 export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
 export {
   APDATA_HIERARCHY_SCHEMA_VERSION,
+  applyTurmaHourLabels,
   buildApdataHierarchy,
   buildBlockJornadaSteps,
   buildJornadaCandidates,
@@ -119,7 +121,6 @@ export {
   buildMonthCalendarMatrix,
   buildMonthDays,
   crewWorksOnDay,
-  crewsWithTotalHeadcount,
   daysInMonth,
   defaultReferencePeriod,
   minimumNeedForWeekday,

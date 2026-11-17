@@ -66,13 +66,35 @@ export function resolveRegime(
 }
 
 /**
+ * Re-balance crews so Σ headcount === `total` (keep N turmas / rest pattern).
+ * Spreads remainder +1 across the first crews — never invents heads beyond `total`.
+ */
+export function crewsWithTotalHeadcount(
+  crews: TurmaCrew[],
+  total: number,
+): TurmaCrew[] {
+  const n = crews.length
+  if (n === 0) return crews
+  const target = Math.max(0, Math.round(total))
+  if (target === 0) return crews.map((c) => ({ ...c, headcount: 0 }))
+  const base = Math.floor(target / n)
+  let rem = target - base * n
+  return crews.map((c) => {
+    const extra = rem > 0 ? 1 : 0
+    if (rem > 0) rem -= 1
+    return { ...c, headcount: base + extra }
+  })
+}
+
+/**
  * Distribute required headcount into turmas for the operating regime.
  *
  * - SEG_SEX: one 5×2 pool covering Mon–Fri.
  * - SEG_SAB: one 6-day pool (modeled as 6×1 work pattern for coverage days;
  *   suggestion policy still prefers 5×2 candidates elsewhere).
  * - CONTINUO_7D: **7 rotating 5×2 crews** — each calendar day 5 of 7 crews
- *   work, so dailyCoverage = 5 × crewSize and totalHC = 7 × crewSize.
+ *   work. Total HC is preserved exactly (no ceil×7 inflation); daily need ≈
+ *   round(total × 5/7).
  */
 export function distributeCrews(
   regime: RegimeFuncionamento,
@@ -123,30 +145,31 @@ export function distributeCrews(
   }
 
   // CONTINUO_7D: 7 rotating 5×2 crews.
-  // If requiredHeadcount is the *total* roster, crewSize = ceil(total/7)
-  // and daily coverage ≈ 5/7 of roster. If callers pass daily need, they
-  // should pass dailyNeed * 7/5 as requiredHeadcount first.
-  // Convention here: `requiredHeadcount` = total roster after scale factor.
+  // Convention: `requiredHeadcount` = total roster after scale factor.
+  // Allocate exactly that roster across T1…T7 (same as baseline calendar) —
+  // do NOT ceil(hc/7)*7, which invented heads for small CCs (ex. 1→7, 8→14).
   const crewCount = 7
-  const crewSize = Math.max(1, Math.ceil(hc / crewCount))
-  const totalHeadcount = crewSize * crewCount
-  const dailyCoverageNeed = crewSize * 5
-  const crews: TurmaCrew[] = []
+  const skeleton: TurmaCrew[] = []
 
   for (let i = 0; i < crewCount; i++) {
     // Stagger rest days: crew i rests on weekdays i and (i+1)%7
     const restA = WEEKDAYS_7D[i]
     const restB = WEEKDAYS_7D[(i + 1) % 7]
     const workDays = WEEKDAYS_7D.filter((d) => d !== restA && d !== restB)
-    crews.push({
+    skeleton.push({
       turmaIndex: i + 1,
       label: `Turma ${i + 1} (5×2 rotativa)`,
       escala: '5x2',
       workDays: [...workDays],
       restDays: [restA, restB],
-      headcount: crewSize,
+      headcount: 0,
     })
   }
+
+  const crews = crewsWithTotalHeadcount(skeleton, hc)
+  const totalHeadcount = hc
+  const dailyCoverageNeed =
+    hc === 0 ? 0 : Math.max(0, Math.round((hc * 5) / 7))
 
   return {
     regime: 'CONTINUO_7D',
@@ -156,7 +179,7 @@ export function distributeCrews(
     crews,
     note:
       'Operação contínua: 7 turmas 5×2 rotativas — a cada dia 5 de 7 turmas ' +
-      'trabalham (cobertura diária = 5 × tamanho da turma).',
+      'trabalham (cobertura diária ≈ HC × 5/7). HC total = requerido (sem inventar).',
   }
 }
 
