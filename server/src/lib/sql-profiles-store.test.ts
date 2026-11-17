@@ -45,6 +45,25 @@ describe("SqlProfilesStore", () => {
     assert.match(list[0]!.slots.REGRA_VT.mssql, /MRI_DtdInicioVigencia/);
   });
 
+  it("factory slots use TiposDiasPonto TIP_* (not TDP_*)", () => {
+    const slots = factoryDefaultSlots();
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /TIP_OplTrabalho/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /TIP_CdiTipoDiaPonto/);
+    for (const id of SQL_SLOT_IDS) {
+      for (const dialect of ["mssql", "oracle"] as const) {
+        const sql = slots[id][dialect];
+        assert.ok(
+          !sql.includes("TDP_OplTrabalho"),
+          `${id}/${dialect} still has TDP_OplTrabalho`,
+        );
+        assert.ok(
+          !sql.includes("TDP_CdiTipoDiaPonto"),
+          `${id}/${dialect} still has TDP_CdiTipoDiaPonto`,
+        );
+      }
+    }
+  });
+
   it("factory SQL passes SELECT-only for every slot/dialect", () => {
     const slots = factoryDefaultSlots();
     for (const id of SQL_SLOT_IDS) {

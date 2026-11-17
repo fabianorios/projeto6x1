@@ -2,7 +2,7 @@
  * Apdata → PayrollRow[] via /api/query/select (single-table) + client join.
  * LGPD: never selects CON_DssNome; centro_custo uses CCU_CosEstrutura.
  * VT: ConATransportes (CAS_DtdFim IS NULL) × MeiosTransportesItens;
- *     days = HorariosTiposDiasAT ∩ TDP_OplTrabalho=1. No ConCalculoATransportes.
+ *     days = HorariosTiposDiasAT ∩ TIP_OplTrabalho=1. No ConCalculoATransportes.
  */
 
 import { selectRows } from '../api/query'
@@ -367,8 +367,8 @@ export async function exportPayrollFromApdata(
     )
 
     const tipos = tiposRes.rows.map((r) => ({
-      id: num(r.TDP_CdiTipoDiaPonto) ?? 0,
-      trabalho: num(r.TDP_OplTrabalho) ?? 0,
+      id: num(r.TIP_CdiTipoDiaPonto) ?? 0,
+      trabalho: num(r.TIP_OplTrabalho) ?? 0,
     }))
     const jornadas = jornadasRes.rows.map((r) => ({
       horarioId: num(r.HRI_CdiHorario) ?? 0,
