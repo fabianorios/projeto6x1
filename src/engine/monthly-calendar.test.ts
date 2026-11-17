@@ -134,4 +134,17 @@ describe('baselineCrewsForCalendar', () => {
     assert.ok(crews[0].workDays.includes('seg'))
     assert.ok(crews[0].restDays.includes('dom'))
   })
+
+  it('CONTINUO_7D baseline keeps exact current HC across T1–T7', () => {
+    const crews = baselineCrewsForCalendar({
+      currentHeadcount: 8,
+      escalaAtual: '6x1',
+      regime: 'CONTINUO_7D',
+    })
+    assert.equal(crews.length, 7)
+    assert.equal(
+      crews.reduce((s, c) => s + c.headcount, 0),
+      8,
+    )
+  })
 })

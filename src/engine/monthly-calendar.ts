@@ -10,6 +10,8 @@ import {
 } from './coverage-days'
 import type { TurmaCrew } from './crew-distribution'
 import { distributeCrews } from './crew-distribution'
+
+export { crewsWithTotalHeadcount } from './crew-distribution'
 import { parseScale } from './scale'
 import type { ScaleCycle, ScenarioId } from './types'
 import { normalizeScenarioId } from './rules'
@@ -266,28 +268,14 @@ export function buildMonthCalendarMatrix(args: {
   }
 }
 
-/** Re-balance CONTINUO crews so total HC matches `total` (keep N turmas). */
-export function crewsWithTotalHeadcount(
-  crews: TurmaCrew[],
-  total: number,
-): TurmaCrew[] {
-  const n = crews.length
-  if (n === 0) return crews
-  const target = Math.max(0, Math.round(total))
-  if (target === 0) return crews.map((c) => ({ ...c, headcount: 0 }))
-  const base = Math.floor(target / n)
-  let rem = target - base * n
-  return crews.map((c) => {
-    const extra = rem > 0 ? 1 : 0
-    if (rem > 0) rem -= 1
-    return { ...c, headcount: base + extra }
-  })
-}
-
 /**
  * Baseline (Atual) crews for the monthly grid.
  * CONTINUO_7D → 7 rotating 5×2 turmas sized from current HC.
  * Otherwise → single pool from escala atual (5×2 / 6×1 weekdays).
+ *
+ * Labels stay generic here (`Baseline …` / `Turma N`); callers that show
+ * Quadro Atual should apply `formatTurmaLabel` / `applyTurmaHourLabels` so
+ * Atual matches Proposto (`09:00–17:00 · T1 · CC`).
  */
 export function baselineCrewsForCalendar(args: {
   currentHeadcount: number
@@ -296,8 +284,8 @@ export function baselineCrewsForCalendar(args: {
 }): TurmaCrew[] {
   const hc = Math.max(0, Math.round(args.currentHeadcount))
   if (args.regime === 'CONTINUO_7D') {
-    const dist = distributeCrews('CONTINUO_7D', Math.max(hc, 1))
-    return crewsWithTotalHeadcount(dist.crews, hc)
+    // distributeCrews already preserves exact HC across T1…T7.
+    return distributeCrews('CONTINUO_7D', hc).crews
   }
 
   const scale: ScaleCycle = parseScale(args.escalaAtual ?? '6x1')

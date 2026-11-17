@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { DEFAULT_OPERATING_HOURS, simulate } from './index'
 import {
   APDATA_HIERARCHY_SCHEMA_VERSION,
+  applyTurmaHourLabels,
   buildApdataHierarchy,
   buildBlockJornadaSteps,
   buildJornadaCandidates,
@@ -55,6 +56,24 @@ describe('apdata-hierarchy naming', () => {
       formatTurmaLabel(13, 21, 3, 'CC-OPS'),
       '13:00–21:00 · T3 · CC-OPS',
     )
+  })
+
+  it('applyTurmaHourLabels matches proposto prefix on baseline crews', () => {
+    const labeled = applyTurmaHourLabels(
+      [
+        {
+          turmaIndex: 1,
+          label: 'Baseline 6×1',
+          escala: '6x1',
+          workDays: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'],
+          restDays: ['dom'],
+          headcount: 1,
+        },
+      ],
+      [{ startHour: 9, endHour: 17 }],
+      'Geral',
+    )
+    assert.equal(labeled[0]?.label, '09:00–17:00 · T1 · Geral')
   })
 
   it('jornada/horario códigos follow clock + day keys', () => {

@@ -133,8 +133,30 @@ describe('crew distribution', () => {
     assert.ok(d.crews.every((c) => c.escala === '5x2'))
     assert.equal(d.crews[0].workDays.length, 5)
     assert.equal(d.crews[0].restDays.length, 2)
-    // daily coverage = 5 × crewSize
+    assert.equal(d.totalHeadcount, 35)
+    // daily coverage ≈ HC × 5/7 (exact when divisible by 7)
     assert.equal(d.dailyCoverageNeed, (d.totalHeadcount / 7) * 5)
+  })
+
+  it('CONTINUO_7D preserves exact HC (no ceil×7 invent)', () => {
+    const d1 = distributeCrews('CONTINUO_7D', 1)
+    assert.equal(d1.totalHeadcount, 1)
+    assert.equal(
+      d1.crews.reduce((s, c) => s + c.headcount, 0),
+      1,
+    )
+    assert.equal(d1.dailyCoverageNeed, 1)
+
+    const d8 = distributeCrews('CONTINUO_7D', 8)
+    assert.equal(d8.totalHeadcount, 8)
+    assert.equal(
+      d8.crews.reduce((s, c) => s + c.headcount, 0),
+      8,
+    )
+    // Must not inflate to 14 (old ceil(8/7)*7 bug that showed 1→2 per turma)
+    assert.ok(d8.crews.every((c) => c.headcount <= 2))
+    assert.equal(d8.crews.filter((c) => c.headcount === 2).length, 1)
+    assert.equal(d8.dailyCoverageNeed, Math.round((8 * 5) / 7))
   })
 })
 
