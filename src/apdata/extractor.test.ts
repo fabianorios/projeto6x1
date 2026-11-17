@@ -68,6 +68,29 @@ describe('extractor SQL (SPA)', () => {
     assert.match(oracle, /TBE_CdiTipoBeneficio/)
     assert.match(oracle, /beneficios_agg/)
   })
+
+  it('Oracle Folha dialect has LISTAGG/NVL and no MSSQL-only constructs', () => {
+    const oracle = getAptoolsExtractorScript('oracle')
+    const mssql = getAptoolsExtractorScript('mssql')
+    assert.match(oracle, /LISTAGG\s*\(/)
+    assert.match(oracle, /WITHIN GROUP\s*\(\s*ORDER BY/)
+    assert.match(oracle, /\bNVL\s*\(/)
+    assert.match(oracle, /\bCHR\s*\(\s*59\s*\)/)
+    assert.match(oracle, /\|\|/)
+    assert.match(oracle, /AS NUMBER/)
+    assert.match(oracle, /beneficios_agg/)
+    assert.match(oracle, /cnpj_completo/)
+    assert.match(oracle, /NOT IN \(0, 2, 3, 99\)/)
+    assert.ok(!/\bISNULL\s*\(/i.test(oracle), 'Oracle must not use ISNULL')
+    assert.ok(!/\bSTRING_AGG\s*\(/i.test(oracle), 'Oracle must not use STRING_AGG')
+    assert.ok(!/\bCHAR\s*\(/i.test(oracle), 'Oracle must use CHR not CHAR')
+    assert.ok(!/\bVARCHAR\s*\(/i.test(oracle), 'Oracle must not use VARCHAR(n)')
+    assert.ok(!/\bDECIMAL\s*\(/i.test(oracle), 'Oracle must use NUMBER not DECIMAL')
+    // MSSQL variant must keep its own dialect (do not break it).
+    assert.match(mssql, /STRING_AGG/)
+    assert.match(mssql, /\bISNULL\s*\(/)
+    assert.ok(!/\bLISTAGG\s*\(/i.test(mssql))
+  })
 })
 
 describe('mapExtractorAggregatesToPayroll', () => {

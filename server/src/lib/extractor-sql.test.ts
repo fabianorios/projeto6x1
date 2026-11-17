@@ -58,6 +58,28 @@ describe("extractor SQL", () => {
     assert.ok(oracle.includes("beneficios_agg"));
   });
 
+  it("Oracle Folha has LISTAGG/NVL and rejects MSSQL-only tokens", () => {
+    const oracle = getAptoolsExtractorScript("oracle");
+    const mssql = getAptoolsExtractorScript("mssql");
+    assert.match(oracle, /LISTAGG\s*\(/);
+    assert.match(oracle, /WITHIN GROUP\s*\(\s*ORDER BY/);
+    assert.match(oracle, /\bNVL\s*\(/);
+    assert.match(oracle, /\bCHR\s*\(\s*59\s*\)/);
+    assert.match(oracle, /\|\|/);
+    assert.match(oracle, /AS NUMBER/);
+    assert.match(oracle, /beneficios_agg/);
+    assert.match(oracle, /cnpj_completo/);
+    assert.match(oracle, /NOT IN \(0, 2, 3, 99\)/);
+    assert.ok(!/\bISNULL\s*\(/i.test(oracle));
+    assert.ok(!/\bSTRING_AGG\s*\(/i.test(oracle));
+    assert.ok(!/\bCHAR\s*\(/i.test(oracle));
+    assert.ok(!/\bVARCHAR\s*\(/i.test(oracle));
+    assert.ok(!/\bDECIMAL\s*\(/i.test(oracle));
+    assert.match(mssql, /STRING_AGG/);
+    assert.match(mssql, /\bISNULL\s*\(/);
+    assert.ok(!/\bLISTAGG\s*\(/i.test(mssql));
+  });
+
   it("uses TIP_* escalas with work_days x off_days concat", () => {
     const mssql = getAptoolsExtractorScript("mssql");
     const oracle = getAptoolsExtractorScript("oracle");

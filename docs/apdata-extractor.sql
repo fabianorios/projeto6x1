@@ -30,6 +30,8 @@
 
 /* ----------------------------------------------------------------------------
    [DIALETO 1] MICROSOFT SQL SERVER (MSSQL)
+   Run ONLY this block on SQL Server. Do NOT paste into Oracle Aptools.
+   Product UI: Extrair via Aptools → tab MSSQL (default).
    ---------------------------------------------------------------------------- */
 
 WITH CTE_VT_DIARIO AS (
@@ -217,6 +219,9 @@ ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo;
 
 /* ----------------------------------------------------------------------------
    [DIALETO 2] ORACLE DATABASE (APDATA SAAS ORACLE)
+   Run ONLY this block on Oracle. Uses NVL / CHR / VARCHAR2-via-TO_CHAR /
+   NUMBER / || / LISTAGG(... ) WITHIN GROUP — never ISNULL / CHAR / STRING_AGG / +.
+   Product UI: Extrair via Aptools → tab Oracle (SQL switches immediately).
    ---------------------------------------------------------------------------- */
 
 WITH CTE_VT_DIARIO AS (
