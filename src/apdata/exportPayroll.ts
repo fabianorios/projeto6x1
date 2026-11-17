@@ -473,6 +473,7 @@ export async function exportPayrollFromApdata(
       cnpjCompleto: string
       codEmpresa: string | null
       codFilial: string | null
+      codHorarioAtual: string | null
       salarioSum: number
       salarioN: number
       cargaMensal: number
@@ -622,11 +623,14 @@ export async function exportPayrollFromApdata(
       const codEmpresa =
         est?.empresaId != null ? String(est.empresaId) : null
       const codFilial = est?.localId != null ? String(est.localId) : null
-      // Include CNPJ so the same CC under two filiais stays separate.
+      const codHorarioAtual =
+        horarioId != null && horarioId > 0 ? String(horarioId) : null
+      // Filial → CC → horário: keep schedule slices distinct for Seção B / Quadro.
       const key = [
         estKey,
         cargo,
         centroCusto,
+        codHorarioAtual ?? '',
         String(cargaMensal),
         String(cargaSemanal),
         escala,
@@ -642,6 +646,7 @@ export async function exportPayrollFromApdata(
           cnpjCompleto: estKey,
           codEmpresa,
           codFilial,
+          codHorarioAtual,
           salarioSum: 0,
           salarioN: 0,
           cargaMensal,
@@ -715,6 +720,7 @@ export async function exportPayrollFromApdata(
         cnpjCompleto: agg.cnpjCompleto,
         codCc: agg.centroCusto,
         descCargo: agg.cargo,
+        codHorarioAtual: agg.codHorarioAtual,
         massaSalarialBase: salario * agg.quantidade,
       })
       line += 1
@@ -725,6 +731,11 @@ export async function exportPayrollFromApdata(
       if (ca !== 0) return ca
       const c = a.centroCusto.localeCompare(b.centroCusto, 'pt-BR')
       if (c !== 0) return c
+      const h = (a.codHorarioAtual ?? '').localeCompare(
+        b.codHorarioAtual ?? '',
+        'pt-BR',
+      )
+      if (h !== 0) return h
       return a.cargo.localeCompare(b.cargo, 'pt-BR')
     })
 

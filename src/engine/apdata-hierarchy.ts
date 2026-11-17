@@ -121,6 +121,8 @@ export interface ApdataHierarchyNode {
 
 export interface ApdataHierarchyCenter {
   centroCustoCodigo: string
+  /** Digits/formatted CNPJ so UI can nest Filial → CC → horário. */
+  cnpjCompleto: string | null
   regime: RegimeFuncionamento
   currentHeadcount: number
   requiredHeadcount: number
@@ -186,6 +188,8 @@ export interface ApdataHorarioCandidate {
   startHour: number
   endHour: number
   centroCustoCodigo: string
+  /** Filial CNPJ from Quadro / payroll (for Filial → CC nesting). */
+  cnpjCompleto: string | null
   escala: string
   turmaIndexes: number[]
   jornadaCodigos: string[]
@@ -651,7 +655,8 @@ export function deriveApdataCandidates(
           s.endHour,
           cc.centroCusto,
         )
-        const id = `${slugCc(cc.centroCusto)}::${workdayKey(work)}::${lead.escala}::${shiftKey}`
+        const cnpjKey = (cc.cnpjCompleto ?? '').replace(/\D/g, '')
+        const id = `${cnpjKey || '_'}::${slugCc(cc.centroCusto)}::${workdayKey(work)}::${lead.escala}::${shiftKey}`
         const existing = horarioMap.get(id)
         if (existing) {
           for (const c of crews) {
@@ -671,6 +676,7 @@ export function deriveApdataCandidates(
           startHour: s.startHour,
           endHour: s.endHour,
           centroCustoCodigo: cc.centroCusto,
+          cnpjCompleto: cc.cnpjCompleto ?? null,
           escala: lead.escala,
           turmaIndexes: crews.map((c) => c.turmaIndex).sort((a, b) => a - b),
           jornadaCodigos: [...jornadaCodigos],
@@ -679,13 +685,22 @@ export function deriveApdataCandidates(
     }
   }
 
+  const horarios = [...horarioMap.values()].sort((a, b) => {
+    const ca = (a.cnpjCompleto ?? '').replace(/\D/g, '')
+    const cb = (b.cnpjCompleto ?? '').replace(/\D/g, '')
+    if (ca !== cb) return ca.localeCompare(cb)
+    const ccCmp = a.centroCustoCodigo.localeCompare(b.centroCustoCodigo, 'pt-BR')
+    if (ccCmp !== 0) return ccCmp
+    return a.descricao.localeCompare(b.descricao, 'pt-BR')
+  })
+
   return {
     shift,
     shifts,
     meal,
     includeLunchDefault,
     jornadas,
-    horarios: [...horarioMap.values()],
+    horarios,
   }
 }
 
@@ -716,11 +731,12 @@ export function buildApdataHierarchy(
     selectedSet ? selectedSet.has(h.id) : true,
   )
   const selectedHorarioIds = selectedHorarios.map((h) => h.id)
-  const selectedByCc = new Map<string, ApdataHorarioCandidate[]>()
+  const selectedByFilialCc = new Map<string, ApdataHorarioCandidate[]>()
   for (const h of selectedHorarios) {
-    const list = selectedByCc.get(h.centroCustoCodigo) ?? []
+    const filialCc = `${(h.cnpjCompleto ?? '').replace(/\D/g, '')}\u0001${h.centroCustoCodigo}`
+    const list = selectedByFilialCc.get(filialCc) ?? []
     list.push(h)
-    selectedByCc.set(h.centroCustoCodigo, list)
+    selectedByFilialCc.set(filialCc, list)
   }
 
   const jornadasByCode = new Map<string, ApdataJornada>()
@@ -737,31 +753,62 @@ export function buildApdataHierarchy(
   const horariosByCode = new Map<string, ApdataHorario>()
   const ciclosByCode = new Map<string, ApdataCicloHorario>()
   const grades: ApdataGradeTurma[] = []
-  const centers: ApdataHierarchyCenter[] = []
   const centersIn = centersFromResult(result)
   const regimeRoot = result.distribuicaoTurmas.regime
   // Only keep jornadas actually bound to selected horários.
   const usedJornadaCodes = new Set<string>()
 
+  // Collapse horário slices → one CC section per Filial+CC.
+  const slicesByFilialCc = new Map<string, CostCenterResult[]>()
   for (const cc of centersIn) {
-    const dist = resolveDist(cc, result.distribuicaoTurmas)
-    const ccSlug = slugCc(cc.centroCusto)
+    const filialCcKey = `${(cc.cnpjCompleto ?? '').replace(/\D/g, '')}\u0001${cc.centroCusto}`
+    const list = slicesByFilialCc.get(filialCcKey) ?? []
+    list.push(cc)
+    slicesByFilialCc.set(filialCcKey, list)
+  }
+
+  const centers: ApdataHierarchyCenter[] = []
+  for (const [filialCcKey, slices] of slicesByFilialCc) {
+    const lead = slices[0]!
+    const ccSlug = slugCc(lead.centroCusto)
     const nodes: ApdataHierarchyNode[] = []
-    const ccHorarios = selectedByCc.get(cc.centroCusto) ?? []
+    let currentHeadcount = 0
+    let requiredHeadcount = 0
+    let dailyCoverageNeed = 0
+    let regime = resolveDist(lead, result.distribuicaoTurmas).regime
+
+    const ccHorarios =
+      selectedByFilialCc.get(filialCcKey) ??
+      selectedHorarios.filter((h) => h.centroCustoCodigo === lead.centroCusto)
+
+    // Build nodes once per Filial+CC; HC sums across horário slices.
+    for (const slice of slices) {
+      const dist = resolveDist(slice, result.distribuicaoTurmas)
+      currentHeadcount += slice.currentHeadcount
+      requiredHeadcount += slice.requiredHeadcount
+      dailyCoverageNeed += dist.dailyCoverageNeed
+      regime = dist.regime
+    }
+
+    // Use total required HC for crew→grade materialization under this CC.
+    const distAll = resolveDist(
+      { ...lead, requiredHeadcount },
+      result.distribuicaoTurmas,
+    )
 
     for (const cand of ccHorarios) {
       const candHours = shiftHours(cand.startHour, cand.endHour)
       if (!horariosByCode.has(cand.codigo)) {
         const weekly =
-          cc.cargaSemanalAtual != null && Number.isFinite(cc.cargaSemanalAtual)
-            ? cc.cargaSemanalAtual
+          lead.cargaSemanalAtual != null && Number.isFinite(lead.cargaSemanalAtual)
+            ? lead.cargaSemanalAtual
             : Math.round(candHours * cand.workDays.length * 10) / 10
         horariosByCode.set(cand.codigo, {
           codigo: cand.codigo,
           descricao: cand.descricao,
           jornadaCodigos: [...cand.jornadaCodigos],
           cargaSemanalHoras: weekly,
-          codHorarioAtualRef: cc.codHorarioAtual ?? null,
+          codHorarioAtualRef: lead.codHorarioAtual ?? null,
         })
       }
       const horario = horariosByCode.get(cand.codigo)!
@@ -771,7 +818,7 @@ export function buildApdataHierarchy(
         .map((code) => jornadasByCode.get(code))
         .filter((j): j is ApdataJornada => j != null)
 
-      const crewsForHorario = dist.crews.filter((c) =>
+      const crewsForHorario = distAll.crews.filter((c) =>
         cand.turmaIndexes.includes(c.turmaIndex),
       )
 
@@ -806,14 +853,14 @@ export function buildApdataHierarchy(
           turma: `T${crew.turmaIndex}`,
           turmaIndex: crew.turmaIndex,
           cicloCodigo,
-          centroCustoCodigo: cc.centroCusto,
+          centroCustoCodigo: lead.centroCusto,
           headcountProposto: Math.max(0, Math.round(crew.headcount)),
           tipoGrade,
           label: formatTurmaLabel(
             cand.startHour,
             cand.endHour,
             crew.turmaIndex,
-            cc.centroCusto,
+            lead.centroCusto,
           ),
         }
         grades.push(grade)
@@ -828,14 +875,22 @@ export function buildApdataHierarchy(
     }
 
     centers.push({
-      centroCustoCodigo: cc.centroCusto,
-      regime: dist.regime,
-      currentHeadcount: cc.currentHeadcount,
-      requiredHeadcount: cc.requiredHeadcount,
-      dailyCoverageNeed: dist.dailyCoverageNeed,
+      centroCustoCodigo: lead.centroCusto,
+      cnpjCompleto: lead.cnpjCompleto ?? null,
+      regime,
+      currentHeadcount,
+      requiredHeadcount,
+      dailyCoverageNeed,
       nodes,
     })
   }
+
+  centers.sort((a, b) => {
+    const ca = (a.cnpjCompleto ?? '').replace(/\D/g, '')
+    const cb = (b.cnpjCompleto ?? '').replace(/\D/g, '')
+    if (ca !== cb) return ca.localeCompare(cb)
+    return a.centroCustoCodigo.localeCompare(b.centroCustoCodigo, 'pt-BR')
+  })
 
   const catalogJornadas =
     usedJornadaCodes.size > 0

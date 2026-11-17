@@ -251,4 +251,28 @@ describe('simulate() v2 wiring', () => {
     assert.equal(cc.coberturaAtualPorDia!.seg, 14)
     assert.equal(cc.coberturaAtualPorDia!.dom, 0)
   })
+
+  it('splits same CC into horário slices (Filial → CC → horário)', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_horario_atual;cnpj_completo',
+      'Operador;2200;220;44;CC-A;5;6x1;10;12345678000190',
+      'Operador;2200;220;44;CC-A;3;6x1;20;12345678000190',
+      'Operador;2200;220;44;CC-B;2;5x2;30;12345678000190',
+    ].join('\n')
+    const { rows } = parsePayrollCsv(csv)
+    const r = simulate(
+      baseInput({
+        payrollRows: rows,
+        defaultRegimeFuncionamento: 'SEG_SEX',
+      }),
+    )
+    assert.equal(r.byCostCenter.length, 3)
+    assert.deepEqual(
+      r.byCostCenter.map((c) => `${c.centroCusto}:${c.codHorarioAtual}`),
+      ['CC-A:10', 'CC-A:20', 'CC-B:30'],
+    )
+    assert.equal(r.byCostCenter[0]!.currentHeadcount, 5)
+    assert.equal(r.byCostCenter[1]!.currentHeadcount, 3)
+    assert.equal(r.byCostCenter[2]!.currentHeadcount, 2)
+  })
 })

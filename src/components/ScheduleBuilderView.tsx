@@ -27,6 +27,11 @@ import {
   type TurmaCrew,
 } from '../engine'
 import { downloadEscalasTurmasExcel } from '../utils/exportExcel'
+import {
+  OPERACIONAL_SEM_CNPJ_KEY,
+  nestCentersByCc,
+} from '../utils/resultsDossier'
+import { cnpjDigits } from '../apdata/cnpj'
 
 export interface EditableTurmaRow {
   turmaIndex: number
@@ -48,6 +53,11 @@ interface ScheduleBuilderViewProps {
    * `null` / omitted = all centers from the simulation.
    */
   centroCustoFilter?: string[] | null
+  /**
+   * Digits-only CNPJ (or {@link OPERACIONAL_SEM_CNPJ_KEY}) for the Filial
+   * accordion — keeps the same CC code under another filial out of this nest.
+   */
+  cnpjFilter?: string | null
   /** Hide the outer title/export chrome when nested under a Filial accordion. */
   embedded?: boolean
 }
@@ -568,6 +578,7 @@ function CostCenterScheduleCard({
   month,
   mode,
   onModeChange,
+  nestedUnderCc = false,
 }: {
   cc: CostCenterResult
   operatingHours: OperatingHours
@@ -577,6 +588,8 @@ function CostCenterScheduleCard({
   month: number
   mode: QuadroMode
   onModeChange?: (m: QuadroMode) => void
+  /** When true, title is the horário (CC already shown as parent). */
+  nestedUnderCc?: boolean
 }) {
   const print = variant === 'print'
   const dist =
@@ -644,6 +657,9 @@ function CostCenterScheduleCard({
       : '—'
   const codLabel = cc.codHorarioAtual?.trim() || '—'
   const regimeLabel = REGIME_FUNCIONAMENTO_LABELS[regime]
+  const title = nestedUnderCc
+    ? `Horário ${codLabel}`
+    : cc.centroCusto
 
   return (
     <article
@@ -661,7 +677,7 @@ function CostCenterScheduleCard({
               : 'text-sm font-semibold text-[var(--color-ink)]'
           }
         >
-          {cc.centroCusto}
+          {title}
         </h4>
         <p
           className={
@@ -688,16 +704,29 @@ function CostCenterScheduleCard({
               : 'grid gap-2 text-xs sm:grid-cols-3'
           }
         >
-          <div>
-            <dt
-              className={
-                print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
-              }
-            >
-              Cód. horário (Apdata)
-            </dt>
-            <dd className="font-medium tabular-nums">{codLabel}</dd>
-          </div>
+          {!nestedUnderCc ? (
+            <div>
+              <dt
+                className={
+                  print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
+                }
+              >
+                Cód. horário (Apdata)
+              </dt>
+              <dd className="font-medium tabular-nums">{codLabel}</dd>
+            </div>
+          ) : (
+            <div>
+              <dt
+                className={
+                  print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
+                }
+              >
+                Centro de custo
+              </dt>
+              <dd className="font-medium tabular-nums">{cc.centroCusto}</dd>
+            </div>
+          )}
           <div>
             <dt
               className={
@@ -877,19 +906,35 @@ function CostCenterScheduleCard({
 /**
  * Escala Atual × Proposta: calendário mensal T/F por turma + cobertura diária.
  */
+function matchesCnpjFilter(
+  cc: CostCenterResult,
+  cnpjFilter: string | null | undefined,
+): boolean {
+  if (!cnpjFilter) return true
+  const dig = cnpjDigits(cc.cnpjCompleto)
+  if (cnpjFilter === OPERACIONAL_SEM_CNPJ_KEY) {
+    return dig.length < 8
+  }
+  return dig.length >= 8 && dig === cnpjFilter
+}
+
 export function ScheduleBuilderView({
   result,
   variant = 'interactive',
   centroCustoFilter = null,
+  cnpjFilter = null,
   embedded = false,
 }: ScheduleBuilderViewProps) {
   const allCenters = centersFromResult(result)
   const allowCc = centroCustoFilter?.length
     ? new Set(centroCustoFilter.map((x) => x.trim()))
     : null
-  const centers = allowCc
-    ? allCenters.filter((c) => allowCc.has(c.centroCusto.trim()))
-    : allCenters
+  const centers = allCenters.filter((c) => {
+    if (!matchesCnpjFilter(c, cnpjFilter)) return false
+    if (allowCc && !allowCc.has(c.centroCusto.trim())) return false
+    return true
+  })
+  const ccGroups = nestCentersByCc(centers)
   const print = variant === 'print'
   const defaults = defaultReferencePeriod(result.input.scenarioId)
   const [year, setYear] = useState(defaults.year)
@@ -990,36 +1035,63 @@ export function ScheduleBuilderView({
       ) : print ? (
         <div className="mt-3 space-y-4">
           {(['atual', 'proposto'] as const).map((m) => (
-            <div key={m} className="space-y-3">
-              {centers.map((cc) => (
-                <CostCenterScheduleCard
-                  key={`${m}-${cc.cnpjCompleto ?? ''}-${cc.centroCusto}`}
-                  cc={cc}
-                  operatingHours={result.input.operatingHours}
-                  shiftsPerDay={result.input.shiftsPerDay}
-                  variant="print"
-                  year={year}
-                  month={month}
-                  mode={m}
-                />
+            <div key={m} className="space-y-4">
+              {ccGroups.map((group) => (
+                <div
+                  key={`${m}-${group.centroCusto}`}
+                  className="space-y-2 border border-neutral-300 px-2 py-2"
+                >
+                  <h4 className="text-xs font-semibold tracking-wide uppercase">
+                    Centro de custo {group.centroCusto}
+                  </h4>
+                  {group.horarios.map((cc) => (
+                    <CostCenterScheduleCard
+                      key={`${m}-${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
+                      cc={cc}
+                      operatingHours={result.input.operatingHours}
+                      shiftsPerDay={result.input.shiftsPerDay}
+                      variant="print"
+                      year={year}
+                      month={month}
+                      mode={m}
+                      nestedUnderCc
+                    />
+                  ))}
+                </div>
               ))}
             </div>
           ))}
         </div>
       ) : (
         <div className="mt-3 space-y-4">
-          {centers.map((cc) => (
-            <CostCenterScheduleCard
-              key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}`}
-              cc={cc}
-              operatingHours={result.input.operatingHours}
-              shiftsPerDay={result.input.shiftsPerDay}
-              variant="interactive"
-              year={year}
-              month={month}
-              mode={mode}
-              onModeChange={setMode}
-            />
+          {ccGroups.map((group) => (
+            <div
+              key={group.centroCusto}
+              className="space-y-3 border border-[var(--color-line)] bg-[var(--color-surface)]/60 px-3 py-3"
+            >
+              <header>
+                <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                  Centro de custo {group.centroCusto}
+                </h4>
+                <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                  {group.horarios.length} horário(s) neste CC
+                </p>
+              </header>
+              {group.horarios.map((cc) => (
+                <CostCenterScheduleCard
+                  key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
+                  cc={cc}
+                  operatingHours={result.input.operatingHours}
+                  shiftsPerDay={result.input.shiftsPerDay}
+                  variant="interactive"
+                  year={year}
+                  month={month}
+                  mode={mode}
+                  onModeChange={setMode}
+                  nestedUnderCc
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

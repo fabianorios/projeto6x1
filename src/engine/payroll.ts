@@ -701,7 +701,10 @@ export function resolveBenefitDays(
   return { currentDays, proposedDays: estimatedTarget }
 }
 
-/** Aggregate imported rows by centro_custo (pre–HC-scale). */
+/**
+ * Aggregate imported rows by Filial (CNPJ) → centro_custo → horário
+ * (pre–HC-scale). Same CC under two CNPJs or two horários stays separate.
+ */
 export function aggregateByCostCenter(
   rows: PayrollRow[],
   resolveScale: (row: PayrollRow) => ScaleCycle,
@@ -724,12 +727,13 @@ export function aggregateByCostCenter(
   >()
 
   for (const row of rows) {
-    // Keep filiais separate when the same CC code exists under multiple CNPJs.
+    // Filial → CC → horário: keep each schedule slice distinct under its CC.
     const cnpjKey = (row.cnpjCompleto ?? '').replace(/\D/g, '')
+    const horarioKey = (row.codHorarioAtual ?? '').trim()
     const key =
       cnpjKey.length >= 8
-        ? `${cnpjKey}\u0001${row.centroCusto}`
-        : row.centroCusto
+        ? `${cnpjKey}\u0001${row.centroCusto}\u0001${horarioKey}`
+        : `${row.centroCusto}\u0001${horarioKey}`
     let agg = map.get(key)
     if (!agg) {
       agg = {
@@ -769,7 +773,7 @@ export function aggregateByCostCenter(
         heMediaMensalHoras: 0,
         regimeFuncionamento: row.regimeFuncionamento,
         cnpjCompleto: row.cnpjCompleto,
-        codHorarioAtual: null,
+        codHorarioAtual: horarioKey || null,
         escalaAtual: null,
         cargaSemanalAtual: null,
         vrDiaSum: 0,
@@ -910,10 +914,21 @@ export function aggregateByCostCenter(
             ? Math.round((cargaSemanalSum / rest.headcount) * 100) / 100
             : null,
         escalaAtual: dominantVote(escalaVotes),
-        codHorarioAtual: dominantVote(horarioVotes),
+        // Prefer the slice key horário; fall back to dominant vote if empty.
+        codHorarioAtual: rest.codHorarioAtual || dominantVote(horarioVotes),
       }),
     )
-    .sort((a, b) => a.centroCusto.localeCompare(b.centroCusto, 'pt-BR'))
+    .sort((a, b) => {
+      const ca = (a.cnpjCompleto ?? '').replace(/\D/g, '')
+      const cb = (b.cnpjCompleto ?? '').replace(/\D/g, '')
+      if (ca !== cb) return ca.localeCompare(cb)
+      const ccCmp = a.centroCusto.localeCompare(b.centroCusto, 'pt-BR')
+      if (ccCmp !== 0) return ccCmp
+      return (a.codHorarioAtual ?? '').localeCompare(
+        b.codHorarioAtual ?? '',
+        'pt-BR',
+      )
+    })
 }
 
 function dominantVote(votes: Map<string, number>): string | null {

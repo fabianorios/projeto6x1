@@ -149,6 +149,77 @@ export interface OperacionalFilialGroup {
   centers: CostCenterResult[]
 }
 
+/** CC bucket with horário slices nested underneath (never siblings of Filial). */
+export interface OperacionalCcGroup {
+  centroCusto: string
+  /** One entry per horário under this CC (sorted by codHorarioAtual). */
+  horarios: CostCenterResult[]
+}
+
+/** Sort key: Filial (CNPJ) → CC → horário. */
+export function compareFilialCcHorario(
+  a: CostCenterResult,
+  b: CostCenterResult,
+): number {
+  const ca = cnpjDigits(a.cnpjCompleto)
+  const cb = cnpjDigits(b.cnpjCompleto)
+  if (ca !== cb) return ca.localeCompare(cb)
+  const ccCmp = a.centroCusto
+    .trim()
+    .localeCompare(b.centroCusto.trim(), 'pt-BR')
+  if (ccCmp !== 0) return ccCmp
+  return (a.codHorarioAtual ?? '')
+    .trim()
+    .localeCompare((b.codHorarioAtual ?? '').trim(), 'pt-BR')
+}
+
+/**
+ * Nest horário slices under centro de custo (within one Filial).
+ * Same CC code with multiple horários → one CC group, many horário children.
+ */
+export function nestCentersByCc(
+  centers: CostCenterResult[],
+): OperacionalCcGroup[] {
+  const map = new Map<string, CostCenterResult[]>()
+  for (const c of centers) {
+    const key = c.centroCusto.trim() || 'SEM_CC'
+    const list = map.get(key) ?? []
+    list.push(c)
+    map.set(key, list)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+    .map(([centroCusto, list]) => ({
+      centroCusto,
+      horarios: [...list].sort((a, b) =>
+        (a.codHorarioAtual ?? '')
+          .trim()
+          .localeCompare((b.codHorarioAtual ?? '').trim(), 'pt-BR'),
+      ),
+    }))
+}
+
+export interface HierarchyFilialCcHorarioGroup {
+  key: string
+  label: string
+  centroCustos: OperacionalCcGroup[]
+}
+
+/**
+ * Full review tree: Filial → CC → horário.
+ * Used by Apdata hierarchy / Quadro nesting whenever CNPJ is present.
+ */
+export function groupFilialCcHorario(opts: {
+  centers: CostCenterResult[]
+  payrollRows?: PayrollRow[] | null
+}): HierarchyFilialCcHorarioGroup[] {
+  return groupOperacionalByCnpj(opts).map((g) => ({
+    key: g.key,
+    label: g.label,
+    centroCustos: nestCentersByCc(g.centers),
+  }))
+}
+
 /**
  * Group Seção 2 (Bloco Operacional) cost centers by Filial/CNPJ in scope.
  * Prefer `CostCenterResult.cnpjCompleto`; fall back to payroll establishment map.
@@ -203,6 +274,7 @@ export function groupOperacionalByCnpj(opts: {
 
   const groups = [...buckets.values()].map((g) => ({
     ...g,
+    centers: [...g.centers].sort(compareFilialCcHorario),
     centroCustos: [...g.centroCustos].sort((a, b) =>
       a.localeCompare(b, 'pt-BR'),
     ),

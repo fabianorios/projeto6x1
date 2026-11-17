@@ -288,6 +288,7 @@ function hierarchySheetRows(tree: ApdataHierarchyTree): string[] {
   lines.push(row([cell('=== Arvore (revisao) ===')]))
   lines.push(
     row([
+      cell('FilialCNPJ'),
       cell('CC'),
       cell('Turma'),
       cell('Jornada'),
@@ -305,6 +306,7 @@ function hierarchySheetRows(tree: ApdataHierarchyTree): string[] {
       const tf = node.ciclo.dias.map((d) => d.marca).join('')
       lines.push(
         row([
+          cell(center.cnpjCompleto ?? ''),
           cell(center.centroCustoCodigo),
           cell(g?.turma ?? ''),
           cell(node.jornadas.map((j) => j.codigo).join(', ') || node.jornada.codigo),
