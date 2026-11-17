@@ -37,6 +37,7 @@ import {
   expandAllDossier,
   OPERACIONAL_SEM_CNPJ_KEY,
   groupOperacionalByCnpj,
+  shouldShowFilialAccordion,
   summarizeOperacionalTurmas,
   type DossierOpenState,
   type DossierSectionId,
@@ -332,7 +333,11 @@ export function ResultsView({
           ],
     payrollRows: input.payrollRows,
   })
-  const multiFilial = operacionalGroups.length > 1
+  /** Accordion whenever ≥1 real Filial/CNPJ (not only when 2+). */
+  const filialAccordion = shouldShowFilialAccordion(operacionalGroups)
+  const multiFilial =
+    operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY)
+      .length > 1
 
   const topSuggestion = scheduleSuggestions[0]
   const proposedScaleLabel = ruleVersion.params.preserveCurrentScale
@@ -858,15 +863,18 @@ export function ResultsView({
           open={dossier.operacional}
           onToggle={() => toggleSection('operacional')}
           collapsedSummary={
-            multiFilial
-              ? `${operacionalGroups.length} filiais/CNPJ · ${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · HC ${distribuicaoTurmas.totalHeadcount}`
+            filialAccordion
+              ? `${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} filiais/CNPJ · ${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · HC ${distribuicaoTurmas.totalHeadcount}`
               : `${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`
           }
         >
-          {multiFilial ? (
+          {filialAccordion ? (
             <p className="text-xs text-[var(--color-muted)]">
-              Horários, jornadas e escalas agrupados por Filial/CNPJ do escopo
-              da simulação ({operacionalGroups.length} estabelecimentos).
+              Horários, jornadas e escalas por Filial/CNPJ
+              {multiFilial
+                ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
+                : ''}
+              . Cada filial abre/recolhe no acordeão abaixo.
             </p>
           ) : null}
 
@@ -874,7 +882,7 @@ export function ResultsView({
             <ExcludedScheduleNotice notice={excludedScheduleNotice} />
           ) : null}
 
-          {multiFilial ? (
+          {filialAccordion ? (
             <div className="space-y-3">
               {operacionalGroups.map((group, idx) => (
                 <OperacionalFilialPanel
@@ -894,9 +902,7 @@ export function ResultsView({
               group={operacionalGroups[0]}
               result={result}
               embeddedSchedule={false}
-              showFilialHeader={
-                operacionalGroups[0].key !== OPERACIONAL_SEM_CNPJ_KEY
-              }
+              showFilialHeader={false}
               scheduleSuggestions={scheduleSuggestions}
               scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
               recorded={recorded}
@@ -998,11 +1004,17 @@ function OperacionalFilialPanel({
     editedShifts?: EditedShiftFields[],
   ) => void
 }) {
+  // Controlled open — bare `open={defaultOpen}` stuck the first panel open.
+  const [open, setOpen] = useState(defaultOpen)
   const turmas = summarizeOperacionalTurmas(group.centers)
   return (
     <details
       className="border border-[var(--color-line)] bg-white/90"
-      open={defaultOpen}
+      open={open}
+      onToggle={(e) => {
+        const next = e.currentTarget.open
+        if (next !== open) setOpen(next)
+      }}
     >
       <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1016,7 +1028,7 @@ function OperacionalFilialPanel({
             </p>
           </div>
           <span className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-            Abrir / recolher
+            {open ? 'Recolher' : 'Expandir'}
           </span>
         </div>
       </summary>
