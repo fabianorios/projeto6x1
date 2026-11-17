@@ -392,10 +392,11 @@ describe('simulate() v2 wiring', () => {
 
   it('attaches coberturaAtualPorDia per cost center from payroll', () => {
     const csv = [
-      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_horario_atual',
-      'Operador;2200;220;44;Loja-01;14;6x1;42',
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_horario_atual;horario_trabalho_atual',
+      'Operador;2200;220;44;Loja-01;14;6x1;42;08:00-17:48',
     ].join('\n')
     const { rows } = parsePayrollCsv(csv)
+    assert.equal(rows[0].horarioTrabalhoAtual, '08:00-17:48')
     const r = simulate(
       baseInput({
         payrollRows: rows,
@@ -405,6 +406,7 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.byCostCenter.length, 1)
     const cc = r.byCostCenter[0]
     assert.equal(cc.codHorarioAtual, '42')
+    assert.equal(cc.horarioTrabalhoAtual, '08:00-17:48')
     assert.equal(cc.escalaAtual, '6x1')
     assert.equal(cc.cargaSemanalAtual, 44)
     assert.ok(cc.coberturaAtualPorDia)

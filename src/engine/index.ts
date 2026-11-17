@@ -32,6 +32,7 @@ export {
   detectPayrollDelimiter,
   emptyPayrollExtras,
   estimateWorkDaysPerMonth,
+  formatHorarioAtualLabel,
   parseNumberBr,
   parsePayrollCsv,
   resolveBenefitDays,

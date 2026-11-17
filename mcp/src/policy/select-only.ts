@@ -42,6 +42,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "Horarios",
   "HorariosJornadas",
   "Jornadas",
+  "JornadasItens",
+  "TiposJornadas",
   "TiposDiasPonto",
   "Contratados",
   "CentrosCustos",

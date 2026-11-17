@@ -344,6 +344,7 @@ export const SQL_SLOT_CONTRACT: Record<SqlSlotId, readonly string[]> = {
     'desc_cargo',
     'cod_vinculo',
     'cod_horario_atual',
+    'horario_trabalho_atual',
     'escala_atual',
     'carga_semanal_atual',
     'qtd_colaboradores',

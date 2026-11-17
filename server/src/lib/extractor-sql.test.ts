@@ -98,6 +98,25 @@ describe("extractor SQL", () => {
     assert.ok(/;\s*$/.test(mssql), "MSSQL Aptools may keep trailing ;");
   });
 
+  it("emits horario_trabalho_atual via JornadasItens JOI_* × TJO_OplTrabalhada", () => {
+    const mssql = getAptoolsExtractorScript("mssql");
+    const oracle = getAptoolsExtractorScript("oracle");
+    assert.match(mssql, /CTE_HORARIO_TRABALHO/);
+    assert.match(mssql, /JornadasItens/);
+    assert.match(mssql, /JOI_HrdHoraMinutoInicio/);
+    assert.match(mssql, /JOI_HrdHoraMinutoFim/);
+    assert.match(mssql, /TiposJornadas/);
+    assert.match(mssql, /TJO_OplTrabalhada/);
+    assert.match(mssql, /AS horario_trabalho_atual/);
+    assert.match(mssql, /HRI_CdiJornada/);
+    assert.ok(!mssql.includes("JIT_"));
+    assert.ok(!mssql.includes("OplConsiderarTrabalho"));
+    assert.match(oracle, /CTE_HORARIO_TRABALHO/);
+    assert.match(oracle, /JOI_HrdHoraMinutoInicio/);
+    assert.match(oracle, /AS horario_trabalho_atual/);
+    assert.match(oracle, /TO_CHAR\(MIN\(ji\.JOI_HrdHoraMinutoInicio\), 'HH24:MI'\)/);
+  });
+
   it("uses TIP_* escalas with work_days x off_days concat", () => {
     const mssql = getAptoolsExtractorScript("mssql");
     const oracle = getAptoolsExtractorScript("oracle");

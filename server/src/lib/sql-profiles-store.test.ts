@@ -52,6 +52,10 @@ describe("SqlProfilesStore", () => {
     assert.match(slots.FOLHA_E_ESCALAS.mssql, /CCU_D1sCentroCusto/);
     assert.match(slots.FOLHA_E_ESCALAS.mssql, /AS desc_cc/);
     assert.match(slots.FOLHA_E_ESCALAS.oracle, /AS desc_cc/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /CTE_HORARIO_TRABALHO/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /JOI_HrdHoraMinutoInicio/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /AS horario_trabalho_atual/);
+    assert.match(slots.FOLHA_E_ESCALAS.oracle, /AS horario_trabalho_atual/);
     for (const id of SQL_SLOT_IDS) {
       for (const dialect of ["mssql", "oracle"] as const) {
         const sql = slots[id][dialect];

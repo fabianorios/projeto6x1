@@ -4,6 +4,7 @@ import {
   buildFeedbackEntry,
   buildScenarioWhyBullets,
   centroCustoDisplayLabel,
+  formatHorarioAtualLabel,
   clearCalibrationHistory,
   defaultApdataDataInicio,
   downloadCalibrationJson,
@@ -924,7 +925,7 @@ export function ResultsView({
                               <td className="px-3 py-2 font-medium">
                                 {centroCustoDisplayLabel(c)}
                                 {c.codHorarioAtual?.trim()
-                                  ? ` · hor. ${c.codHorarioAtual.trim()}`
+                                  ? ` · hor. ${formatHorarioAtualLabel(c)}`
                                   : ''}
                               </td>
                               <td className="px-3 py-2 tabular-nums">
@@ -1261,10 +1262,10 @@ function OperacionalFilialBody({
                     c.cargaSemanalAtual != null
                       ? `${c.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
                       : '—'
-                  const cod = c.codHorarioAtual?.trim() || '—'
+                  const cod = formatHorarioAtualLabel(c)
                   return (
                     <li
-                      key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${cod}`}
+                      key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${c.codHorarioAtual?.trim() || '—'}`}
                     >
                       Horário {cod} · escala {escala} · carga {carga}
                       {d

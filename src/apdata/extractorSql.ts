@@ -90,6 +90,29 @@ CTE_CICLO_HORARIO AS (
       AND ISNULL(hciclo.HOR_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
+CTE_HORARIO_TRABALHO AS (
+    SELECT
+        hj.HRI_CdiHorario,
+        CONVERT(varchar(5), MIN(ji.JOI_HrdHoraMinutoInicio), 108) AS entrada,
+        CONVERT(varchar(5), MAX(ji.JOI_HrdHoraMinutoFim), 108) AS saida
+    FROM HorariosJornadas hj
+    INNER JOIN TiposDiasPonto tdp
+        ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN Jornadas j
+        ON j.JOR_CdiJornada = hj.HRI_CdiJornada
+    INNER JOIN JornadasItens ji
+        ON ji.JOI_CdiJornada = j.JOR_CdiJornada
+    INNER JOIN TiposJornadas tj
+        ON tj.TJO_CdiTipoJornada = ji.JOI_CdiTipoJornada
+    WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
+      AND ISNULL(ji.JOI_OplDesativado, 0) = 0
+      AND ISNULL(tdp.TIP_OplTrabalho, 0) = 1
+      AND (
+            ISNULL(tj.TJO_OplTrabalhada, 0) = 1
+         OR tj.TJO_CdiTipoJornada = 1
+          )
+    GROUP BY hj.HRI_CdiHorario
+),
 CTE_BEN_CONTRATO AS (
     SELECT
         cbn.CBN_CdiContratado,
@@ -182,6 +205,7 @@ SELECT
     ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20)) AS cod_vinculo,
     CAST(ISNULL(c.CON_CdiHorario, 0) AS VARCHAR(20)) AS cod_horario_atual,
+    ${SANITIZE_MSSQL("CASE WHEN ht.entrada IS NOT NULL AND ht.saida IS NOT NULL THEN ht.entrada + '-' + ht.saida ELSE NULL END", '')} AS horario_trabalho_atual,
     ISNULL(
         CAST(cic.work_days AS VARCHAR(10)) + 'x' + CAST(cic.off_days AS VARCHAR(10)),
         'other'
@@ -208,6 +232,7 @@ LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
+LEFT JOIN CTE_HORARIO_TRABALHO ht ON ht.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
@@ -231,7 +256,8 @@ GROUP BY
     ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')},
     c.CON_CdiCargo, ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
-    ISNULL(h.HOR_QtnHorasSemanal, 44.0)
+    ISNULL(h.HOR_QtnHorasSemanal, 44.0),
+    ht.entrada, ht.saida
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()
 
@@ -260,6 +286,29 @@ CTE_CICLO_HORARIO AS (
         ON hciclo.HOR_CdiHorario = hj.HRI_CdiHorario
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
       AND NVL(hciclo.HOR_OplDesativado, 0) = 0
+    GROUP BY hj.HRI_CdiHorario
+),
+CTE_HORARIO_TRABALHO AS (
+    SELECT
+        hj.HRI_CdiHorario,
+        TO_CHAR(MIN(ji.JOI_HrdHoraMinutoInicio), 'HH24:MI') AS entrada,
+        TO_CHAR(MAX(ji.JOI_HrdHoraMinutoFim), 'HH24:MI') AS saida
+    FROM HorariosJornadas hj
+    INNER JOIN TiposDiasPonto tdp
+        ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN Jornadas j
+        ON j.JOR_CdiJornada = hj.HRI_CdiJornada
+    INNER JOIN JornadasItens ji
+        ON ji.JOI_CdiJornada = j.JOR_CdiJornada
+    INNER JOIN TiposJornadas tj
+        ON tj.TJO_CdiTipoJornada = ji.JOI_CdiTipoJornada
+    WHERE NVL(hj.HRI_OplDesativado, 0) = 0
+      AND NVL(ji.JOI_OplDesativado, 0) = 0
+      AND NVL(tdp.TIP_OplTrabalho, 0) = 1
+      AND (
+            NVL(tj.TJO_OplTrabalhada, 0) = 1
+         OR tj.TJO_CdiTipoJornada = 1
+          )
     GROUP BY hj.HRI_CdiHorario
 ),
 CTE_BEN_CONTRATO AS (
@@ -354,6 +403,7 @@ SELECT
     ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0)) AS cod_vinculo,
     TO_CHAR(NVL(c.CON_CdiHorario, 0)) AS cod_horario_atual,
+    ${SANITIZE_ORACLE("CASE WHEN ht.entrada IS NOT NULL AND ht.saida IS NOT NULL THEN ht.entrada || '-' || ht.saida ELSE NULL END", '')} AS horario_trabalho_atual,
     NVL(
         TO_CHAR(cic.work_days) || 'x' || TO_CHAR(cic.off_days),
         'other'
@@ -380,6 +430,7 @@ LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
+LEFT JOIN CTE_HORARIO_TRABALHO ht ON ht.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
 LEFT JOIN CTE_BENEFICIOS_AGG ben
     ON ben.EMP_CdiEmpresa = e.EMP_CdiEmpresa
@@ -403,7 +454,8 @@ GROUP BY
     ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')},
     c.CON_CdiCargo, ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
-    NVL(h.HOR_QtnHorasSemanal, 44.0)
+    NVL(h.HOR_QtnHorasSemanal, 44.0),
+    ht.entrada, ht.saida
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()
 

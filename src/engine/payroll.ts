@@ -33,6 +33,7 @@ export const PAYROLL_CSV_HEADERS = [
   'desc_cargo',
   'cod_vinculo',
   'cod_horario_atual',
+  'horario_trabalho_atual',
   'carga_semanal_atual',
   'qtd_colaboradores',
   'massa_salarial_base',
@@ -94,6 +95,8 @@ export interface PayrollRow {
   descCargo: string | null
   codVinculo: string | null
   codHorarioAtual: string | null
+  /** Current work window HH:MM-HH:MM from JornadasItens (optional). */
+  horarioTrabalhoAtual: string | null
   /** Existing overtime hours/month (cascade input). */
   heMediaMensalHoras: number
   regimeFuncionamento: RegimeFuncionamento | null
@@ -139,6 +142,7 @@ export function emptyPayrollExtras(): Pick<
   | 'descCargo'
   | 'codVinculo'
   | 'codHorarioAtual'
+  | 'horarioTrabalhoAtual'
   | 'heMediaMensalHoras'
   | 'regimeFuncionamento'
   | 'massaSalarialBase'
@@ -163,6 +167,7 @@ export function emptyPayrollExtras(): Pick<
     descCargo: null,
     codVinculo: null,
     codHorarioAtual: null,
+    horarioTrabalhoAtual: null,
     heMediaMensalHoras: 0,
     regimeFuncionamento: null,
     massaSalarialBase: null,
@@ -599,6 +604,7 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       descCargo,
       codVinculo: cell(cols, 'cod_vinculo') || null,
       codHorarioAtual: cell(cols, 'cod_horario_atual') || null,
+      horarioTrabalhoAtual: cell(cols, 'horario_trabalho_atual') || null,
       heMediaMensalHoras,
       regimeFuncionamento,
       massaSalarialBase,
@@ -679,10 +685,24 @@ export interface CostCenterTotals {
   cnpjCompleto: string | null
   /** Dominant Apdata schedule code (by headcount). */
   codHorarioAtual: string | null
+  /** Work window HH:MM-HH:MM for the horário slice (optional). */
+  horarioTrabalhoAtual: string | null
   /** Dominant escala_atual label (by headcount). */
   escalaAtual: string | null
   /** Headcount-weighted average weekly hours. */
   cargaSemanalAtual: number | null
+}
+
+/** Prefer `cod · HH:MM–HH:MM` when the Folha window is present. */
+export function formatHorarioAtualLabel(opts: {
+  codHorarioAtual?: string | null
+  horarioTrabalhoAtual?: string | null
+}): string {
+  const cod = (opts.codHorarioAtual ?? '').trim() || '—'
+  const win = (opts.horarioTrabalhoAtual ?? '')
+    .trim()
+    .replace(/-/g, '–')
+  return win ? `${cod} · ${win}` : cod
 }
 
 /**
@@ -795,6 +815,7 @@ export function aggregateByCostCenter(
         regimeFuncionamento: row.regimeFuncionamento,
         cnpjCompleto: row.cnpjCompleto,
         codHorarioAtual: horarioKey || null,
+        horarioTrabalhoAtual: row.horarioTrabalhoAtual?.trim() || null,
         escalaAtual: null,
         cargaSemanalAtual: null,
         vrDiaSum: 0,
@@ -838,6 +859,9 @@ export function aggregateByCostCenter(
     }
     if (!agg.descCc && row.descCc?.trim()) {
       agg.descCc = row.descCc.trim()
+    }
+    if (!agg.horarioTrabalhoAtual && row.horarioTrabalhoAtual?.trim()) {
+      agg.horarioTrabalhoAtual = row.horarioTrabalhoAtual.trim()
     }
 
     if (row.vrValorDia !== null) {
