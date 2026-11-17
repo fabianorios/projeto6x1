@@ -8,7 +8,10 @@
 
 export { simulate } from "../../../src/engine/simulate";
 export { DEFAULT_OPERATING_HOURS } from "../../../src/engine/operating-hours";
-export { emptyPayrollExtras } from "../../../src/engine/payroll";
+export {
+  emptyPayrollExtras,
+  parsePayrollCsv,
+} from "../../../src/engine/payroll";
 export { buildApdataHierarchy } from "../../../src/engine/apdata-hierarchy";
 export { mapExtractorAggregatesToPayroll } from "../../../src/apdata/mapExtractorRows";
 export {
@@ -25,7 +28,11 @@ export type {
   SimulationResult,
   ScenarioId,
 } from "../../../src/engine/types";
-export type { PayrollRow } from "../../../src/engine/payroll";
+export type {
+  PayrollParseIssue,
+  PayrollParseResult,
+  PayrollRow,
+} from "../../../src/engine/payroll";
 export type { OperatingHours } from "../../../src/engine/operating-hours";
 export type { ExtractorAggregate } from "../../../src/apdata/mapExtractorRows";
 export type {

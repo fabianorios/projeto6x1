@@ -1,5 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import {
+  isFolhaAptoolsNetworkFailure,
+  postFolhaAptoolsFile,
+  type FolhaAptoolsProgressStage,
+} from '../api/folhaAptools'
+import {
   getAptoolsExtractorScript,
   type ExtractorDialect,
 } from '../apdata/extractorSql'
@@ -15,12 +20,30 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
 
 interface AptoolsExtractModalProps {
   onClose: () => void
-  /** When set, CSV drop/picker parses and hands rows to the parent (wizard / Apdata flow). */
+  /** When set, CSV drop/picker parses (server preferred) and hands rows to the parent. */
   onImported?: (rows: PayrollRow[], issues: PayrollParseIssue[]) => void
+}
+
+type ImportProgress = {
+  stage: FolhaAptoolsProgressStage | 'local'
+  label: string
+  pct: number
+}
+
+const PROGRESS: Record<FolhaAptoolsProgressStage | 'local', ImportProgress> = {
+  upload: { stage: 'upload', label: 'Enviando arquivo…', pct: 30 },
+  parse: { stage: 'parse', label: 'Processando no servidor…', pct: 70 },
+  done: { stage: 'done', label: 'Finalizando…', pct: 95 },
+  local: {
+    stage: 'local',
+    label: 'Processando neste navegador…',
+    pct: 70,
+  },
 }
 
 /**
  * Modal: Extrair via Aptools — 3 passos (banco → colar/exportar → TXT/CSV).
+ * File import prefers POST /api/folha/aptools (no full client parse on large bases).
  */
 export function AptoolsExtractModal({
   onClose,
@@ -34,7 +57,9 @@ export function AptoolsExtractModal({
   const [copyError, setCopyError] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importOk, setImportOk] = useState<string | null>(null)
+  const [importNotice, setImportNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [sql, setSql] = useState(() => getAptoolsExtractorScript(dialect))
 
@@ -86,20 +111,61 @@ export function AptoolsExtractModal({
     }
   }
 
+  async function importLocalFallback(file: File): Promise<{
+    rows: PayrollRow[]
+    issues: PayrollParseIssue[]
+  }> {
+    setProgress(PROGRESS.local)
+    const { text } = await readCsvFileText(file)
+    const t0 = performance.now()
+    const { rows, issues } = parsePayrollTolerant(text)
+    logPerf('parse-folha', performance.now() - t0, {
+      rowCount: rows.length,
+      issueCount: issues.length,
+      charCount: text.length,
+      via: 'local-fallback',
+    })
+    return { rows, issues }
+  }
+
   async function importCsvFile(file: File | null) {
     if (!file || !onImported) return
     setBusy(true)
     setImportError(null)
     setImportOk(null)
+    setImportNotice(null)
+    setProgress(PROGRESS.upload)
+    const t0 = performance.now()
     try {
-      const { text } = await readCsvFileText(file)
-      const t0 = performance.now()
-      const { rows, issues } = parsePayrollTolerant(text)
-      logPerf('parse-folha', performance.now() - t0, {
-        rowCount: rows.length,
-        issueCount: issues.length,
-        charCount: text.length,
-      })
+      let rows: PayrollRow[]
+      let issues: PayrollParseIssue[]
+      let via: 'api' | 'local-fallback' = 'api'
+
+      try {
+        const remote = await postFolhaAptoolsFile(file, {
+          onStage: (stage) => setProgress(PROGRESS[stage]),
+        })
+        rows = remote.payrollRows
+        issues = remote.parseWarnings ?? []
+        logPerf('parse-folha', performance.now() - t0, {
+          rowCount: remote.rowCount,
+          issueCount: remote.issueCount,
+          via: 'api',
+          apiLatencyMs: remote.latencyMs.total,
+        })
+      } catch (err) {
+        if (!isFolhaAptoolsNetworkFailure(err)) {
+          throw err
+        }
+        via = 'local-fallback'
+        const local = await importLocalFallback(file)
+        rows = local.rows
+        issues = local.issues
+        setImportNotice(
+          'API de Folha indisponível — arquivo processado localmente neste navegador.',
+        )
+      }
+
       if (rows.length === 0) {
         setImportError(
           issues[0]?.message ??
@@ -109,12 +175,17 @@ export function AptoolsExtractModal({
       }
       onImported(rows, issues)
       setImportOk(
-        `Importadas ${rows.length} linha(s)${issues.length ? ` · ${issues.length} aviso(s)` : ''}.`,
+        `Importadas ${rows.length} linha(s)${issues.length ? ` · ${issues.length} aviso(s)` : ''}${via === 'api' ? ' · servidor' : ' · local'}.`,
       )
-    } catch {
-      setImportError('Não foi possível ler o arquivo TXT/CSV.')
+    } catch (err) {
+      setImportError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível ler o arquivo TXT/CSV.',
+      )
     } finally {
       setBusy(false)
+      setProgress(null)
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -233,7 +304,8 @@ export function AptoolsExtractModal({
             </p>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
               Exporte o resultado no Aptools em formato TXT (separado por TAB) ou
-              CSV e arraste o arquivo aqui (sem PII — só agregados).
+              CSV e arraste o arquivo aqui (sem PII — só agregados). O parse
+              roda no servidor em bases grandes.
             </p>
           </li>
 
@@ -248,6 +320,7 @@ export function AptoolsExtractModal({
                   role="button"
                   tabIndex={0}
                   aria-label="Arraste o TXT ou CSV ou escolha um arquivo"
+                  aria-busy={busy || undefined}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
@@ -280,12 +353,28 @@ export function AptoolsExtractModal({
                 >
                   <p className="text-sm text-[var(--color-ink)]">
                     {busy
-                      ? 'Importando…'
+                      ? progress?.label ?? 'Importando…'
                       : 'Exporte o resultado no Aptools em formato TXT (separado por TAB) ou CSV e arraste o arquivo aqui'}
                   </p>
                   <p className="mt-1 text-xs text-[var(--color-muted)]">
-                    A importação atualiza o wizard sem fechar o fluxo Aptools.
+                    Upload para a API — sem parse completo no navegador em bases
+                    grandes.
                   </p>
+                  {busy && progress ? (
+                    <div
+                      className="mx-auto mt-4 h-2 w-full max-w-sm overflow-hidden rounded-sm bg-[var(--color-line)]"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={progress.pct}
+                      aria-label={progress.label}
+                    >
+                      <div
+                        className="h-full bg-[var(--color-accent)] transition-[width] duration-300 ease-out"
+                        style={{ width: `${progress.pct}%` }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <input
                   ref={fileRef}
@@ -298,6 +387,9 @@ export function AptoolsExtractModal({
                     void importCsvFile(e.target.files?.[0] ?? null)
                   }
                 />
+                {importNotice ? (
+                  <p className="text-xs text-amber-900">{importNotice}</p>
+                ) : null}
                 {importError ? (
                   <p className="text-xs text-red-700">{importError}</p>
                 ) : null}
