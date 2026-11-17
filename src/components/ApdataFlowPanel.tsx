@@ -1856,6 +1856,106 @@ function SimulateProgressBar({
   )
 }
 
+function truncateSqlOneLine(sql: string, max = 72): string {
+  const one = sql.replace(/\s+/g, ' ').trim()
+  if (one.length <= max) return one
+  return `${one.slice(0, max - 1)}…`
+}
+
+function ProgressStepRow({ step }: { step: ExportProgressStep }) {
+  const [sqlOpen, setSqlOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState<string | null>(null)
+
+  const mark =
+    step.status === 'done'
+      ? '✓'
+      : step.status === 'running'
+        ? '…'
+        : step.status === 'error'
+          ? '✗'
+          : '○'
+
+  const hasSql = Boolean(step.sql && step.status === 'done')
+
+  async function copySql() {
+    if (!step.sql) return
+    setCopyError(null)
+    try {
+      await navigator.clipboard.writeText(step.sql)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setSqlOpen(true)
+      setCopyError(
+        'Não foi possível copiar automaticamente — abra Ver SQL, selecione o texto e use Ctrl+C.',
+      )
+    }
+  }
+
+  return (
+    <li className="border-b border-[var(--color-line)]/50 py-1.5 text-sm">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span
+          className={[
+            'w-4 shrink-0 font-mono',
+            step.status === 'done'
+              ? 'text-[var(--color-accent)]'
+              : step.status === 'error'
+                ? 'text-red-700'
+                : 'text-[var(--color-muted)]',
+          ].join(' ')}
+          aria-hidden
+        >
+          {mark}
+        </span>
+        <p className="min-w-0 flex-1 text-[var(--color-ink)]">
+          <span className="font-medium">{step.label}</span>
+          {step.detail ? (
+            <span className="text-[var(--color-muted)]">
+              {' · '}
+              {step.detail}
+            </span>
+          ) : null}
+        </p>
+        {hasSql ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-[55%]">
+            <code
+              className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--color-muted)]"
+              title={truncateSqlOneLine(step.sql!, 240)}
+            >
+              {truncateSqlOneLine(step.sql!)}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copySql()}
+              className="shrink-0 border border-[var(--color-line)] bg-white px-2 py-0.5 text-[11px] text-[var(--color-ink)] hover:border-[var(--color-accent)]"
+            >
+              {copied ? 'Copiado!' : 'Copiar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSqlOpen((o) => !o)}
+              aria-expanded={sqlOpen}
+              className="shrink-0 border border-[var(--color-line)] bg-white px-2 py-0.5 text-[11px] text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            >
+              {sqlOpen ? 'Ocultar' : 'Ver SQL'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {copyError ? (
+        <p className="mt-1 pl-6 text-xs text-amber-900">{copyError}</p>
+      ) : null}
+      {hasSql && sqlOpen ? (
+        <pre className="mt-1 ml-6 max-h-40 overflow-auto bg-[var(--color-ink)]/90 p-2 text-[10px] leading-snug text-[var(--color-accent-soft)]">
+          {step.sql}
+        </pre>
+      ) : null}
+    </li>
+  )
+}
+
 function ProgressList({ steps }: { steps: ExportProgressStep[] }) {
   if (steps.length === 0) {
     return (
@@ -1863,48 +1963,10 @@ function ProgressList({ steps }: { steps: ExportProgressStep[] }) {
     )
   }
   return (
-    <ol className="mt-2 space-y-1.5">
-      {steps.map((s) => {
-        const mark =
-          s.status === 'done'
-            ? '✓'
-            : s.status === 'running'
-              ? '…'
-              : s.status === 'error'
-                ? '✗'
-                : '○'
-        return (
-          <li
-            key={s.id}
-            className="flex gap-2 border-b border-[var(--color-line)]/50 py-1.5 text-sm"
-          >
-            <span
-              className={[
-                'w-4 shrink-0 font-mono',
-                s.status === 'done'
-                  ? 'text-[var(--color-accent)]'
-                  : s.status === 'error'
-                    ? 'text-red-700'
-                    : 'text-[var(--color-muted)]',
-              ].join(' ')}
-              aria-hidden
-            >
-              {mark}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[var(--color-ink)]">{s.label}</p>
-              {s.detail && (
-                <p className="text-xs text-[var(--color-muted)]">{s.detail}</p>
-              )}
-              {s.sql && s.status === 'done' && (
-                <pre className="mt-1 overflow-x-auto bg-[var(--color-ink)]/90 p-2 text-[10px] leading-snug text-[var(--color-accent-soft)]">
-                  {s.sql}
-                </pre>
-              )}
-            </div>
-          </li>
-        )
-      })}
+    <ol className="mt-2 space-y-0">
+      {steps.map((s) => (
+        <ProgressStepRow key={s.id} step={s} />
+      ))}
     </ol>
   )
 }
