@@ -9,6 +9,8 @@ import {
   type SimulationResult,
 } from '../engine'
 import { getTemplate } from '../templates'
+import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
+import { HcIncreaseSummary } from './HcIncreaseSummary'
 import { ScheduleBuilderView } from './ScheduleBuilderView'
 import { ScenarioBasketCompare } from './ScenarioBasketCompare'
 import {
@@ -124,6 +126,7 @@ export function PrintableReport({
     scheduleHint,
   })
   const scenarioWhyBullets = buildScenarioWhyBullets(result)
+  const hcIncreaseSummary = buildHcIncreaseSummary(result)
 
   return (
     <article className="print-only report-sheet mx-auto max-w-[210mm] bg-white text-black">
@@ -189,6 +192,10 @@ export function PrintableReport({
           variant="print"
         />
       </section>
+
+      {hcIncreaseSummary ? (
+        <HcIncreaseSummary summary={hcIncreaseSummary} variant="print" />
+      ) : null}
 
       <section className="mt-6 text-xs">
         <h2 className="text-base font-semibold tracking-wide uppercase">

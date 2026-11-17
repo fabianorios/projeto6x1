@@ -33,6 +33,7 @@ import {
   formatSignedExecutiveNumber,
 } from '../utils/executiveKpi'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
+import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
 import {
   DEFAULT_DOSSIER_OPEN,
   collapseAllDossier,
@@ -49,6 +50,7 @@ import {
 } from '../utils/resultsDossier'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
+import { HcIncreaseSummary } from './HcIncreaseSummary'
 import { PrintableReport } from './PrintableReport'
 import { ScheduleBuilderView } from './ScheduleBuilderView'
 import { ScenarioBasketCompare } from './ScenarioBasketCompare'
@@ -375,6 +377,7 @@ export function ResultsView({
   const showMultiBasket = proposedCount >= 2
   const showSidePanel = proposedCount < 2
   const scenarioWhyBullets = buildScenarioWhyBullets(result)
+  const hcIncreaseSummary = buildHcIncreaseSummary(result)
   const folhaDir = deltaDirection(cost.monthlyDelta)
   const folhaToneClass =
     folhaDir.tone === 'up'
@@ -737,6 +740,10 @@ export function ResultsView({
             bullets={scenarioWhyBullets}
             scenarioLabel={ruleVersion.label}
           />
+
+          {hcIncreaseSummary ? (
+            <HcIncreaseSummary summary={hcIncreaseSummary} />
+          ) : null}
 
           <div className="border border-[var(--color-line)] bg-white/70">
             <button
