@@ -243,6 +243,55 @@ function normalizeClock(h: number): number {
   return Math.round(wrapped * 100) / 100
 }
 
+/**
+ * Quadro Proposto default entrada/saída for one coverage day.
+ * Mirrors ScheduleBuilder: full window when ≤10h; otherwise first 8h from open.
+ * 24h ops → 00:00–08:00; closed → 08:00–17:00 fallback.
+ */
+export function defaultShiftWindow(
+  day: DayOperatingHours,
+): { startHour: number; endHour: number; hours: number } {
+  if (day.closed) return { startHour: 8, endHour: 17, hours: 8 }
+  if (day.openHour === day.closeHour) {
+    return { startHour: 0, endHour: 8, hours: 8 }
+  }
+  const span = coverageSpanHours(day)
+  const end =
+    span > 10 ? day.openHour + 8 : day.closeHour === 0 ? 24 : day.closeHour
+  const endHour = end > 24 ? end - 24 : end
+  const hours = Math.round(shiftSpanHours(day.openHour, endHour) * 100) / 100
+  return { startHour: day.openHour, endHour, hours }
+}
+
+function shiftSpanHours(startHour: number, endHour: number): number {
+  if (startHour === endHour) return 24
+  if (endHour > startHour) return endHour - startHour
+  return 24 - startHour + endHour
+}
+
+/**
+ * Resolve work-shift windows from establishment hours + turnos/dia.
+ * - 1 turno: Quadro-aligned single window (`defaultShiftWindow`)
+ * - 2+ turnos: `tileCoverageWindow` tiles (≤ turnos/dia), never invent clocks
+ */
+export function resolveShiftWindows(
+  hours: OperatingHours,
+  shiftsPerDay: number,
+  maxHours = 10,
+  preferredBlockHours = 8,
+): { startHour: number; endHour: number; hours: number }[] {
+  const day = widestCoverageDay(hours)
+  const n = Math.max(1, Math.floor(Number.isFinite(shiftsPerDay) ? shiftsPerDay : 1))
+  if (n <= 1) {
+    return [defaultShiftWindow(day)]
+  }
+  const tiles = tileCoverageWindow(day, maxHours, preferredBlockHours)
+  if (tiles.length === 0) {
+    return [defaultShiftWindow(day)]
+  }
+  return tiles.slice(0, n)
+}
+
 /** Short summary for UI/report (default + optional weekday notes). */
 export function summarizeOperatingHours(hours: OperatingHours): string {
   const base = `Funcionamento ${formatOperatingWindow(hours.default)}`

@@ -9,6 +9,7 @@ import {
   coberturaPropostaFromCrews,
   compareCoverageDay,
   defaultReferencePeriod,
+  defaultShiftWindow,
   deriveCoberturaAtualPorDia,
   distributeCrews,
   formatHourClock,
@@ -45,30 +46,13 @@ interface ScheduleBuilderViewProps {
 
 type QuadroMode = 'atual' | 'proposto'
 
-function defaultShiftHours(operatingHours: OperatingHours): {
-  startHour: number
-  endHour: number
-} {
-  const day = widestCoverageDay(operatingHours)
-  if (day.closed) return { startHour: 8, endHour: 17 }
-  if (day.openHour === day.closeHour) return { startHour: 0, endHour: 8 }
-  const span =
-    day.closeHour > day.openHour
-      ? day.closeHour - day.openHour
-      : 24 - day.openHour + day.closeHour
-  const end =
-    span > 10 ? day.openHour + 8 : day.closeHour === 0 ? 24 : day.closeHour
-  return {
-    startHour: day.openHour,
-    endHour: end > 24 ? end - 24 : end,
-  }
-}
-
 function crewsToEditable(
   crews: TurmaCrew[],
   operatingHours: OperatingHours,
 ): EditableTurmaRow[] {
-  const { startHour, endHour } = defaultShiftHours(operatingHours)
+  const { startHour, endHour } = defaultShiftWindow(
+    widestCoverageDay(operatingHours),
+  )
   return crews.map((c) => ({
     turmaIndex: c.turmaIndex,
     label: c.label,
