@@ -301,6 +301,60 @@ export function resolveShiftWindows(
   return tiles.slice(0, count)
 }
 
+const HORARIO_PERIOD_RE =
+  /^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/
+const HORARIO_INTERVALO_RE = /^intervalo\s+\d+\s*min$/i
+
+/**
+ * Parse Folha `horario_trabalho_atual` into work periods.
+ *
+ * Supports multi-period `HH:MM-HH:MM / …` and skips synthetic
+ * `intervalo Nmin` tokens (PX-150). Returns [] when missing/unparseable.
+ */
+export function parseHorarioTrabalhoPeriods(
+  raw: string | null | undefined,
+): { startHour: number; endHour: number; hours: number }[] {
+  const text = (raw ?? '').trim()
+  if (!text) return []
+  const parts = text.split(/\s*\/\s*/)
+  const out: { startHour: number; endHour: number; hours: number }[] = []
+  for (const part of parts) {
+    const token = part.trim()
+    if (!token || HORARIO_INTERVALO_RE.test(token)) continue
+    const m = HORARIO_PERIOD_RE.exec(token)
+    if (!m) continue
+    const startHour = normalizeHour(
+      Number(m[1]) + Number(m[2]) / 60,
+    )
+    const endHourRaw = Number(m[3]) + Number(m[4]) / 60
+    // 24:00 end-of-day sentinel (formatHourClock accepts 24).
+    const endHour =
+      Number(m[3]) === 24 && Number(m[4]) === 0
+        ? 24
+        : normalizeHour(endHourRaw)
+    const hours = Math.round(shiftSpanHours(startHour, endHour) * 100) / 100
+    out.push({ startHour, endHour, hours })
+  }
+  return out
+}
+
+/**
+ * Quadro **Atual (Baseline)** windows: prefer Folha collaborator/horário
+ * entry–exit (`horario_trabalho_atual`). Fall back to establishment OH tiles
+ * only when Folha has no parseable work period.
+ *
+ * Quadro Proposto may still use {@link resolveShiftWindows} for PEC redesign.
+ */
+export function resolveBaselineShiftWindows(
+  horarioTrabalhoAtual: string | null | undefined,
+  hours: OperatingHours,
+  shiftsPerDay: number,
+): { startHour: number; endHour: number; hours: number }[] {
+  const folha = parseHorarioTrabalhoPeriods(horarioTrabalhoAtual)
+  if (folha.length > 0) return folha
+  return resolveShiftWindows(hours, shiftsPerDay)
+}
+
 /** Short summary for UI/report (default + optional weekday notes). */
 export function summarizeOperatingHours(hours: OperatingHours): string {
   const base = `Funcionamento ${formatOperatingWindow(hours.default)}`

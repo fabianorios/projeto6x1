@@ -12,6 +12,7 @@ import {
   buildApdataHierarchy,
   buildMonthCalendarMatrix,
   baselineCrewsForCalendar,
+  resolveBaselineShiftWindows,
   resolveShiftWindows,
   type ApdataHierarchyTree,
   type MonthCalendarMatrix,
@@ -366,13 +367,19 @@ export function buildEscalasTurmasSpreadsheetXml(
       ]),
     )
 
+    // Atual only: Folha window when present; Proposto keeps OH tiles.
+    const atualWindows = resolveBaselineShiftWindows(
+      cc.horarioTrabalhoAtual,
+      operatingHours,
+      shiftsPerDay,
+    )
     const atualCrews = applyTurmaHourLabels(
       baselineCrewsForCalendar({
         currentHeadcount: cc.currentHeadcount,
         escalaAtual: cc.escalaAtual,
         regime,
       }),
-      shiftWindows,
+      atualWindows,
       cc.centroCusto,
       { dailyCoverageNeed: dist.dailyCoverageNeed },
     )
