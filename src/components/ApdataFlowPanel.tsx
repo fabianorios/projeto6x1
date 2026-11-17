@@ -1731,7 +1731,7 @@ export function ApdataFlowPanel({
             const out = exportResultFromPayrollRows(rows, issues, [
               {
                 id: 'aptools-csv',
-                label: 'CSV Aptools (parse local)',
+                label: 'CSV Aptools (parse servidor)',
                 status: 'done',
                 detail: `${rows.length} linha(s) importadas`,
               },

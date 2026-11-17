@@ -1,4 +1,8 @@
 import { useId, useState } from 'react'
+import {
+  isFolhaAptoolsNetworkFailure,
+  postFolhaAptoolsFile,
+} from '../api/folhaAptools'
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
 import { readCsvFileText, type CsvEncoding } from '../utils/csvEncoding'
@@ -52,11 +56,34 @@ export function PayrollImport({
 
   async function onFileChange(file: File | null) {
     if (!file) return
+    setLoadError(null)
     try {
+      // Prefer server parse so large Aptools TAB files skip client FileReader parse.
+      try {
+        const remote = await postFolhaAptoolsFile(file)
+        logPerf('parse-folha', remote.latencyMs.total, {
+          rowCount: remote.rowCount,
+          issueCount: remote.issueCount,
+          via: 'api',
+        })
+        setFileName(file.name)
+        setEncoding(null)
+        setPaste('')
+        onParsed(remote.payrollRows, remote.parseWarnings ?? [])
+        return
+      } catch (err) {
+        if (!isFolhaAptoolsNetworkFailure(err)) {
+          throw err
+        }
+      }
       const { text, encoding: enc } = await readCsvFileText(file)
       applyText(text, file.name, enc)
-    } catch {
-      setLoadError('Não foi possível ler o arquivo TXT/CSV.')
+    } catch (err) {
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível ler o arquivo TXT/CSV.',
+      )
     }
   }
 

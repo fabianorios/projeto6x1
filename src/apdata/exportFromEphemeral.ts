@@ -88,7 +88,7 @@ export function exportResultFromPayrollRows(
   const doneSteps: ExportProgressStep[] = steps ?? [
     {
       id: 'aptools-csv',
-      label: 'CSV Aptools (parse local)',
+      label: 'CSV Aptools (parse servidor)',
       status: 'done',
       detail: `${payrollRows.length} linha(s)`,
     },
