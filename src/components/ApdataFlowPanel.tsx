@@ -17,6 +17,7 @@ import {
 } from '../api/environments'
 import { listSqlProfiles } from '../api/sql-profiles'
 import { cnpjDigits, type Establishment } from '../apdata/cnpj'
+import { enrichPayrollCnpjFromEscopo } from '../apdata/enrichPayrollCnpj'
 import {
   categsTrabeSocFromEphemeralCatalog,
   establishmentsFromEphemeralCatalog,
@@ -700,7 +701,16 @@ export function ApdataFlowPanel({
 
   function handleSimulate() {
     if (!exported || exported.rows.length === 0) return
-    const payrollRows = applyBenefitOverridesToRows(exported.rows)
+    const payrollRows = enrichPayrollCnpjFromEscopo(
+      applyBenefitOverridesToRows(exported.rows),
+      establishments.length > 0
+        ? establishments.filter(
+            (e) =>
+              selectedCnpjKeys.length === 0 ||
+              selectedCnpjKeys.includes(e.key),
+          )
+        : selectedCnpjKeys.map((key) => ({ key })),
+    )
     // Dominant headcount scale as wizard default; per-row escalaAtual still wins.
     const byScale = new Map<string, number>()
     for (const r of payrollRows) {
@@ -740,8 +750,18 @@ export function ApdataFlowPanel({
   function resimulateWithAbsorcao(nextAbs: EstrategiaAbsorcao) {
     if (!exported) return
     setEstrategiaAbsorcao(nextAbs)
+    const payrollRows = enrichPayrollCnpjFromEscopo(
+      applyBenefitOverridesToRows(exported.rows),
+      establishments.length > 0
+        ? establishments.filter(
+            (e) =>
+              selectedCnpjKeys.length === 0 ||
+              selectedCnpjKeys.includes(e.key),
+          )
+        : selectedCnpjKeys.map((key) => ({ key })),
+    )
     const byScale = new Map<string, number>()
-    for (const r of exported.rows) {
+    for (const r of payrollRows) {
       const code = r.escalaAtual || '6x1'
       byScale.set(code, (byScale.get(code) ?? 0) + r.quantidade)
     }
@@ -764,7 +784,7 @@ export function ApdataFlowPanel({
       shiftsPerDay: 2,
       operatingHours,
       scenarioId,
-      payrollRows: exported.rows,
+      payrollRows,
       estrategiaAbsorcao: nextAbs,
       defaultTaxRegime,
       defaultRegimeFuncionamento: defaultRegime,

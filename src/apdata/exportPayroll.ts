@@ -469,6 +469,10 @@ export async function exportPayrollFromApdata(
     type Agg = {
       cargo: string
       centroCusto: string
+      /** Digits-only establishment key — required for Seção B filial accordion. */
+      cnpjCompleto: string
+      codEmpresa: string | null
+      codFilial: string | null
       salarioSum: number
       salarioN: number
       cargaMensal: number
@@ -614,7 +618,13 @@ export async function exportPayrollFromApdata(
         }
       }
 
+      const est = establishmentByKey.get(estKey)
+      const codEmpresa =
+        est?.empresaId != null ? String(est.empresaId) : null
+      const codFilial = est?.localId != null ? String(est.localId) : null
+      // Include CNPJ so the same CC under two filiais stays separate.
       const key = [
+        estKey,
         cargo,
         centroCusto,
         String(cargaMensal),
@@ -629,6 +639,9 @@ export async function exportPayrollFromApdata(
         agg = {
           cargo,
           centroCusto,
+          cnpjCompleto: estKey,
+          codEmpresa,
+          codFilial,
           salarioSum: 0,
           salarioN: 0,
           cargaMensal,
@@ -697,6 +710,9 @@ export async function exportPayrollFromApdata(
         escalaAtual: agg.escala,
         sourceLine: line,
         ...emptyPayrollExtras(),
+        codEmpresa: agg.codEmpresa,
+        codFilial: agg.codFilial,
+        cnpjCompleto: agg.cnpjCompleto,
         codCc: agg.centroCusto,
         descCargo: agg.cargo,
         massaSalarialBase: salario * agg.quantidade,
@@ -705,6 +721,8 @@ export async function exportPayrollFromApdata(
     }
 
     rows.sort((a, b) => {
+      const ca = (a.cnpjCompleto ?? '').localeCompare(b.cnpjCompleto ?? '', 'pt-BR')
+      if (ca !== 0) return ca
       const c = a.centroCusto.localeCompare(b.centroCusto, 'pt-BR')
       if (c !== 0) return c
       return a.cargo.localeCompare(b.cargo, 'pt-BR')
