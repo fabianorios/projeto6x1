@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import { AptoolsExtractModal } from './AptoolsExtractModal'
 import { readCsvFileText, type CsvEncoding } from '../utils/csvEncoding'
+import { logPerf } from '../utils/perfTelemetry'
 import { parsePayrollTolerant } from '../utils/parsePayrollTolerant'
 
 interface PayrollImportProps {
@@ -35,7 +36,13 @@ export function PayrollImport({
     name: string | null,
     detectedEncoding: CsvEncoding | null = null,
   ) {
+    const t0 = performance.now()
     const result = parsePayrollTolerant(text)
+    logPerf('parse-folha', performance.now() - t0, {
+      rowCount: result.rows.length,
+      issueCount: result.issues.length,
+      charCount: text.length,
+    })
     setFileName(name)
     setEncoding(detectedEncoding)
     setLoadError(null)

@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
@@ -36,6 +42,7 @@ import {
 } from '../utils/executiveKpi'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
 import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
+import { logPerf } from '../utils/perfTelemetry'
 import {
   DEFAULT_DOSSIER_OPEN,
   collapseAllDossier,
@@ -307,10 +314,50 @@ export function ResultsView({
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
   )
   const [dossier, setDossier] = useState<DossierOpenState>(DEFAULT_DOSSIER_OPEN)
+  /** Print tree stays unmounted until Imprimir / Ctrl+P (P0 — evita DOM ×2). */
+  const [printMounted, setPrintMounted] = useState(false)
+  const printPendingRef = useRef(false)
+  const passo5MountLoggedRef = useRef(false)
 
   function toggleSection(id: DossierSectionId) {
     setDossier((prev) => ({ ...prev, [id]: !prev[id] }))
   }
+
+  /** Mount print tree, then open the browser print dialog. */
+  const handlePrint = useCallback(() => {
+    printPendingRef.current = true
+    setPrintMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!printMounted || !printPendingRef.current) return
+    printPendingRef.current = false
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        window.print()
+      })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [printMounted])
+
+  useEffect(() => {
+    function onAfterPrint() {
+      printPendingRef.current = false
+      setPrintMounted(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        handlePrint()
+      }
+    }
+    window.addEventListener('afterprint', onAfterPrint)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('afterprint', onAfterPrint)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [handlePrint])
 
   /** Open cadastral (if needed) then smooth-scroll — does not download/send JSON. */
   function handleIrParaEstruturaApdata() {
@@ -403,6 +450,26 @@ export function ResultsView({
   const multiFilial =
     operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY)
       .length > 1
+
+  useEffect(() => {
+    if (passo5MountLoggedRef.current) return
+    passo5MountLoggedRef.current = true
+    const t0 = performance.now()
+    const id = window.requestAnimationFrame(() => {
+      logPerf('passo5-mount', performance.now() - t0, {
+        centerCount: byCostCenter.length,
+        filialCount: operacionalGroups.length,
+        suggestionCount: scheduleSuggestions.length,
+        filialAccordion,
+      })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [
+    byCostCenter.length,
+    operacionalGroups.length,
+    scheduleSuggestions.length,
+    filialAccordion,
+  ])
 
   const topSuggestion = scheduleSuggestions[0]
   const proposedScaleLabel = ruleVersion.params.preserveCurrentScale
@@ -548,7 +615,7 @@ export function ResultsView({
               </button>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={handlePrint}
                 className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
               >
                 🖨️ Imprimir PDF
@@ -994,50 +1061,55 @@ export function ResultsView({
               : `${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`
           }
         >
-          {filialAccordion ? (
-            <p className="text-xs text-[var(--color-muted)]">
-              Horários, jornadas e escalas por Filial/CNPJ
-              {multiFilial
-                ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
-                : ''}
-              . Cada filial abre/recolhe no acordeão abaixo.
-            </p>
-          ) : null}
+          {/* Unmount operacional calendars when the dossier section is closed (P0). */}
+          {dossier.operacional ? (
+            <>
+              {filialAccordion ? (
+                <p className="text-xs text-[var(--color-muted)]">
+                  Horários, jornadas e escalas por Filial/CNPJ
+                  {multiFilial
+                    ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
+                    : ''}
+                  . Cada filial abre/recolhe no acordeão abaixo.
+                </p>
+              ) : null}
 
-          {excludedScheduleNotice ? (
-            <ExcludedScheduleNotice notice={excludedScheduleNotice} />
-          ) : null}
+              {excludedScheduleNotice ? (
+                <ExcludedScheduleNotice notice={excludedScheduleNotice} />
+              ) : null}
 
-          {filialAccordion ? (
-            <div className="space-y-3">
-              {operacionalGroups.map((group, idx) => (
-                <OperacionalFilialPanel
-                  key={group.key}
-                  group={group}
-                  defaultOpen={idx === 0}
+              {filialAccordion ? (
+                <div className="space-y-3">
+                  {operacionalGroups.map((group, idx) => (
+                    <OperacionalFilialPanel
+                      key={group.key}
+                      group={group}
+                      defaultOpen={idx === 0}
+                      result={result}
+                      scheduleSuggestions={scheduleSuggestions}
+                      scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+                      recorded={recorded}
+                      onFeedback={recordFeedback}
+                    />
+                  ))}
+                </div>
+              ) : operacionalGroups[0] ? (
+                <OperacionalFilialBody
+                  group={operacionalGroups[0]}
                   result={result}
+                  embeddedSchedule={false}
+                  showFilialHeader={false}
                   scheduleSuggestions={scheduleSuggestions}
                   scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
                   recorded={recorded}
                   onFeedback={recordFeedback}
+                  globalTurmasNote={distribuicaoTurmas.note}
                 />
-              ))}
-            </div>
-          ) : operacionalGroups[0] ? (
-            <OperacionalFilialBody
-              group={operacionalGroups[0]}
-              result={result}
-              embeddedSchedule={false}
-              showFilialHeader={false}
-              scheduleSuggestions={scheduleSuggestions}
-              scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
-              recorded={recorded}
-              onFeedback={recordFeedback}
-              globalTurmasNote={distribuicaoTurmas.note}
-            />
-          ) : (
-            <ScheduleBuilderView result={result} />
-          )}
+              ) : (
+                <ScheduleBuilderView result={result} />
+              )}
+            </>
+          ) : null}
         </DossierSection>
 
         <DossierSection
@@ -1054,7 +1126,9 @@ export function ResultsView({
         </DossierSection>
       </section>
 
-      <PrintableReport result={result} basket={basket} />
+      {printMounted ? (
+        <PrintableReport result={result} basket={basket} />
+      ) : null}
     </>
   )
 }
@@ -1158,18 +1232,21 @@ function OperacionalFilialPanel({
           </span>
         </div>
       </summary>
-      <div className="space-y-4 border-t border-[var(--color-line)] px-4 py-4">
-        <OperacionalFilialBody
-          group={group}
-          result={result}
-          embeddedSchedule
-          showFilialHeader={false}
-          scheduleSuggestions={scheduleSuggestions}
-          scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
-          recorded={recorded}
-          onFeedback={onFeedback}
-        />
-      </div>
+      {/* Lazy-mount: closed <details> alone still kept React trees alive (P0). */}
+      {open ? (
+        <div className="space-y-4 border-t border-[var(--color-line)] px-4 py-4">
+          <OperacionalFilialBody
+            group={group}
+            result={result}
+            embeddedSchedule
+            showFilialHeader={false}
+            scheduleSuggestions={scheduleSuggestions}
+            scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+            recorded={recorded}
+            onFeedback={onFeedback}
+          />
+        </div>
+      ) : null}
     </details>
   )
 }

@@ -33,6 +33,7 @@ export type EphemeralCatalogResult = {
   mode: 'catalog'
   engine: EphemeralEngine
   latencyMs: number
+  timeoutMs?: number
   tables: Record<string, EphemeralTableResult>
   note?: string
 }
@@ -42,6 +43,8 @@ export type EphemeralExtractResult = {
   mode?: 'extract'
   engine: EphemeralEngine
   latencyMs: number
+  /** Server-side query ceiling used for this request (ms). */
+  timeoutMs?: number
   rowCount: number
   columns: string[]
   rows: Record<string, unknown>[]

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   EPHEMERAL_CONN_FAIL_MSG,
+  EPHEMERAL_FOLHA_TIMEOUT_MS,
+  EPHEMERAL_TIMEOUT_MS,
   createEphemeralClient,
   isEphemeralConnectionFailure,
   scrubErrorText,
@@ -55,6 +57,12 @@ describe("ephemeral-db helpers", () => {
   it("exposes a stable Portuguese connection failure message", () => {
     assert.match(EPHEMERAL_CONN_FAIL_MSG, /Falha de conexão/);
     assert.match(EPHEMERAL_CONN_FAIL_MSG, /firewall|timeout/i);
+  });
+
+  it("Folha extract timeout is higher than catalog timeout (P0)", () => {
+    assert.equal(EPHEMERAL_TIMEOUT_MS, 15_000);
+    assert.ok(EPHEMERAL_FOLHA_TIMEOUT_MS > EPHEMERAL_TIMEOUT_MS);
+    assert.equal(EPHEMERAL_FOLHA_TIMEOUT_MS, 60_000);
   });
 
   it("createEphemeralClient omits empty MSSQL database (undefined, not \"\")", () => {

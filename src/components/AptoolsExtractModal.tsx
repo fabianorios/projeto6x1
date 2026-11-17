@@ -5,6 +5,7 @@ import {
 } from '../apdata/extractorSql'
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import { readCsvFileText } from '../utils/csvEncoding'
+import { logPerf } from '../utils/perfTelemetry'
 import { parsePayrollTolerant } from '../utils/parsePayrollTolerant'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
@@ -92,7 +93,13 @@ export function AptoolsExtractModal({
     setImportOk(null)
     try {
       const { text } = await readCsvFileText(file)
+      const t0 = performance.now()
       const { rows, issues } = parsePayrollTolerant(text)
+      logPerf('parse-folha', performance.now() - t0, {
+        rowCount: rows.length,
+        issueCount: issues.length,
+        charCount: text.length,
+      })
       if (rows.length === 0) {
         setImportError(
           issues[0]?.message ??
