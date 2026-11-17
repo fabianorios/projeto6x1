@@ -149,7 +149,11 @@ export function ApdataHierarchyView({
   }
 
   return (
-    <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+    <div
+      id="hierarquia-apdata"
+      tabIndex={-1}
+      className="border border-[var(--color-line)] bg-white/80 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[var(--color-ink)]">
