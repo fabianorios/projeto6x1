@@ -34,18 +34,27 @@ describe('extractor SQL (SPA)', () => {
     assert.match(mssql, /AS desc_cc/)
     assert.match(oracle, /CCU_D1sCentroCusto/)
     assert.match(oracle, /AS desc_cc/)
-    // Current work window via JornadasItens (JOI_*) × TiposJornadas.
+    // Per-period work blocks via JornadasItens (JOI_*) × TiposJornadas.
     assert.match(mssql, /CTE_HORARIO_TRABALHO/)
+    assert.match(mssql, /CTE_HT_ITENS/)
+    assert.match(mssql, /CTE_HT_PARTS/)
     assert.match(mssql, /JornadasItens/)
     assert.match(mssql, /JOI_HrdHoraMinutoInicio/)
     assert.match(mssql, /JOI_HrdHoraMinutoFim/)
     assert.match(mssql, /TJO_OplTrabalhada/)
     assert.match(mssql, /AS horario_trabalho_atual/)
+    assert.match(mssql, /intervalo /)
+    assert.match(mssql, /STRING_AGG\(part, ' \/ '\)/)
     assert.match(oracle, /CTE_HORARIO_TRABALHO/)
+    assert.match(oracle, /CTE_HT_ITENS/)
     assert.match(oracle, /JOI_HrdHoraMinutoInicio/)
     assert.match(oracle, /AS horario_trabalho_atual/)
+    assert.match(oracle, /LISTAGG\(part, ' \/ '\)/)
+    assert.match(oracle, /intervalo /)
     assert.ok(!mssql.includes('JIT_'))
     assert.ok(!mssql.includes('OplConsiderarTrabalho'))
+    assert.ok(!/TO_CHAR\(MIN\(ji\.JOI_HrdHoraMinutoInicio\)/.test(oracle))
+    assert.ok(!/CONVERT\(varchar\(5\), MIN\(ji\.JOI_HrdHoraMinutoInicio\)/.test(mssql))
   })
 
   it('uses TIP_* escalas with work_days x off_days concat', () => {
@@ -179,6 +188,21 @@ describe('mapExtractorAggregatesToPayroll', () => {
     ])
     assert.equal(withWin[0].codHorarioAtual, '42')
     assert.equal(withWin[0].horarioTrabalhoAtual, '08:00-17:48')
+    const multi = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+        cod_horario_atual: '4',
+        horario_trabalho_atual: '08:00-12:00 / intervalo 60min / 13:00-17:48',
+      },
+    ])
+    assert.equal(
+      multi[0].horarioTrabalhoAtual,
+      '08:00-12:00 / intervalo 60min / 13:00-17:48',
+    )
     const without = mapExtractorAggregatesToPayroll([
       {
         cod_cc: 'CC-01',

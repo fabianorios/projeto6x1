@@ -14,7 +14,7 @@ import {
 } from './crew-distribution'
 import { applyTurmaHourLabels } from './apdata-hierarchy'
 import { DEFAULT_OPERATING_HOURS, resolveShiftWindows } from './operating-hours'
-import { parsePayrollCsv } from './payroll'
+import { formatHorarioAtualLabel, parsePayrollCsv } from './payroll'
 import {
   RULE_VERSIONS,
   listScenarios,
@@ -412,6 +412,23 @@ describe('simulate() v2 wiring', () => {
     assert.ok(cc.coberturaAtualPorDia)
     assert.equal(cc.coberturaAtualPorDia!.seg, 14)
     assert.equal(cc.coberturaAtualPorDia!.dom, 0)
+  })
+
+  it('formatHorarioAtualLabel keeps multi-period / intervalo strings', () => {
+    assert.equal(
+      formatHorarioAtualLabel({
+        codHorarioAtual: '4',
+        horarioTrabalhoAtual: '08:00-12:00 / intervalo 60min / 13:00-17:48',
+      }),
+      '4 · 08:00–12:00 / intervalo 60min / 13:00–17:48',
+    )
+    assert.equal(
+      formatHorarioAtualLabel({
+        codHorarioAtual: '4',
+        horarioTrabalhoAtual: '08:00-17:48',
+      }),
+      '4 · 08:00–17:48',
+    )
   })
 
   it('splits same CC into horário slices (Filial → CC → horário)', () => {

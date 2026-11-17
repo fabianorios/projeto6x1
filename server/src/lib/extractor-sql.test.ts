@@ -102,6 +102,8 @@ describe("extractor SQL", () => {
     const mssql = getAptoolsExtractorScript("mssql");
     const oracle = getAptoolsExtractorScript("oracle");
     assert.match(mssql, /CTE_HORARIO_TRABALHO/);
+    assert.match(mssql, /CTE_HT_ITENS/);
+    assert.match(mssql, /CTE_HT_PARTS/);
     assert.match(mssql, /JornadasItens/);
     assert.match(mssql, /JOI_HrdHoraMinutoInicio/);
     assert.match(mssql, /JOI_HrdHoraMinutoFim/);
@@ -109,12 +111,18 @@ describe("extractor SQL", () => {
     assert.match(mssql, /TJO_OplTrabalhada/);
     assert.match(mssql, /AS horario_trabalho_atual/);
     assert.match(mssql, /HRI_CdiJornada/);
+    assert.match(mssql, /intervalo /);
+    assert.match(mssql, /STRING_AGG\(part, ' \/ '\)/);
     assert.ok(!mssql.includes("JIT_"));
     assert.ok(!mssql.includes("OplConsiderarTrabalho"));
+    assert.ok(!/CONVERT\(varchar\(5\), MIN\(ji\.JOI_HrdHoraMinutoInicio\)/.test(mssql));
     assert.match(oracle, /CTE_HORARIO_TRABALHO/);
+    assert.match(oracle, /CTE_HT_ITENS/);
     assert.match(oracle, /JOI_HrdHoraMinutoInicio/);
     assert.match(oracle, /AS horario_trabalho_atual/);
-    assert.match(oracle, /TO_CHAR\(MIN\(ji\.JOI_HrdHoraMinutoInicio\), 'HH24:MI'\)/);
+    assert.match(oracle, /LISTAGG\(part, ' \/ '\)/);
+    assert.match(oracle, /intervalo /);
+    assert.ok(!/TO_CHAR\(MIN\(ji\.JOI_HrdHoraMinutoInicio\)/.test(oracle));
   });
 
   it("uses TIP_* escalas with work_days x off_days concat", () => {

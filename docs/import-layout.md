@@ -33,7 +33,7 @@ Se `vr_dias_mes_atual` / `vt_dias_mes_atual` vierem vazios, o motor estima pelos
 | `quantidade` | número | Qtd de pessoas nessa linha (default 1) |
 | `escala_atual` | texto | Ex. `6x1`, `5x2` (default do wizard se vazio) |
 | `desc_cc` | texto | Descrição do centro de custo (`CCU_D1sCentroCusto`). Opcional; se ausente, a UI mostra `cod_cc` / `centro_custo`. |
-| `horario_trabalho_atual` | texto | Janela entrada–saída do horário atual (`HH:MM-HH:MM`). Opcional; vem do extrator Apdata (JornadasItens). |
+| `horario_trabalho_atual` | texto | Períodos de trabalho do horário atual (`HH:MM-HH:MM`), unidos por ` / `. Sem step de almoço/intervalo entre blocos, inclui `intervalo Nmin`. Opcional; vem do extrator Apdata (JornadasItens). |
 
 ## Exemplo
 
