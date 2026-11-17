@@ -6,6 +6,7 @@ import {
   REGIME_FUNCIONAMENTO_LABELS,
   applyTurmaHourLabels,
   centroCustoDisplayLabel,
+  formatHorarioAtualLabel,
   assignCrewWindowIndices,
   baselineCrewsForCalendar,
   buildMonthCalendarMatrix,
@@ -700,7 +701,7 @@ function CostCenterScheduleCard({
     cc.cargaSemanalAtual != null
       ? `${cc.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
       : '—'
-  const codLabel = cc.codHorarioAtual?.trim() || '—'
+  const codLabel = formatHorarioAtualLabel(cc)
   const regimeLabel = REGIME_FUNCIONAMENTO_LABELS[regime]
   const title = nestedUnderCc
     ? `Horário ${codLabel}`

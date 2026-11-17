@@ -34,6 +34,18 @@ describe('extractor SQL (SPA)', () => {
     assert.match(mssql, /AS desc_cc/)
     assert.match(oracle, /CCU_D1sCentroCusto/)
     assert.match(oracle, /AS desc_cc/)
+    // Current work window via JornadasItens (JOI_*) × TiposJornadas.
+    assert.match(mssql, /CTE_HORARIO_TRABALHO/)
+    assert.match(mssql, /JornadasItens/)
+    assert.match(mssql, /JOI_HrdHoraMinutoInicio/)
+    assert.match(mssql, /JOI_HrdHoraMinutoFim/)
+    assert.match(mssql, /TJO_OplTrabalhada/)
+    assert.match(mssql, /AS horario_trabalho_atual/)
+    assert.match(oracle, /CTE_HORARIO_TRABALHO/)
+    assert.match(oracle, /JOI_HrdHoraMinutoInicio/)
+    assert.match(oracle, /AS horario_trabalho_atual/)
+    assert.ok(!mssql.includes('JIT_'))
+    assert.ok(!mssql.includes('OplConsiderarTrabalho'))
   })
 
   it('uses TIP_* escalas with work_days x off_days concat', () => {
@@ -151,6 +163,33 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].codCc, 'CC-01')
     assert.equal(rows[0].descCc, 'Operacoes Loja')
     assert.equal(rows[0].centroCusto, 'CC-01')
+  })
+
+  it('maps optional horario_trabalho_atual and keeps it optional', () => {
+    const withWin = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+        cod_horario_atual: '42',
+        horario_trabalho_atual: '08:00-17:48',
+      },
+    ])
+    assert.equal(withWin[0].codHorarioAtual, '42')
+    assert.equal(withWin[0].horarioTrabalhoAtual, '08:00-17:48')
+    const without = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+        cod_horario_atual: '42',
+      },
+    ])
+    assert.equal(without[0].horarioTrabalhoAtual, null)
   })
 
   it('keeps desc_cc optional for backward-compatible CSV', () => {

@@ -782,6 +782,7 @@ function buildCostCenterResults(
       regimeFuncionamento: regime,
       distribuicaoTurmas,
       codHorarioAtual: agg.codHorarioAtual,
+      horarioTrabalhoAtual: agg.horarioTrabalhoAtual,
       escalaAtual: escalaLabel,
       cargaSemanalAtual: agg.cargaSemanalAtual,
       coberturaAtualPorDia,

@@ -87,6 +87,9 @@ describe("allowlist", () => {
     for (const t of [
       "Horarios",
       "HorariosJornadas",
+      "Jornadas",
+      "JornadasItens",
+      "TiposJornadas",
       "Contratados",
       "CentrosCustos",
       "Cargos",

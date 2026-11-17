@@ -12,6 +12,8 @@ export type ExtractorAggregateRow = {
   desc_cargo: string;
   cod_vinculo: string;
   cod_horario_atual: string;
+  /** Outer work window HH:MM-HH:MM from JornadasItens (optional). */
+  horario_trabalho_atual: string;
   escala_atual: string;
   carga_semanal_atual: number;
   qtd_colaboradores: number;
@@ -66,6 +68,7 @@ export function mapExtractorRows(
     desc_cargo: str(pick(row, "desc_cargo"), "NAO_INFORMADO"),
     cod_vinculo: str(pick(row, "cod_vinculo")),
     cod_horario_atual: str(pick(row, "cod_horario_atual")),
+    horario_trabalho_atual: str(pick(row, "horario_trabalho_atual")),
     escala_atual: str(pick(row, "escala_atual"), "other"),
     carga_semanal_atual: num(pick(row, "carga_semanal_atual"), 44),
     qtd_colaboradores: num(pick(row, "qtd_colaboradores"), 0),

@@ -191,6 +191,8 @@ export interface CostCenterResult {
   distribuicaoTurmas?: TurmaDistribution
   /** Apdata schedule code (dominant in CC). */
   codHorarioAtual?: string | null
+  /** Current work window HH:MM-HH:MM (optional Folha column). */
+  horarioTrabalhoAtual?: string | null
   /** Current scale label (dominant), e.g. 6x1. */
   escalaAtual?: string | null
   /** Weighted average weekly hours. */

@@ -27,6 +27,8 @@ export type ExtractorAggregate = {
   desc_cargo?: string
   cod_vinculo?: string
   cod_horario_atual?: string
+  /** Outer work window HH:MM-HH:MM (optional). */
+  horario_trabalho_atual?: string
   escala_atual?: string
   carga_semanal_atual?: number
   qtd_colaboradores?: number
@@ -163,6 +165,7 @@ export function mapExtractorAggregatesToPayroll(
       descCargo: r.desc_cargo || null,
       codVinculo: r.cod_vinculo || null,
       codHorarioAtual: r.cod_horario_atual || null,
+      horarioTrabalhoAtual: r.horario_trabalho_atual?.trim() || null,
       massaSalarialBase: massa,
       vaModoValor: va != null && va > 0 ? vaModo : null,
       vaValorDia: va != null && va > 0 && vaModo === 'DIA' ? va : null,

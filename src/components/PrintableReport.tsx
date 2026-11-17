@@ -2,6 +2,7 @@ import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildScenarioWhyBullets,
   centroCustoDisplayLabel,
+  formatHorarioAtualLabel,
   formatShiftRange,
   getSectorDisplayLabel,
   summarizeOperatingHours,
@@ -321,7 +322,7 @@ export function PrintableReport({
                   <td className="py-1.5 pr-2 font-medium">
                     {centroCustoDisplayLabel(c)}
                     {c.codHorarioAtual?.trim()
-                      ? ` · hor. ${c.codHorarioAtual.trim()}`
+                      ? ` · hor. ${formatHorarioAtualLabel(c)}`
                       : ''}
                   </td>
                   <td className="py-1.5 pr-2 tabular-nums">
