@@ -1,9 +1,10 @@
 /**
  * Passo 5 — executive KPI card layout helpers.
- * Keeps long signed BRL values inside the 4-card grid (no spill into neighbors).
+ * Keeps long signed BRL / headcount ranges readable inside the 4-card grid
+ * (full values, no ellipsis truncation — shrink type or wrap).
  */
 
-/** Shell for each KPI grid child: shrinkable + clip overflow. */
+/** Shell for each KPI grid child: shrinkable; clip only decorative overflow. */
 export const EXECUTIVE_KPI_CARD_CLASS =
   'min-w-0 overflow-hidden px-4 py-4'
 
@@ -15,13 +16,16 @@ export const EXECUTIVE_KPI_CARD_HERO_CLASS =
 export const EXECUTIVE_KPI_CARD_PLAIN_CLASS =
   `${EXECUTIVE_KPI_CARD_CLASS} border border-[var(--color-line)] bg-white/80`
 
-/** Value line shell: contain + allow fluid type; ellipsis as last resort. */
+/**
+ * Value line shell: fluid type + wrap so full BRL/ranges stay visible.
+ * No text-overflow ellipsis / nowrap — PX-128.
+ */
 export const EXECUTIVE_KPI_VALUE_SHELL_CLASS =
-  'mt-2 min-w-0 overflow-hidden whitespace-nowrap font-semibold tracking-tight tabular-nums leading-tight text-ellipsis'
+  'mt-2 min-w-0 max-w-full break-words font-semibold tracking-tight tabular-nums leading-tight'
 
-/** Hint / subline under the primary value. */
+/** Hint / subline under the primary value — wrap, never ellipsize. */
 export const EXECUTIVE_KPI_HINT_CLASS =
-  'mt-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--color-muted)]'
+  'mt-1 min-w-0 max-w-full break-words text-xs leading-snug text-[var(--color-muted)]'
 
 /**
  * Compact length of a display string (ignore spaces) for sizing thresholds.
@@ -32,19 +36,24 @@ export function executiveKpiDisplayLength(display: string): number {
 }
 
 /**
- * Responsive type for large BRL in a 4-col card.
- * Long values step down so "+R$ 1.030.367" fits without overlapping neighbors.
+ * Responsive type for large BRL / ranges in a 4-col card.
+ * Longer values step down so full text fits (or wraps) without ellipsis.
  */
 export function executiveKpiValueSizeClass(display: string): string {
   const len = executiveKpiDisplayLength(display)
-  // "+R$1.030.367" = 12 — reported overflow into HEADCOUNT (PX-125)
+  // "+R$1.030.367" = 12 — million-scale Δ folha
   if (len >= 12) {
-    return 'text-[clamp(0.95rem,2.1vw,1.25rem)]'
+    return 'text-[clamp(0.8rem,1.8vw,1.05rem)]'
   }
+  // "+R$183.612" / mid VR·VT
   if (len >= 10) {
-    return 'text-[clamp(1.05rem,2.4vw,1.5rem)]'
+    return 'text-[clamp(0.9rem,2vw,1.2rem)]'
   }
-  return 'text-[clamp(1.25rem,2.8vw,1.875rem)]'
+  // "754→832" (len 7) and short signed BRL — still tight in 4-col
+  if (len >= 7) {
+    return 'text-[clamp(1rem,2.2vw,1.35rem)]'
+  }
+  return 'text-[clamp(1.15rem,2.6vw,1.75rem)]'
 }
 
 /** Full class list for a KPI primary value given its display text. */
