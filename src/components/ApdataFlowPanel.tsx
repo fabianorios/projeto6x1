@@ -204,6 +204,9 @@ export function ApdataFlowPanel({
   /** Soft notice when Passo 4→5 fell back to in-bundle simulate (API down). */
   const [simulateNotice, setSimulateNotice] = useState<string | null>(null)
   const [simulating, setSimulating] = useState(false)
+  /** Passo 4 progress while POST /api/simulate (or local fallback) runs. */
+  const [simulateProgress, setSimulateProgress] =
+    useState<SimulateProgressStage | null>(null)
   const [steps, setSteps] = useState<ExportProgressStep[]>([])
   const [exported, setExported] = useState<ExportResult | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
@@ -748,6 +751,7 @@ export function ApdataFlowPanel({
    * Decision: if the API is unreachable and the engine is still in the SPA
    * bundle, fall back to local `simulate()` so meetings without VPN still work;
    * show a clear notice. Validation (4xx) errors do not fall back.
+   * Stages the visible progress bar: enviar → processar → montar.
    */
   async function runSimulatePath(
     nextAbs: EstrategiaAbsorcao,
@@ -777,7 +781,13 @@ export function ApdataFlowPanel({
     }
     const centerHint = new Set(payrollRows.map((r) => r.centroCusto)).size
     const t0 = performance.now()
+
+    setSimulateProgress(SIMULATE_PROGRESS.send)
+    await yieldForPaint()
+
     try {
+      setSimulateProgress(SIMULATE_PROGRESS.calcApi)
+      await yieldForPaint()
       const remote = await postSimulate({
         schemaVersion: 1,
         scenarioId,
@@ -803,11 +813,15 @@ export function ApdataFlowPanel({
         apiLatencyMs: remote.latencyMs.total,
       })
       setSimulateNotice(null)
+      setSimulateProgress(SIMULATE_PROGRESS.assemble)
+      await yieldForPaint()
       return remote.result
     } catch (err) {
       if (!isSimulateNetworkFailure(err)) {
         throw err
       }
+      setSimulateProgress(SIMULATE_PROGRESS.calcLocal)
+      await yieldForPaint()
       const next = measurePerf(
         perfLabel,
         () => simulate(input),
@@ -816,6 +830,8 @@ export function ApdataFlowPanel({
       setSimulateNotice(
         'API de simulação indisponível — resultado calculado localmente neste navegador.',
       )
+      setSimulateProgress(SIMULATE_PROGRESS.assemble)
+      await yieldForPaint()
       return next
     }
   }
@@ -823,6 +839,7 @@ export function ApdataFlowPanel({
   async function handleSimulate() {
     if (!exported || exported.rows.length === 0 || simulating) return
     setSimulating(true)
+    setSimulateProgress(SIMULATE_PROGRESS.send)
     setError(null)
     try {
       const next = await runSimulatePath(estrategiaAbsorcao, 'simulate')
@@ -840,6 +857,7 @@ export function ApdataFlowPanel({
       )
     } finally {
       setSimulating(false)
+      setSimulateProgress(null)
     }
   }
 
@@ -847,6 +865,7 @@ export function ApdataFlowPanel({
     if (!exported || simulating) return
     setEstrategiaAbsorcao(nextAbs)
     setSimulating(true)
+    setSimulateProgress(SIMULATE_PROGRESS.send)
     setError(null)
     try {
       const next = await runSimulatePath(nextAbs, 'simulate-absorcao')
@@ -863,6 +882,7 @@ export function ApdataFlowPanel({
       )
     } finally {
       setSimulating(false)
+      setSimulateProgress(null)
     }
   }
 
@@ -1678,6 +1698,7 @@ export function ApdataFlowPanel({
                       )
                     }
                     className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                    disabled={simulating}
                   >
                     Voltar
                   </button>
@@ -1688,10 +1709,16 @@ export function ApdataFlowPanel({
                     }
                     onClick={() => void handleSimulate()}
                     className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    aria-busy={simulating || undefined}
                   >
                     {simulating ? 'Simulando…' : 'Gerar Resultados'}
                   </button>
                 </div>
+                {(simulating || simulateProgress) && (
+                  <SimulateProgressBar
+                    progress={simulateProgress ?? SIMULATE_PROGRESS.send}
+                  />
+                )}
               </section>
             )}
           </>
@@ -1718,6 +1745,71 @@ export function ApdataFlowPanel({
           }}
         />
       )}
+    </div>
+  )
+}
+
+type SimulateProgressStage = {
+  step: 1 | 2 | 3
+  label: string
+  pct: number
+}
+
+const SIMULATE_PROGRESS = {
+  send: { step: 1, label: 'Enviando…', pct: 28 } satisfies SimulateProgressStage,
+  calcApi: {
+    step: 2,
+    label: 'Calculando no servidor…',
+    pct: 62,
+  } satisfies SimulateProgressStage,
+  calcLocal: {
+    step: 2,
+    label: 'Calculando neste navegador…',
+    pct: 62,
+  } satisfies SimulateProgressStage,
+  assemble: {
+    step: 3,
+    label: 'Montando resultados…',
+    pct: 92,
+  } satisfies SimulateProgressStage,
+} as const
+
+/** Let React paint the progress stage before a long sync/async chunk. */
+function yieldForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      // ~160ms keeps PT labels readable on fast API / local fallback.
+      window.setTimeout(resolve, 160)
+    })
+  })
+}
+
+function SimulateProgressBar({
+  progress,
+}: {
+  progress: SimulateProgressStage
+}) {
+  return (
+    <div className="mt-3 space-y-2" role="status" aria-live="polite">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <p className="font-medium text-[var(--color-ink)]">{progress.label}</p>
+        <p className="shrink-0 text-xs text-[var(--color-muted)] tabular-nums">
+          Etapa {progress.step} de 3
+        </p>
+      </div>
+      <div
+        className="h-3.5 w-full overflow-hidden border border-[var(--color-line)] bg-[var(--color-accent-soft)]"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.pct}
+        aria-label={progress.label}
+      >
+        <div
+          className="h-full bg-[var(--color-teal)] transition-[width] duration-300 ease-out"
+          style={{ width: `${progress.pct}%` }}
+        />
+      </div>
     </div>
   )
 }
