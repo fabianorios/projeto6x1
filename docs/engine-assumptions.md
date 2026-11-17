@@ -35,6 +35,7 @@ Encargos patronais vêm do **regime tributário por CNPJ** (Simples / Lucro Pres
 4. **Headcount requerido**:
    - `required = ceil( HC × scaleFactor × (1 + buffer) × atritoSetorial )`
    - piso no HC atual; no status quo o adicional é forçado a **0**.
+   - **Exceção (folga fixa):** se o regime já é coberto pelo padrão-alvo com o quadro atual — ex. `SEG_SEX` → 5×2 (folga sáb/dom) ou `SEG_SAB` → ciclo com ≥6 dias de trabalho — o fator **não** infla o HC. Cobertura Mon–Fri (ou Mon–Sáb) já fecha com as mesmas pessoas no mesmo horário; `ceil(1 × 1,2)` não deve inventar a 2ª vaga. `CONTINUO_7D` e alvos mais curtos (ex. 4×3 em SEG_SEX) continuam com o fator.
 5. **Folha (salários)**:
    - Sem import: baseline = `HC × salário médio` (sem encargos).
    - Com import CSV (`docs/import-layout.md`): baseline = `Σ(salario × quantidade)`; HC = `Σ quantidade`; salário médio = baseline / HC.

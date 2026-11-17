@@ -187,3 +187,45 @@ export function distributeCrews(
 export function continuo7dRosterFactor(): number {
   return 7 / 5
 }
+
+/**
+ * True when a fixed weekly target pattern already staffs every operating day
+ * of the regime at full roster — so the person-days scale factor must not
+ * invent headcount.
+ *
+ * Example: SEG_SEX + 5×2 (folga fixa sáb/dom, mesmo horário). Baseline 6×1
+ * already puts the whole roster on Mon–Fri; migrating to 5×2 keeps that
+ * coverage without hiring. CONTINUO_7D always needs the factor (rotating
+ * offs). Shorter targets (e.g. 4×3 on SEG_SEX) still need more roster.
+ */
+export function fixedOffTargetCoversOperatingDays(
+  regime: RegimeFuncionamento,
+  targetWorkDays: number,
+): boolean {
+  const work = Math.max(0, Math.round(targetWorkDays))
+  if (regime === 'SEG_SEX') return work >= 5
+  if (regime === 'SEG_SAB') return work >= 6
+  return false
+}
+
+/**
+ * Required roster after scenario factor, with fixed-off coverage waiver.
+ * When folga fixa + target already covers operating days, keep current HC
+ * (ceil(1 × 1.2 × buffer) must not invent a second person).
+ */
+export function requiredHeadcountAfterFactor(
+  currentHeadcount: number,
+  headcountFactor: number,
+  opts: {
+    preserveCurrentScale: boolean
+    regime: RegimeFuncionamento
+    targetWorkDays: number
+  },
+): number {
+  const hc = Math.max(0, Math.round(currentHeadcount))
+  if (opts.preserveCurrentScale) return hc
+  if (fixedOffTargetCoversOperatingDays(opts.regime, opts.targetWorkDays)) {
+    return hc
+  }
+  return Math.max(hc, Math.ceil(hc * headcountFactor))
+}

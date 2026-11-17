@@ -23,12 +23,17 @@ import {
   type AllowedScheduleCode,
   type ExclusionHit,
 } from './schedule-policy'
+import {
+  requiredHeadcountAfterFactor,
+  resolveRegime,
+} from './crew-distribution'
 import { parseScale } from './scale'
 import type {
   ScenarioId,
   SectorId,
   SimulationInput,
 } from './types'
+import type { RegimeFuncionamento } from '../types'
 
 export interface ShiftWindowSuggestion {
   label: string
@@ -84,6 +89,8 @@ export interface CostCenterDemand {
   avgVtValorDia: number | null
   currentMonthlyVr: number | null
   currentMonthlyVt: number | null
+  /** Operating regime for this center (fixed-off waiver). */
+  regimeFuncionamento?: RegimeFuncionamento | null
 }
 
 export interface SuggestSchedulesInput {
@@ -103,6 +110,8 @@ export interface SuggestSchedulesInput {
   projectedChargeFactor: number
   /** Scenario coverage buffer (0–1). */
   coverageBuffer: number
+  /** Default regime when a cost center omits its own. */
+  defaultRegimeFuncionamento?: RegimeFuncionamento | null
   /** Optional per-center demand from payroll import. */
   costCenters?: CostCenterDemand[]
   /**
@@ -180,13 +189,18 @@ function requiredHeadcountForCandidate(
   candidateRestDays: number,
   coverageBuffer: number,
   staffingFriction: number,
+  regime: RegimeFuncionamento,
 ): number {
   const target = makeScale(candidateWorkDays, candidateRestDays)
   const safeTarget = target.workRatio > 0 ? target.workRatio : currentWorkRatio
   const scaleFactor =
     safeTarget > 0 ? currentWorkRatio / safeTarget : 1
   const factor = scaleFactor * (1 + coverageBuffer) * staffingFriction
-  return Math.max(currentHc, Math.ceil(currentHc * factor))
+  return requiredHeadcountAfterFactor(currentHc, factor, {
+    preserveCurrentScale: false,
+    regime,
+    targetWorkDays: candidateWorkDays,
+  })
 }
 
 function estimateCosts(args: {
@@ -251,6 +265,9 @@ function suggestForCenter(
   const sector = getSectorCalibration(input.sector, input.sectorBufferPct)
   const currentScale = parseScale(input.currentScale)
   const codes = listSuggestableCodes(input.scenarioId, input.currentScale)
+  const regime = resolveRegime(
+    demand.regimeFuncionamento ?? input.defaultRegimeFuncionamento,
+  )
 
   // Coverage need: prefer units×shifts as posts; fall back to HC.
   const posts = Math.max(1, input.units * input.shiftsPerDay)
@@ -270,6 +287,7 @@ function suggestForCenter(
       def.restDays,
       input.coverageBuffer,
       sector.staffingFriction,
+      regime,
     )
 
     const shifts = buildShiftWindows(code, input.operatingHours, hc)
@@ -407,6 +425,7 @@ export function suggestSchedulesFromSimulation(
     operatingHours: input.operatingHours ?? DEFAULT_OPERATING_HOURS,
     projectedChargeFactor: opts.projectedChargeFactor,
     coverageBuffer: opts.coverageBuffer,
+    defaultRegimeFuncionamento: input.defaultRegimeFuncionamento,
     costCenters: opts.costCenters,
     manualScaleRequest: opts.manualScaleRequest,
   })
