@@ -28,6 +28,8 @@ import {
   EXECUTIVE_KPI_CARD_PLAIN_CLASS,
   EXECUTIVE_KPI_HINT_CLASS,
   executiveKpiValueClass,
+  formatExecutiveNumber,
+  formatSignedExecutiveNumber,
 } from '../utils/executiveKpi'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
 import {
@@ -373,16 +375,17 @@ export function ResultsView({
       : folhaDir.tone === 'down'
         ? 'text-[var(--color-accent)]'
         : 'text-[var(--color-ink)]'
-  const folhaValue = signedBrl(cost.monthlyDelta)
-  const folhaHint = `${folhaDir.label} · anual ${signedBrl(cost.annualDelta)}`
+  // C-Level KPIs: numeric pt-BR (no R$) — keep signs / arrows (PX-130)
+  const folhaValue = formatSignedExecutiveNumber(cost.monthlyDelta)
+  const folhaHint = `${folhaDir.label} · anual ${formatSignedExecutiveNumber(cost.annualDelta)}`
   const hcValue = `${coverage.currentHeadcount} → ${coverage.requiredHeadcount}`
-  const vrValue = vr ? signedBrl(vr.monthlyDelta) : '—'
+  const vrValue = vr ? formatSignedExecutiveNumber(vr.monthlyDelta) : '—'
   const vrHint = vr
-    ? `${brl(vr.currentMonthly)} → ${brl(vr.proposedMonthly)}`
+    ? `${formatExecutiveNumber(vr.currentMonthly)} → ${formatExecutiveNumber(vr.proposedMonthly)}`
     : 'Sem VR na folha'
-  const vtValue = vt ? signedBrl(vt.monthlyDelta) : '—'
+  const vtValue = vt ? formatSignedExecutiveNumber(vt.monthlyDelta) : '—'
   const vtHint = vt
-    ? `${brl(vt.currentMonthly)} → ${brl(vt.proposedMonthly)}`
+    ? `${formatExecutiveNumber(vt.currentMonthly)} → ${formatExecutiveNumber(vt.proposedMonthly)}`
     : 'Sem VT na folha'
 
   const absorcaoLabel =
@@ -394,7 +397,7 @@ export function ResultsView({
     currentHeadcount: coverage.currentHeadcount,
     requiredHeadcount: coverage.requiredHeadcount,
     absorcaoLabel,
-    formatSignedBrl: signedBrl,
+    formatSigned: formatSignedExecutiveNumber,
   })
 
   return (
