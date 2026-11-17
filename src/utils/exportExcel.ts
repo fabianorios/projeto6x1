@@ -56,6 +56,9 @@ function centersFromResult(result: SimulationResult): CostCenterResult[] {
       currentHeadcount: result.coverage.currentHeadcount,
       requiredHeadcount: result.coverage.requiredHeadcount,
       additionalHeadcount: result.coverage.additionalHeadcount,
+      baselineSalaryMass:
+        result.cost.baselineSalaryMass ??
+        result.coverage.currentHeadcount * result.input.averageMonthlySalary,
       baselinePayroll: result.cost.baselineMonthlyPayroll,
       projectedPayroll: result.cost.projectedMonthlyPayroll,
       payrollMonthlyDelta: result.cost.monthlyDelta,

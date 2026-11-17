@@ -36,18 +36,21 @@ Encargos patronais vêm do **regime tributário por CNPJ** (Simples / Lucro Pres
    - `required = ceil( HC × scaleFactor × (1 + buffer) × atritoSetorial )`
    - piso no HC atual; no status quo o adicional é forçado a **0**.
    - **Exceção (folga fixa):** se o regime já é coberto pelo padrão-alvo com o quadro atual — ex. `SEG_SEX` → 5×2 (folga sáb/dom) ou `SEG_SAB` → ciclo com ≥6 dias de trabalho — o fator **não** infla o HC. Cobertura Mon–Fri (ou Mon–Sáb) já fecha com as mesmas pessoas no mesmo horário; `ceil(1 × 1,2)` não deve inventar a 2ª vaga. `CONTINUO_7D` e alvos mais curtos (ex. 4×3 em SEG_SEX) continuam com o fator.
-5. **Folha (salários)**:
-   - Sem import: baseline = `HC × salário médio` (sem encargos).
-   - Com import CSV (`docs/import-layout.md`): baseline = `Σ(salario × quantidade)`; HC = `Σ quantidade`; salário médio = baseline / HC.
-   - Projetada = `required × salário_médio × projectedChargeFactor`.
+5. **Folha (salários + encargos)**:
+   - Massa salarial atual: sem import = `HC × salário médio`; com import = `Σ(salario × quantidade)` (HC = `Σ quantidade`).
+   - **Baseline e projetada** usam a **mesma receita** de encargos/provisões (regime tributário + férias/13º + onboarding + benefícios fixos proxy) sobre a massa respectiva — o Δ não compara “só salário” com “salário+encargos”.
+   - Projetada ainda soma Δ HE por queda de divisor (220→210/200/180) e custo de HE de absorção.
+   - Com HC igual e sem HE na folha, Δ folha ≈ **0** (status quo e SEG_SEX→5×2 com waiver). Com HE existente, sobra só a cascata do divisor.
    - Delta mensal = projetada − baseline; anual = mensal × 12.
 6. **VR / VT** (somente com folha importada; layout canônico em `docs/import-layout.md`):
    - Dias/mês estimados da escala: `dias_mes ≈ round(30 × workRatio)` → 6×1 ≈ 26, 5×2 ≈ 21, 4×3 ≈ 17.
    - Se `vr_dias_mes_atual` / `vt_dias_mes_atual` vierem preenchidos, usam-se esses valores; se vazios, usa-se a estimativa da escala atual (ou `escala_atual` da linha).
+   - Modo `ESCALA` (default): proposto recalcula dias pela escala-alvo → com HC igual, 6×1→5×2 **reduz** VR/VT (26→21). Modos `FIXO_MES` / `CALENDARIO_LOCAL`: dias fixos → Δ ≈ 0 se HC igual.
    - **Atual** = `valor_dia × dias_mes_atual × quantidade` (somado nas linhas).
    - **Proposto (quadro atual)** = `valor_dia × dias_mes_proposta(escala-alvo) × quantidade`.
    - **HC adicional** no centro de custo: `média(valor_dia) × dias_mes_proposta × adicional`.
    - Totais gerais = soma dos centros; delta = proposto − atual (mensal e ×12 anual).
+   - Se VR/VT **sobem** com HC igual, os dias atuais na folha estão abaixo da estimativa do alvo (checar apuração de jornada / `TIP_OplTrabalho` — PX-133), não o fator de HC.
 7. **Gap de cobertura** (se não contratar):
    - `horas/semana ≈ adicional × workDays_alvo × hoursPerShift` (padrão 8h).
 

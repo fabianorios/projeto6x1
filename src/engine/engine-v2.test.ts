@@ -264,6 +264,31 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.coverage.headcountFactor, 1)
   })
 
+  it('same HC + no HE → Δ folha ≈ 0 (encargos on both sides)', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;vr_valor_dia;vr_dias_mes_atual;vt_valor_dia;vt_dias_mes_atual;regime_funcionamento',
+      'Operador;3000;220;44;CC1;10;6x1;32;26;15;26;SEG_SEX',
+    ].join('\n')
+    const { rows } = parsePayrollCsv(csv)
+    const r = simulate(
+      baseInput({
+        scenarioId: 'fase1_2026_42h',
+        payrollRows: rows,
+        defaultRegimeFuncionamento: 'SEG_SEX',
+      }),
+    )
+    assert.equal(r.coverage.additionalHeadcount, 0)
+    assert.equal(r.heCascade.heCostDelta, 0)
+    assert.ok(Math.abs(r.cost.monthlyDelta) < 0.01)
+    assert.ok(r.vr && r.vr.monthlyDelta < 0) // 26→21 days
+    assert.ok(r.vt && r.vt.monthlyDelta < 0)
+  })
+
+  it('status_quo Δ folha ≈ 0 (no fake encargos-only jump)', () => {
+    const r = simulate(baseInput({ scenarioId: 'status_quo' }))
+    assert.ok(Math.abs(r.cost.monthlyDelta) < 0.01)
+  })
+
   it('HORA_EXTRA_MAXIMA can show heCap badge state', () => {
     const r = simulate(
       baseInput({
