@@ -13,6 +13,11 @@ import {
 import type { EnvironmentStore } from "../lib/store.js";
 import { createClientForEnvironment } from "../lib/db.js";
 import type { ServerConfig } from "../config.js";
+import {
+  EPHEMERAL_CONN_FAIL_MSG,
+  isEphemeralConnectionFailure,
+  scrubErrorText,
+} from "../lib/ephemeral-db.js";
 
 const selectSchema = z.object({
   environmentId: z.string().uuid().optional(),
@@ -122,10 +127,12 @@ export function createQueryRoutes(deps: QueryRoutesDeps) {
       } catch {
         // ignore
       }
-      return c.json(
-        { error: err instanceof Error ? err.message : String(err) },
-        502,
-      );
+      // Never HTTP 502 — Cloudflare/Nginx rewrite 502 into HTML and break SPA JSON.
+      if (isEphemeralConnectionFailure(err)) {
+        return c.json({ error: EPHEMERAL_CONN_FAIL_MSG }, 422);
+      }
+      const raw = err instanceof Error ? err.message : String(err);
+      return c.json({ error: scrubErrorText(raw) }, 400);
     }
   });
 

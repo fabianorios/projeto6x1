@@ -98,14 +98,18 @@ export function isEphemeralConnectionFailure(err: unknown): boolean {
   return false;
 }
 
-/** Remove passwords / usernames from error strings before JSON or logs (LGPD). */
+/**
+ * Remove passwords / usernames from error strings before JSON or logs (LGPD).
+ * Secrets shorter than 4 chars are skipped — e.g. user `sa` must not corrupt
+ * table names like `Empresas` → `Empre[redacted]s`.
+ */
 export function scrubErrorText(
   text: string,
   secrets: readonly string[] = [],
 ): string {
   let out = text;
   for (const secret of secrets) {
-    if (!secret) continue;
+    if (!secret || secret.length < 4) continue;
     if (out.includes(secret)) {
       out = out.split(secret).join("[redacted]");
     }

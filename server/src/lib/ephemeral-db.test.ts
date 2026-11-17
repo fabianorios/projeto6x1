@@ -44,6 +44,14 @@ describe("ephemeral-db helpers", () => {
     assert.match(scrubbed, /\[redacted\]/);
   });
 
+  it("does not scrub short usernames inside table names (sa ⊂ Empresas)", () => {
+    const scrubbed = scrubErrorText("Invalid object name 'Empresas'.", [
+      "sa",
+      "x",
+    ]);
+    assert.equal(scrubbed, "Invalid object name 'Empresas'.");
+  });
+
   it("exposes a stable Portuguese connection failure message", () => {
     assert.match(EPHEMERAL_CONN_FAIL_MSG, /Falha de conexão/);
     assert.match(EPHEMERAL_CONN_FAIL_MSG, /firewall|timeout/i);

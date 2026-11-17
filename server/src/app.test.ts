@@ -90,6 +90,39 @@ describe("API routes", () => {
     assert.match(String(body.error), /allowlist/i);
   });
 
+  it("select SQL/driver errors return 4xx JSON (never 502)", async () => {
+    const createRes = await app.request("/api/environments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "SelectFail",
+        engine: "mssql",
+        host: "203.0.113.50",
+        port: 1433,
+        database: "nope",
+        user: "ro",
+        password: "x",
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const { environment } = await createRes.json();
+    const res = await app.request("/api/query/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        environmentId: environment.id,
+        table: "Empresas",
+        columns: ["EMP_CdiEmpresa"],
+        limit: 1,
+      }),
+    });
+    assert.ok(res.status === 400 || res.status === 422, `status=${res.status}`);
+    assert.match(res.headers.get("content-type") ?? "", /json/i);
+    const body = await res.json();
+    assert.equal(typeof body.error, "string");
+    assert.ok(body.error.length > 0);
+  });
+
   it("lists allowlisted tables", async () => {
     const res = await app.request("/api/query/tables");
     assert.equal(res.status, 200);

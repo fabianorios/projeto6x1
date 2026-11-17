@@ -8,9 +8,12 @@ import { z } from "zod";
 import type { ServerConfig } from "../config.js";
 import { createClientForEnvironment } from "../lib/db.js";
 import {
+  EPHEMERAL_CONN_FAIL_MSG,
   applyReadIsolation,
   createEphemeralClient,
+  isEphemeralConnectionFailure,
   scrubCreds,
+  scrubErrorText,
   type EphemeralCreds,
 } from "../lib/ephemeral-db.js";
 import type { EnvironmentStore } from "../lib/store.js";
@@ -467,10 +470,13 @@ export function createTestSlotRoute(deps: SqlProfileRoutesDeps) {
         },
       });
     } catch (err) {
-      return c.json(
-        { error: err instanceof Error ? err.message : String(err) },
-        502,
-      );
+      // Never HTTP 502 — Cloudflare/Nginx rewrite 502 into HTML and break SPA JSON.
+      const secrets = creds ? [creds.password, creds.user] : [];
+      if (isEphemeralConnectionFailure(err)) {
+        return c.json({ error: EPHEMERAL_CONN_FAIL_MSG }, 422);
+      }
+      const raw = err instanceof Error ? err.message : String(err);
+      return c.json({ error: scrubErrorText(raw, secrets) }, 400);
     } finally {
       if (creds) scrubCreds(creds);
       if (client) {
