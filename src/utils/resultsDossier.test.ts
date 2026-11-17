@@ -8,8 +8,12 @@ import {
   dossierEstablishmentOptions,
   executiveImpactSummary,
   expandAllDossier,
+  groupOperacionalByCnpj,
+  OPERACIONAL_SEM_CNPJ_KEY,
   resolveVisibleCentroCustos,
+  summarizeOperacionalTurmas,
 } from './resultsDossier'
+import type { CostCenterResult } from '../engine/types'
 
 function row(partial: Partial<PayrollRow>): PayrollRow {
   return {
@@ -145,5 +149,94 @@ describe('resultsDossier helpers', () => {
       }),
       null,
     )
+  })
+
+  it('groups Bloco Operacional centers by Filial/CNPJ', () => {
+    const stub = (partial: Partial<CostCenterResult>): CostCenterResult => ({
+      centroCusto: 'X',
+      currentHeadcount: 1,
+      requiredHeadcount: 1,
+      additionalHeadcount: 0,
+      baselinePayroll: 0,
+      projectedPayroll: 0,
+      payrollMonthlyDelta: 0,
+      vr: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      vt: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      va: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      assistMedicaMonthly: 0,
+      assistOdontoMonthly: 0,
+      ...partial,
+    })
+
+    const rows = [
+      row({
+        cnpjCompleto: '12345678000190',
+        codFilial: '01',
+        centroCusto: 'CC-A',
+        codCc: 'CC-A',
+      }),
+      row({
+        cnpjCompleto: '98765432000111',
+        codFilial: '02',
+        centroCusto: 'CC-C',
+        codCc: 'CC-C',
+      }),
+    ]
+    const groups = groupOperacionalByCnpj({
+      centers: [
+        stub({
+          centroCusto: 'CC-A',
+          cnpjCompleto: '12345678000190',
+          distribuicaoTurmas: {
+            regime: 'SEG_SEX',
+            crewCount: 2,
+            dailyCoverageNeed: 5,
+            totalHeadcount: 10,
+            crews: [],
+            note: 'a',
+          },
+        }),
+        stub({
+          centroCusto: 'CC-C',
+          cnpjCompleto: '98765432000111',
+          distribuicaoTurmas: {
+            regime: 'SEG_SEX',
+            crewCount: 1,
+            dailyCoverageNeed: 3,
+            totalHeadcount: 3,
+            crews: [],
+            note: 'c',
+          },
+        }),
+        stub({ centroCusto: 'ORFA', cnpjCompleto: null }),
+      ],
+      payrollRows: rows,
+    })
+    assert.equal(groups.length, 3)
+    assert.equal(groups[0]!.centroCustos.join(','), 'CC-A')
+    assert.equal(groups[1]!.centroCustos.join(','), 'CC-C')
+    assert.equal(groups[2]!.key, OPERACIONAL_SEM_CNPJ_KEY)
+
+    const sum = summarizeOperacionalTurmas(groups[0]!.centers)
+    assert.equal(sum.crewCount, 2)
+    assert.equal(sum.totalHeadcount, 10)
   })
 })

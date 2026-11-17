@@ -136,3 +136,114 @@ export function resolveVisibleCentroCustos(opts: {
   }
   return null
 }
+
+export const OPERACIONAL_SEM_CNPJ_KEY = '__sem_cnpj__'
+
+export interface OperacionalFilialGroup {
+  /** Digits-only CNPJ, or {@link OPERACIONAL_SEM_CNPJ_KEY}. */
+  key: string
+  /** UI label (`Filial … · CNPJ` or “Sem CNPJ / filial”). */
+  label: string
+  centroCustos: string[]
+  centers: CostCenterResult[]
+}
+
+/**
+ * Group Seção 2 (Bloco Operacional) cost centers by Filial/CNPJ in scope.
+ * Prefer `CostCenterResult.cnpjCompleto`; fall back to payroll establishment map.
+ * Centers without CNPJ land in a single “Sem CNPJ” bucket (only if needed).
+ */
+export function groupOperacionalByCnpj(opts: {
+  centers: CostCenterResult[]
+  payrollRows?: PayrollRow[] | null
+}): OperacionalFilialGroup[] {
+  const { centers, payrollRows } = opts
+  if (!centers.length) return []
+
+  const establishments = dossierEstablishmentOptions(payrollRows)
+  const labelByKey = new Map(establishments.map((e) => [e.key, e.label]))
+  const ccToKey = new Map<string, string>()
+  for (const est of establishments) {
+    for (const cc of est.centroCustos) {
+      if (!ccToKey.has(cc)) ccToKey.set(cc, est.key)
+    }
+  }
+
+  const buckets = new Map<string, OperacionalFilialGroup>()
+
+  function ensure(key: string, label: string): OperacionalFilialGroup {
+    let g = buckets.get(key)
+    if (!g) {
+      g = { key, label, centroCustos: [], centers: [] }
+      buckets.set(key, g)
+    }
+    return g
+  }
+
+  for (const cc of centers) {
+    const fromCc = cnpjDigits(cc.cnpjCompleto)
+    const fromMap = ccToKey.get(cc.centroCusto.trim()) ?? ''
+    const key =
+      fromCc.length >= 8
+        ? fromCc
+        : fromMap.length >= 8
+          ? fromMap
+          : OPERACIONAL_SEM_CNPJ_KEY
+    const label =
+      key === OPERACIONAL_SEM_CNPJ_KEY
+        ? 'Sem CNPJ / filial'
+        : (labelByKey.get(key) ??
+          formatCnpjDisplay(key.slice(0, 8), key.slice(8, 14)))
+    const g = ensure(key, label)
+    g.centers.push(cc)
+    const code = cc.centroCusto.trim()
+    if (code && !g.centroCustos.includes(code)) g.centroCustos.push(code)
+  }
+
+  const groups = [...buckets.values()].map((g) => ({
+    ...g,
+    centroCustos: [...g.centroCustos].sort((a, b) =>
+      a.localeCompare(b, 'pt-BR'),
+    ),
+  }))
+
+  groups.sort((a, b) => {
+    if (a.key === OPERACIONAL_SEM_CNPJ_KEY) return 1
+    if (b.key === OPERACIONAL_SEM_CNPJ_KEY) return -1
+    return a.label.localeCompare(b.label, 'pt-BR')
+  })
+  return groups
+}
+
+/** Compact turma/jornada summary for one filial group (or whole sim). */
+export function summarizeOperacionalTurmas(
+  centers: CostCenterResult[],
+): {
+  crewCount: number
+  totalHeadcount: number
+  dailyCoverageNeed: number
+  regimes: string[]
+} {
+  let crewCount = 0
+  let totalHeadcount = 0
+  let dailyCoverageNeed = 0
+  const regimes = new Set<string>()
+  for (const c of centers) {
+    const d = c.distribuicaoTurmas
+    if (d) {
+      crewCount += d.crewCount
+      totalHeadcount += d.totalHeadcount
+      dailyCoverageNeed += d.dailyCoverageNeed
+      regimes.add(d.regime)
+    } else {
+      totalHeadcount += c.requiredHeadcount
+    }
+    if (c.regimeFuncionamento) regimes.add(c.regimeFuncionamento)
+  }
+  return {
+    crewCount,
+    totalHeadcount,
+    dailyCoverageNeed,
+    regimes: [...regimes],
+  }
+}
