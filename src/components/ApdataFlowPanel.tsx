@@ -20,6 +20,10 @@ import {
   payrollRowsForApi,
   postSimulate,
 } from '../api/simulate'
+import {
+  isSimulateFromEphemeralNetworkFailure,
+  postSimulateFromEphemeral,
+} from '../api/simulateFromEphemeral'
 import { listSqlProfiles } from '../api/sql-profiles'
 import { cnpjDigits, type Establishment } from '../apdata/cnpj'
 import { enrichPayrollCnpjFromEscopo } from '../apdata/enrichPayrollCnpj'
@@ -134,6 +138,71 @@ function formToSessionCreds(
     database: form.database.trim(),
     user: form.user.trim(),
     password: form.password,
+  }
+}
+
+type DirectFolhaFilters = {
+  cnpjs?: string[]
+  excludeSituacoes?: number[]
+  incluirAfastados?: boolean
+  tipoRegimeTrabalhistaIds?: number[]
+  categTrabeSocIds?: number[]
+  somenteEmpregaticios?: boolean
+}
+
+/**
+ * P3 happy path: POST /api/simulate/from-ephemeral (extract+map on server).
+ * Network/5xx → legacy ephemeral extract + client map (offline meetings).
+ */
+async function runDirectFolhaPipeline(
+  creds: EphemeralSessionCreds,
+  filters: DirectFolhaFilters,
+  overrides: {
+    defaultSalario?: number
+    vrValorDia?: number | null
+    vtValorDia?: number | null
+    selectedCnpjKeys?: string[]
+  } = {},
+): Promise<ExportResult> {
+  try {
+    const remote = await postSimulateFromEphemeral(creds, { filters })
+    logPerf('ephemeral-extract', remote.latencyMs.total, {
+      rowCount: remote.rowCount,
+      via: 'from-ephemeral',
+      extractMs: remote.latencyMs.extract,
+      mapMs: remote.latencyMs.map,
+    })
+    return exportResultFromPayrollRows(
+      remote.payrollRows,
+      [],
+      [
+        {
+          id: 'ephemeral-extract',
+          label: 'Conexão Direta (POST /api/simulate/from-ephemeral)',
+          status: 'done',
+          detail: `${remote.rowCount} linha(s) · extract ${remote.latencyMs.extract}ms · map ${remote.latencyMs.map}ms`,
+        },
+      ],
+      'Extrator efêmero não retornou linhas após filtros.',
+      overrides,
+    )
+  } catch (err) {
+    if (!isSimulateFromEphemeralNetworkFailure(err)) {
+      throw err
+    }
+    const extracted = await postEphemeralExtract(creds, filters)
+    logPerf('ephemeral-extract', extracted.latencyMs, {
+      rowCount: extracted.rowCount,
+      via: 'ephemeral-legacy-fallback',
+    })
+    return exportResultFromEphemeralRows(extracted.rows, overrides, [
+      {
+        id: 'ephemeral-extract',
+        label: 'Extrator efêmero (fallback POST /api/query/ephemeral)',
+        status: 'done',
+        detail: `${extracted.rowCount} linha(s) agregadas · ${extracted.latencyMs}ms · map local`,
+      },
+    ])
   }
 }
 
@@ -437,30 +506,16 @@ export function ApdataFlowPanel({
           .map((e) => cnpjDigits(e.key))
           .filter(Boolean)
           .slice(0, 32)
-        const extracted = await postEphemeralExtract(creds, {
+        const filters = {
           cnpjs,
           excludeSituacoes: extractFilters.excludeSituacoes,
           incluirAfastados: extractFilters.incluirAfastados,
           tipoRegimeTrabalhistaIds: extractFilters.tipoRegimeTrabalhistaIds,
           categTrabeSocIds: extractFilters.categTrabeSocIds,
           somenteEmpregaticios: extractFilters.somenteEmpregaticios,
-        })
-        const out = exportResultFromEphemeralRows(
-          extracted.rows,
-          {
-            selectedCnpjKeys: list.map((e) => e.key),
-          },
-          [
-            {
-              id: 'ephemeral-extract',
-              label: 'Extrator efêmero (POST /api/query/ephemeral)',
-              status: 'done',
-              detail: `${extracted.rowCount} linha(s) · ${extracted.latencyMs}ms`,
-            },
-          ],
-        )
-        logPerf('ephemeral-extract', extracted.latencyMs, {
-          rowCount: extracted.rowCount,
+        }
+        const out = await runDirectFolhaPipeline(creds, filters, {
+          selectedCnpjKeys: list.map((e) => e.key),
         })
         setExported(out)
         setSteps(out.steps)
@@ -558,42 +613,29 @@ export function ApdataFlowPanel({
             'Conecte com IP/Porta antes de executar o export (Conectar).',
           )
         }
-        let steps: ExportProgressStep[] = [
+        setSteps([
           {
             id: 'ephemeral-extract',
-            label: 'Extrator efêmero (POST /api/query/ephemeral)',
+            label: 'Conexão Direta (POST /api/simulate/from-ephemeral)',
             status: 'running',
             detail: 'Conexão volátil — credenciais só nesta requisição',
           },
-        ]
-        setSteps(steps)
+        ])
         const cnpjs = (overrides.selectedCnpjKeys ?? [])
           .map((k) => cnpjDigits(k))
           .filter(Boolean)
           .slice(0, 32)
-        const extracted = await postEphemeralExtract(ephemeralCreds, {
-          cnpjs,
-          excludeSituacoes: extractFilters.excludeSituacoes,
-          incluirAfastados: extractFilters.incluirAfastados,
-          tipoRegimeTrabalhistaIds: extractFilters.tipoRegimeTrabalhistaIds,
-          categTrabeSocIds: extractFilters.categTrabeSocIds,
-          somenteEmpregaticios: extractFilters.somenteEmpregaticios,
-        })
-        steps = [
+        const out = await runDirectFolhaPipeline(
+          ephemeralCreds,
           {
-            id: 'ephemeral-extract',
-            label: 'Extrator efêmero (POST /api/query/ephemeral)',
-            status: 'done',
-            detail: `${extracted.rowCount} linha(s) agregadas · ${extracted.latencyMs}ms`,
+            cnpjs,
+            excludeSituacoes: extractFilters.excludeSituacoes,
+            incluirAfastados: extractFilters.incluirAfastados,
+            tipoRegimeTrabalhistaIds: extractFilters.tipoRegimeTrabalhistaIds,
+            categTrabeSocIds: extractFilters.categTrabeSocIds,
+            somenteEmpregaticios: extractFilters.somenteEmpregaticios,
           },
-        ]
-        logPerf('ephemeral-extract', extracted.latencyMs, {
-          rowCount: extracted.rowCount,
-        })
-        const out = exportResultFromEphemeralRows(
-          extracted.rows,
           overrides,
-          steps,
         )
         setExported(out)
         setSteps(out.steps)

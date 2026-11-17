@@ -9,6 +9,10 @@ import { createQueryRoutes } from "./routes/query.js";
 import { createFolhaAptoolsRoutes } from "./routes/folha-aptools.js";
 import { createSimulateRoutes } from "./routes/simulate.js";
 import {
+  createSimulateFromEphemeralRoutes,
+  type SimulateFromEphemeralExtractFn,
+} from "./routes/simulate-from-ephemeral.js";
+import {
   createSqlProfileRoutes,
   createTestSlotRoute,
 } from "./routes/sql-profiles.js";
@@ -17,6 +21,8 @@ export type AppDeps = {
   config: ServerConfig;
   store?: EnvironmentStore;
   profiles?: SqlProfilesStore;
+  /** Test hook for POST /api/simulate/from-ephemeral (no live DB). */
+  fromEphemeralExtractFn?: SimulateFromEphemeralExtractFn;
 };
 
 export function createApp(deps: AppDeps) {
@@ -58,10 +64,16 @@ export function createApp(deps: AppDeps) {
     createEphemeralRoutes({ config: deps.config }),
   );
   app.route("/api/query", createTestSlotRoute(profileDeps));
-  app.route(
-    "/api/simulate",
-    createSimulateRoutes({ config: deps.config }),
+  const simulateApp = createSimulateRoutes({ config: deps.config });
+  // Nested so /api/simulate/from-ephemeral is not swallowed by /api/simulate 404.
+  simulateApp.route(
+    "/from-ephemeral",
+    createSimulateFromEphemeralRoutes({
+      config: deps.config,
+      extractFn: deps.fromEphemeralExtractFn,
+    }),
   );
+  app.route("/api/simulate", simulateApp);
   app.route(
     "/api/folha/aptools",
     createFolhaAptoolsRoutes({ config: deps.config }),
