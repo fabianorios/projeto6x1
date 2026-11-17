@@ -47,16 +47,20 @@ describe('resultsDossier helpers', () => {
     assert.equal(collapseAllDossier().executivo, false)
   })
 
-  it('builds one-line executive impact summary', () => {
+  it('builds one-line executive impact summary (numeric, no R$)', () => {
     const line = executiveImpactSummary({
       monthlyDelta: 12000,
       annualDelta: 144000,
       currentHeadcount: 40,
       requiredHeadcount: 48,
       absorcaoLabel: 'Contratação integral',
-      formatSignedBrl: (n) => (n >= 0 ? `+R$ ${n}` : `−R$ ${Math.abs(n)}`),
+      formatSigned: (n) =>
+        n >= 0
+          ? `+${n.toLocaleString('pt-BR')}`
+          : `−${Math.abs(n).toLocaleString('pt-BR')}`,
     })
-    assert.match(line, /folha \+R\$ 12000\/mês/)
+    assert.match(line, /folha \+12\.000\/mês/)
+    assert.doesNotMatch(line, /R\$/)
     assert.match(line, /HC 40→48/)
     assert.match(line, /Contratação integral/)
   })

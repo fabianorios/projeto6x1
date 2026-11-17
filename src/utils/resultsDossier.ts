@@ -31,12 +31,13 @@ export function executiveImpactSummary(opts: {
   currentHeadcount: number
   requiredHeadcount: number
   absorcaoLabel: string
-  formatSignedBrl: (n: number) => string
+  /** Signed numeric formatter (pt-BR separators; no R$ — PX-130). */
+  formatSigned: (n: number) => string
 }): string {
-  const { formatSignedBrl: money } = opts
+  const { formatSigned: signed } = opts
   return (
-    `Impacto: folha ${money(opts.monthlyDelta)}/mês` +
-    ` (${money(opts.annualDelta)}/ano)` +
+    `Impacto: folha ${signed(opts.monthlyDelta)}/mês` +
+    ` (${signed(opts.annualDelta)}/ano)` +
     ` · HC ${opts.currentHeadcount}→${opts.requiredHeadcount}` +
     ` · ${opts.absorcaoLabel}`
   )
