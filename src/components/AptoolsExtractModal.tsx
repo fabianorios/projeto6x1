@@ -54,7 +54,10 @@ export function AptoolsExtractModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const [dialect, setDialect] = useState<ExtractorDialect>('mssql')
   const [copied, setCopied] = useState(false)
+  /** Manual “pronto / já usei” — auto-checks after a successful Copiar SQL. */
+  const [itemReady, setItemReady] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
+  const [sqlOpen, setSqlOpen] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importOk, setImportOk] = useState<string | null>(null)
   const [importNotice, setImportNotice] = useState<string | null>(null)
@@ -103,11 +106,13 @@ export function AptoolsExtractModal({
         dialect === 'oracle' ? sql.replace(/;\s*$/, '') : sql
       await navigator.clipboard.writeText(text)
       setCopied(true)
+      setItemReady(true)
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
       setCopyError(
-        'Não foi possível copiar automaticamente — selecione o texto e use Ctrl+C.',
+        'Não foi possível copiar automaticamente — abra Ver SQL, selecione o texto e use Ctrl+C.',
       )
+      setSqlOpen(true)
     }
   }
 
@@ -224,7 +229,7 @@ export function AptoolsExtractModal({
         </div>
 
         <ol className="mt-5 space-y-5">
-          <li className="space-y-3">
+          <li className="space-y-2">
             <p className="text-sm font-semibold text-[var(--color-ink)]">
               <span className="mr-2 text-[var(--color-accent)]">1.</span>
               Selecione o banco e copie o comando SQL
@@ -251,6 +256,7 @@ export function AptoolsExtractModal({
                       setDialect(id)
                       setSql(getAptoolsExtractorScript(id))
                       setCopied(false)
+                      setItemReady(false)
                       setCopyError(null)
                     }}
                     className={
@@ -264,37 +270,67 @@ export function AptoolsExtractModal({
                 )
               })}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void copySql()}
-                className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white"
-              >
-                {copied ? 'Copiado!' : 'Copiar'}
-              </button>
-              <span className="text-xs text-[var(--color-muted)]">
-                Dialeto ativo:{' '}
-                <strong className="font-medium text-[var(--color-ink)]">
-                  {dialect === 'oracle' ? 'Oracle (NVL / LISTAGG / ||)' : 'MSSQL (ISNULL / STRING_AGG / +)'}
-                </strong>
-                {' · '}fonte{' '}
-                <code className="text-[11px]">docs/apdata-extractor.sql</code>
-                {' · '}tipos fábrica VR=53 / VA=52 (editáveis no Studio)
-              </span>
-            </div>
+            <p className="text-xs text-[var(--color-muted)]">
+              Dialeto:{' '}
+              <strong className="font-medium text-[var(--color-ink)]">
+                {dialect === 'oracle'
+                  ? 'Oracle (NVL / LISTAGG / ||)'
+                  : 'MSSQL (ISNULL / STRING_AGG / +)'}
+              </strong>
+              {' · '}
+              <code className="text-[11px]">docs/apdata-extractor.sql</code>
+            </p>
+            <ul className="border border-[var(--color-line)] bg-white/70" role="list">
+              <li className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2">
+                <label className="flex min-w-0 flex-1 items-center gap-2 text-sm text-[var(--color-ink)]">
+                  <input
+                    type="checkbox"
+                    checked={itemReady}
+                    onChange={(e) => setItemReady(e.target.checked)}
+                    className="shrink-0"
+                    aria-label="Extrator Folha marcado como pronto"
+                  />
+                  <span className="min-w-0 font-medium leading-snug">
+                    Extrator Folha
+                    <span className="mt-0.5 block text-xs font-normal text-[var(--color-muted)] sm:mt-0 sm:ml-1.5 sm:inline">
+                      (agregado LGPD — sem nome/CPF/matrícula)
+                    </span>
+                  </span>
+                </label>
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void copySql()}
+                    className="bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white"
+                  >
+                    {copied ? 'Copiado!' : 'Copiar SQL'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSqlOpen((o) => !o)}
+                    aria-expanded={sqlOpen}
+                    className="border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  >
+                    {sqlOpen ? 'Ocultar SQL' : 'Ver SQL'}
+                  </button>
+                </div>
+              </li>
+            </ul>
             {copyError ? (
               <p className="text-xs text-amber-900">{copyError}</p>
             ) : null}
-            <label className="block">
-              <span className="sr-only">Query SQL</span>
-              <textarea
-                readOnly
-                value={sql}
-                rows={12}
-                className="w-full border border-[var(--color-line)] bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink)]"
-                onFocus={(e) => e.currentTarget.select()}
-              />
-            </label>
+            {sqlOpen ? (
+              <label className="block">
+                <span className="sr-only">Query SQL</span>
+                <textarea
+                  readOnly
+                  value={sql}
+                  rows={8}
+                  className="w-full border border-[var(--color-line)] bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-[var(--color-ink)]"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </label>
+            ) : null}
           </li>
 
           <li>
