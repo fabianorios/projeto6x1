@@ -797,7 +797,7 @@ export function ResultsView({
                         <tbody>
                           {byCostCenter.map((c) => (
                             <tr
-                              key={c.centroCusto}
+                              key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}`}
                               className="border-b border-[var(--color-line)]"
                             >
                               <td className="px-3 py-2 font-medium">
@@ -1126,7 +1126,7 @@ function OperacionalFilialBody({
                 : '—'
             const cod = c.codHorarioAtual?.trim() || '—'
             return (
-              <li key={c.centroCusto}>
+              <li key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}`}>
                 <span className="font-medium text-[var(--color-ink)]">
                   {c.centroCusto}
                 </span>

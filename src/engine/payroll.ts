@@ -724,11 +724,16 @@ export function aggregateByCostCenter(
   >()
 
   for (const row of rows) {
-    const key = row.centroCusto
+    // Keep filiais separate when the same CC code exists under multiple CNPJs.
+    const cnpjKey = (row.cnpjCompleto ?? '').replace(/\D/g, '')
+    const key =
+      cnpjKey.length >= 8
+        ? `${cnpjKey}\u0001${row.centroCusto}`
+        : row.centroCusto
     let agg = map.get(key)
     if (!agg) {
       agg = {
-        centroCusto: key,
+        centroCusto: row.centroCusto,
         headcount: 0,
         baselinePayroll: 0,
         salaryMass: 0,

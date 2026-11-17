@@ -985,7 +985,7 @@ export function ScheduleBuilderView({
             <div key={m} className="space-y-3">
               {centers.map((cc) => (
                 <CostCenterScheduleCard
-                  key={`${m}-${cc.centroCusto}`}
+                  key={`${m}-${cc.cnpjCompleto ?? ''}-${cc.centroCusto}`}
                   cc={cc}
                   operatingHours={result.input.operatingHours}
                   shiftsPerDay={result.input.shiftsPerDay}
@@ -1002,7 +1002,7 @@ export function ScheduleBuilderView({
         <div className="mt-3 space-y-4">
           {centers.map((cc) => (
             <CostCenterScheduleCard
-              key={cc.centroCusto}
+              key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}`}
               cc={cc}
               operatingHours={result.input.operatingHours}
               shiftsPerDay={result.input.shiftsPerDay}
