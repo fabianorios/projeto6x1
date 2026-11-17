@@ -222,6 +222,7 @@ export type {
   ScenarioDeltas,
   ScenarioRowMetrics,
 } from './scenario-basket'
+export { buildScenarioWhyBullets } from './scenario-why'
 export type {
   CostCenterTotals,
   PayrollCsvHeader,

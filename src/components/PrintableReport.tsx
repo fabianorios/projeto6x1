@@ -1,5 +1,6 @@
 import {
   REGIME_FUNCIONAMENTO_LABELS,
+  buildScenarioWhyBullets,
   formatShiftRange,
   getSectorDisplayLabel,
   summarizeOperatingHours,
@@ -14,6 +15,7 @@ import {
   ScenarioComparePanel,
   sidesFromSimulation,
 } from './ScenarioComparePanel'
+import { ScenarioWhyPanel } from './ScenarioWhyPanel'
 
 interface PrintableReportProps {
   result: SimulationResult
@@ -121,6 +123,7 @@ export function PrintableReport({
     vtProposed: vt?.proposedMonthly ?? null,
     scheduleHint,
   })
+  const scenarioWhyBullets = buildScenarioWhyBullets(result)
 
   return (
     <article className="print-only report-sheet mx-auto max-w-[210mm] bg-white text-black">
@@ -176,6 +179,14 @@ export function PrintableReport({
           current={compareSides.current}
           proposed={compareSides.proposed}
           footerNote={`Cenário ativo · Δ folha ${brl(cost.monthlyDelta)}/mês · Δ anual ${brl(cost.annualDelta)} · HC adicional +${coverage.additionalHeadcount} · gap ${coverage.uncoveredShiftHoursPerWeek.toFixed(0)} h/sem se não contratar. ${ruleVersion.summary}`}
+        />
+      </section>
+
+      <section className="mt-6">
+        <ScenarioWhyPanel
+          bullets={scenarioWhyBullets}
+          scenarioLabel={ruleVersion.label}
+          variant="print"
         />
       </section>
 

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
+  buildScenarioWhyBullets,
   clearCalibrationHistory,
   defaultApdataDataInicio,
   downloadCalibrationJson,
@@ -54,6 +55,7 @@ import {
   ScenarioComparePanel,
   sidesFromSimulation,
 } from './ScenarioComparePanel'
+import { ScenarioWhyPanel } from './ScenarioWhyPanel'
 import { SuggestionFeedbackControls } from './SuggestionFeedbackControls'
 
 interface ResultsViewProps {
@@ -368,6 +370,7 @@ export function ResultsView({
   const proposedCount = basket?.proposed.length ?? 0
   const showMultiBasket = proposedCount >= 2
   const showSidePanel = proposedCount < 2
+  const scenarioWhyBullets = buildScenarioWhyBullets(result)
   const folhaDir = deltaDirection(cost.monthlyDelta)
   const folhaToneClass =
     folhaDir.tone === 'up'
@@ -725,6 +728,11 @@ export function ResultsView({
               </dd>
             </div>
           </dl>
+
+          <ScenarioWhyPanel
+            bullets={scenarioWhyBullets}
+            scenarioLabel={ruleVersion.label}
+          />
 
           <div className="border border-[var(--color-line)] bg-white/70">
             <button

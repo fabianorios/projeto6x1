@@ -4,6 +4,7 @@
  */
 
 import { formatShiftRange } from './schedule-suggest'
+import { buildScenarioWhyBullets } from './scenario-why'
 import type { ScenarioId, SimulationResult } from './types'
 
 export const SCENARIO_BASKET_STORAGE_KEY = 'projeto6x1.scenarioBasket.v1'
@@ -44,6 +45,8 @@ export interface ScenarioBasketProposed {
   simulatedAt: string
   metrics: ScenarioRowMetrics
   deltas: ScenarioDeltas
+  /** Colloquial PT-BR why-bullets (Passo 5); optional for older baskets. */
+  whyBullets?: string[]
 }
 
 export interface ScenarioBasket {
@@ -232,6 +235,7 @@ export function upsertSimulationInBasket(
       simulatedAt: now,
       metrics: proposedMetrics,
       deltas: computeDeltas(currentMetrics, proposedMetrics),
+      whyBullets: buildScenarioWhyBullets(result),
     }
     const idx = proposed.findIndex((p) => p.scenarioId === scenarioId)
     if (idx >= 0) {
