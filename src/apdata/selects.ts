@@ -375,14 +375,14 @@ export const LIVE_SELECT_STEPS: {
       'JOI_OplDesativado',
       'JOI_NuiOrdem',
     ],
-    note: 'Outer bounds → horario_trabalho_atual; trabalho via TiposJornadas.TJO_OplTrabalhada.',
+    note: 'Períodos trabalho → horario_trabalho_atual ( / + intervalo Nmin se sem step almoço); TJO_OplTrabalhada.',
   },
   {
     id: 'tipos-jornadas',
     label: 'TiposJornadas (flag trabalho)',
     table: 'TiposJornadas',
     columns: ['TJO_CdiTipoJornada', 'TJO_OplTrabalhada'],
-    note: 'User OplConsiderarTrabalho → TJO_OplTrabalhada (prefix JOI_/TJO_, not JIT_).',
+    note: 'User OplConsiderarTrabalho → TJO_OplTrabalhada (prefix JOI_/TJO_, not JIT_). Não-trabalho no gap = almoço/intervalo.',
   },
   {
     id: 'horarios',

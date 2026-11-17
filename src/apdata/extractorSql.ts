@@ -90,11 +90,15 @@ CTE_CICLO_HORARIO AS (
       AND ISNULL(hciclo.HOR_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
-CTE_HORARIO_TRABALHO AS (
-    SELECT
+CTE_HT_ITENS AS (
+    SELECT DISTINCT
         hj.HRI_CdiHorario,
-        CONVERT(varchar(5), MIN(ji.JOI_HrdHoraMinutoInicio), 108) AS entrada,
-        CONVERT(varchar(5), MAX(ji.JOI_HrdHoraMinutoFim), 108) AS saida
+        ji.JOI_HrdHoraMinutoInicio AS inicio,
+        ji.JOI_HrdHoraMinutoFim AS fim,
+        CASE
+            WHEN ISNULL(tj.TJO_OplTrabalhada, 0) = 1 OR tj.TJO_CdiTipoJornada = 1
+            THEN 1 ELSE 0
+        END AS is_work
     FROM HorariosJornadas hj
     INNER JOIN TiposDiasPonto tdp
         ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
@@ -107,11 +111,46 @@ CTE_HORARIO_TRABALHO AS (
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
       AND ISNULL(ji.JOI_OplDesativado, 0) = 0
       AND ISNULL(tdp.TIP_OplTrabalho, 0) = 1
-      AND (
-            ISNULL(tj.TJO_OplTrabalhada, 0) = 1
-         OR tj.TJO_CdiTipoJornada = 1
+),
+CTE_HT_WORK AS (
+    SELECT
+        HRI_CdiHorario,
+        inicio,
+        fim,
+        LEAD(inicio) OVER (PARTITION BY HRI_CdiHorario ORDER BY inicio, fim) AS next_inicio,
+        ROW_NUMBER() OVER (PARTITION BY HRI_CdiHorario ORDER BY inicio, fim) AS rn
+    FROM CTE_HT_ITENS
+    WHERE is_work = 1
+),
+CTE_HT_PARTS AS (
+    SELECT
+        w.HRI_CdiHorario,
+        w.rn * 2 AS seq,
+        CONVERT(varchar(5), w.inicio, 108) + '-' + CONVERT(varchar(5), w.fim, 108) AS part
+    FROM CTE_HT_WORK w
+    UNION ALL
+    SELECT
+        w.HRI_CdiHorario,
+        w.rn * 2 + 1 AS seq,
+        'intervalo ' + CAST(DATEDIFF(minute, w.fim, w.next_inicio) AS varchar(10)) + 'min' AS part
+    FROM CTE_HT_WORK w
+    WHERE w.next_inicio IS NOT NULL
+      AND DATEDIFF(minute, w.fim, w.next_inicio) > 0
+      AND NOT EXISTS (
+            SELECT 1
+            FROM CTE_HT_ITENS i
+            WHERE i.HRI_CdiHorario = w.HRI_CdiHorario
+              AND i.is_work = 0
+              AND i.inicio < w.next_inicio
+              AND i.fim > w.fim
           )
-    GROUP BY hj.HRI_CdiHorario
+),
+CTE_HORARIO_TRABALHO AS (
+    SELECT
+        HRI_CdiHorario,
+        STRING_AGG(part, ' / ') WITHIN GROUP (ORDER BY seq) AS horario_trabalho_atual
+    FROM CTE_HT_PARTS
+    GROUP BY HRI_CdiHorario
 ),
 CTE_BEN_CONTRATO AS (
     SELECT
@@ -205,7 +244,7 @@ SELECT
     ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20)) AS cod_vinculo,
     CAST(ISNULL(c.CON_CdiHorario, 0) AS VARCHAR(20)) AS cod_horario_atual,
-    ${SANITIZE_MSSQL("CASE WHEN ht.entrada IS NOT NULL AND ht.saida IS NOT NULL THEN ht.entrada + '-' + ht.saida ELSE NULL END", '')} AS horario_trabalho_atual,
+    ${SANITIZE_MSSQL('ht.horario_trabalho_atual', '')} AS horario_trabalho_atual,
     ISNULL(
         CAST(cic.work_days AS VARCHAR(10)) + 'x' + CAST(cic.off_days AS VARCHAR(10)),
         'other'
@@ -257,7 +296,7 @@ GROUP BY
     c.CON_CdiCargo, ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     ISNULL(h.HOR_QtnHorasSemanal, 44.0),
-    ht.entrada, ht.saida
+    ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()
 
@@ -288,11 +327,15 @@ CTE_CICLO_HORARIO AS (
       AND NVL(hciclo.HOR_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
-CTE_HORARIO_TRABALHO AS (
-    SELECT
+CTE_HT_ITENS AS (
+    SELECT DISTINCT
         hj.HRI_CdiHorario,
-        TO_CHAR(MIN(ji.JOI_HrdHoraMinutoInicio), 'HH24:MI') AS entrada,
-        TO_CHAR(MAX(ji.JOI_HrdHoraMinutoFim), 'HH24:MI') AS saida
+        ji.JOI_HrdHoraMinutoInicio AS inicio,
+        ji.JOI_HrdHoraMinutoFim AS fim,
+        CASE
+            WHEN NVL(tj.TJO_OplTrabalhada, 0) = 1 OR tj.TJO_CdiTipoJornada = 1
+            THEN 1 ELSE 0
+        END AS is_work
     FROM HorariosJornadas hj
     INNER JOIN TiposDiasPonto tdp
         ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
@@ -305,11 +348,46 @@ CTE_HORARIO_TRABALHO AS (
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
       AND NVL(ji.JOI_OplDesativado, 0) = 0
       AND NVL(tdp.TIP_OplTrabalho, 0) = 1
-      AND (
-            NVL(tj.TJO_OplTrabalhada, 0) = 1
-         OR tj.TJO_CdiTipoJornada = 1
+),
+CTE_HT_WORK AS (
+    SELECT
+        HRI_CdiHorario,
+        inicio,
+        fim,
+        LEAD(inicio) OVER (PARTITION BY HRI_CdiHorario ORDER BY inicio, fim) AS next_inicio,
+        ROW_NUMBER() OVER (PARTITION BY HRI_CdiHorario ORDER BY inicio, fim) AS rn
+    FROM CTE_HT_ITENS
+    WHERE is_work = 1
+),
+CTE_HT_PARTS AS (
+    SELECT
+        w.HRI_CdiHorario,
+        w.rn * 2 AS seq,
+        TO_CHAR(w.inicio, 'HH24:MI') || '-' || TO_CHAR(w.fim, 'HH24:MI') AS part
+    FROM CTE_HT_WORK w
+    UNION ALL
+    SELECT
+        w.HRI_CdiHorario,
+        w.rn * 2 + 1 AS seq,
+        'intervalo ' || TO_CHAR(ROUND((w.next_inicio - w.fim) * 1440)) || 'min' AS part
+    FROM CTE_HT_WORK w
+    WHERE w.next_inicio IS NOT NULL
+      AND (w.next_inicio - w.fim) * 1440 > 0
+      AND NOT EXISTS (
+            SELECT 1
+            FROM CTE_HT_ITENS i
+            WHERE i.HRI_CdiHorario = w.HRI_CdiHorario
+              AND i.is_work = 0
+              AND i.inicio < w.next_inicio
+              AND i.fim > w.fim
           )
-    GROUP BY hj.HRI_CdiHorario
+),
+CTE_HORARIO_TRABALHO AS (
+    SELECT
+        HRI_CdiHorario,
+        LISTAGG(part, ' / ') WITHIN GROUP (ORDER BY seq) AS horario_trabalho_atual
+    FROM CTE_HT_PARTS
+    GROUP BY HRI_CdiHorario
 ),
 CTE_BEN_CONTRATO AS (
     SELECT
@@ -403,7 +481,7 @@ SELECT
     ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0)) AS cod_vinculo,
     TO_CHAR(NVL(c.CON_CdiHorario, 0)) AS cod_horario_atual,
-    ${SANITIZE_ORACLE("CASE WHEN ht.entrada IS NOT NULL AND ht.saida IS NOT NULL THEN ht.entrada || '-' || ht.saida ELSE NULL END", '')} AS horario_trabalho_atual,
+    ${SANITIZE_ORACLE('ht.horario_trabalho_atual', '')} AS horario_trabalho_atual,
     NVL(
         TO_CHAR(cic.work_days) || 'x' || TO_CHAR(cic.off_days),
         'other'
@@ -455,7 +533,7 @@ GROUP BY
     c.CON_CdiCargo, ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     NVL(h.HOR_QtnHorasSemanal, 44.0),
-    ht.entrada, ht.saida
+    ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
 `.trim()
 

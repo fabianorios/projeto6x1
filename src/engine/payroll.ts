@@ -693,7 +693,11 @@ export interface CostCenterTotals {
   cargaSemanalAtual: number | null
 }
 
-/** Prefer `cod · HH:MM–HH:MM` when the Folha window is present. */
+/**
+ * Prefer `cod · HH:MM–HH:MM` when Folha horario_trabalho_atual is present.
+ * Tolerates multi-period strings (`08:00-12:00 / intervalo 60min / 13:00-17:48`):
+ * only HH:MM-HH:MM ranges get an en-dash; delimiters/labels stay intact.
+ */
 export function formatHorarioAtualLabel(opts: {
   codHorarioAtual?: string | null
   horarioTrabalhoAtual?: string | null
@@ -701,7 +705,7 @@ export function formatHorarioAtualLabel(opts: {
   const cod = (opts.codHorarioAtual ?? '').trim() || '—'
   const win = (opts.horarioTrabalhoAtual ?? '')
     .trim()
-    .replace(/-/g, '–')
+    .replace(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/g, '$1–$2')
   return win ? `${cod} · ${win}` : cod
 }
 
