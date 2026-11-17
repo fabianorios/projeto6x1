@@ -99,6 +99,10 @@ export function metricsFromCurrentSide(
   result: SimulationResult,
 ): ScenarioRowMetrics {
   const { input, cost, coverage, vr, vt } = result
+  const baselineCharges = Math.max(
+    0,
+    roundMoney(cost.baselineMonthlyPayroll - (cost.baselineSalaryMass ?? 0)),
+  )
   return {
     scale: input.currentScale,
     scheduleHint: null,
@@ -107,8 +111,12 @@ export function metricsFromCurrentSide(
     vrMonthly: vr?.currentMonthly ?? null,
     vtMonthly: vt?.currentMonthly ?? null,
     uncoveredHoursPerWeek: 0,
-    estimatedCharges: 0,
+    estimatedCharges: baselineCharges,
   }
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100
 }
 
 export function metricsFromProposedSide(

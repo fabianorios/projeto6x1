@@ -46,6 +46,7 @@ export interface AhrHandoffPayload {
     uncoveredShiftHoursPerWeek: number
   }
   cost: {
+    baselineSalaryMass: number
     baselineMonthlyPayroll: number
     projectedMonthlyPayroll: number
     monthlyDelta: number
@@ -136,6 +137,7 @@ export function buildAhrHandoff(
       uncoveredShiftHoursPerWeek: coverage.uncoveredShiftHoursPerWeek,
     },
     cost: {
+      baselineSalaryMass: cost.baselineSalaryMass,
       baselineMonthlyPayroll: cost.baselineMonthlyPayroll,
       projectedMonthlyPayroll: cost.projectedMonthlyPayroll,
       monthlyDelta: cost.monthlyDelta,

@@ -306,6 +306,9 @@ export function ResultsView({
               currentHeadcount: coverage.currentHeadcount,
               requiredHeadcount: coverage.requiredHeadcount,
               additionalHeadcount: coverage.additionalHeadcount,
+              baselineSalaryMass:
+                cost.baselineSalaryMass ??
+                coverage.currentHeadcount * input.averageMonthlySalary,
               baselinePayroll: cost.baselineMonthlyPayroll,
               projectedPayroll: cost.projectedMonthlyPayroll,
               payrollMonthlyDelta: cost.monthlyDelta,

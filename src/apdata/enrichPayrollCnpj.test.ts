@@ -45,6 +45,7 @@ describe('enrichPayrollCnpjFromEscopo', () => {
         currentHeadcount: 1,
         requiredHeadcount: 1,
         additionalHeadcount: 0,
+        baselineSalaryMass: 0,
         baselinePayroll: 0,
         projectedPayroll: 0,
         payrollMonthlyDelta: 0,

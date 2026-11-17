@@ -150,11 +150,15 @@ export function buildScenarioWhyBullets(
       )
     } else if (vr.monthlyDelta > 0) {
       bullets.push(
-        `VR sobe (${signedBrl(vr.monthlyDelta)}/mês) — mais gente no quadro e/ou ~${vr.proposedDaysPerMonth} dias/mês na escala-alvo.`,
+        coverage.additionalHeadcount > 0
+          ? `VR sobe (${signedBrl(vr.monthlyDelta)}/mês) — mais gente no quadro e/ou ~${vr.proposedDaysPerMonth} dias/mês na escala-alvo.`
+          : `VR sobe (${signedBrl(vr.monthlyDelta)}/mês) com HC igual — os dias/mês atuais na folha (~menor que ~${vr.proposedDaysPerMonth} do alvo) estão abaixo da estimativa 5×2; vale checar a apuração da jornada (modo_dias / ciclo).`,
       )
     } else {
       bullets.push(
-        `VR cai (${signedBrl(vr.monthlyDelta)}/mês) — menos dias/mês na escala-alvo ou quadro menor neste recorte.`,
+        coverage.additionalHeadcount <= 0
+          ? `VR cai (${signedBrl(vr.monthlyDelta)}/mês) — com HC igual, a escala-alvo tem menos dias pagos (~${vr.proposedDaysPerMonth}/mês) que o atual.`
+          : `VR cai (${signedBrl(vr.monthlyDelta)}/mês) — menos dias/mês na escala-alvo ou quadro menor neste recorte.`,
       )
     }
   }
@@ -166,20 +170,33 @@ export function buildScenarioWhyBullets(
       )
     } else if (vt.monthlyDelta > 0) {
       bullets.push(
-        `VT sobe (${signedBrl(vt.monthlyDelta)}/mês) — acompanha HC/dias na escala-alvo (~${vt.proposedDaysPerMonth} dias/mês).`,
+        coverage.additionalHeadcount > 0
+          ? `VT sobe (${signedBrl(vt.monthlyDelta)}/mês) — acompanha HC/dias na escala-alvo (~${vt.proposedDaysPerMonth} dias/mês).`
+          : `VT sobe (${signedBrl(vt.monthlyDelta)}/mês) com HC igual — dias atuais na folha abaixo de ~${vt.proposedDaysPerMonth} do alvo (mesma checagem de apuração do VR).`,
       )
     } else {
       bullets.push(
-        `VT cai (${signedBrl(vt.monthlyDelta)}/mês) — menos dias/mês ou menos gente no proposto.`,
+        coverage.additionalHeadcount <= 0
+          ? `VT cai (${signedBrl(vt.monthlyDelta)}/mês) — HC igual e menos dias/mês na escala-alvo (~${vt.proposedDaysPerMonth}).`
+          : `VT cai (${signedBrl(vt.monthlyDelta)}/mês) — menos dias/mês ou menos gente no proposto.`,
       )
     }
   }
 
   // Encargos + divisor HE
   const chargePct = Math.round(charges.employerChargeRate * 100)
+  const heOnlyDelta =
+    coverage.additionalHeadcount <= 0 &&
+    heCascade.heCostDelta > MONEY_TOL &&
+    Math.abs(cost.monthlyDelta - heCascade.heCostDelta) < MONEY_TOL
+
   if (Math.abs(cost.monthlyDelta) < MONEY_TOL) {
     bullets.push(
       `Encargos (${taxRegimeLabel(charges.taxRegime)}, ~${chargePct}%): acompanham a massa — e a folha ficou estável neste cenário.`,
+    )
+  } else if (heOnlyDelta) {
+    bullets.push(
+      `Encargos (${taxRegimeLabel(charges.taxRegime)}, ~${chargePct}%): massa salarial igual (HC parado) — o Δ folha vem da HE reprecificada no divisor, não de gente nova.`,
     )
   } else {
     bullets.push(

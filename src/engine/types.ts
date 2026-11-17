@@ -139,9 +139,16 @@ export interface SimulationInput {
 }
 
 export interface CostDelta {
+  /** Salary mass only (atual) — before encargos/provisões. */
+  baselineSalaryMass: number
+  /**
+   * Current monthly employer cost: salary mass + encargos/provisões
+   * (same recipe as projected, so Δ is apples-to-apples).
+   */
   baselineMonthlyPayroll: number
+  /** Proposed monthly employer cost (salary + encargos + HE/divisor + absorção). */
   projectedMonthlyPayroll: number
-  /** Projected − baseline (salary mass; projected may include charge factor). */
+  /** Projected − baseline (incremental PEC impact; ~0 when HC and divisor HE are flat). */
   monthlyDelta: number
   annualDelta: number
   /** Employer-charge portion embedded in projected payroll (estimate). */
@@ -166,6 +173,9 @@ export interface CostCenterResult {
   currentHeadcount: number
   requiredHeadcount: number
   additionalHeadcount: number
+  /** Salary mass only (Σ salario × qty) — for averages / schedule costing. */
+  baselineSalaryMass: number
+  /** Current total: salary mass + encargos/provisões (comparable to projected). */
   baselinePayroll: number
   projectedPayroll: number
   payrollMonthlyDelta: number

@@ -156,7 +156,7 @@ export function simulate(input: SimulationInput): SimulationResult {
     scenarioDivisor: params.salaryDivisor,
   })
 
-  const baselineMonthlyPayroll = roundMoney(
+  const baselineSalaryMass = roundMoney(
     usedPayrollImport
       ? baselineFromImport
       : headcount * averageMonthlySalary,
@@ -166,16 +166,27 @@ export function simulate(input: SimulationInput): SimulationResult {
   )
 
   const taxRegime = resolveInputTaxRegime(input, payrollRows)
+  // Same charge recipe on both sides so Δ folha is apples-to-apples.
+  // (Pre-fix: baseline was salary-only while projected stacked full encargos
+  // on the whole mass → fake “folha sobe” even with HC unchanged / status quo.)
+  const baselineCharges = computeChargeBreakdown({
+    projectedSalaryMass: baselineSalaryMass,
+    baselineSalaryMass,
+    additionalHeadcount: 0,
+    requiredHeadcount: headcount,
+    taxRegime,
+  })
   const charges = computeChargeBreakdown({
     projectedSalaryMass,
-    baselineSalaryMass: baselineMonthlyPayroll,
+    baselineSalaryMass,
     additionalHeadcount,
     requiredHeadcount: effectiveRequired,
     taxRegime,
   })
 
-  // Prefer tax+provisions path; fall back to legacy flat factor when status_quo
-  // and charges would still apply — always add charge breakdown for transparency.
+  const baselineMonthlyPayroll = roundMoney(
+    baselineSalaryMass + baselineCharges.totalMonthlyExtras,
+  )
   const projectedMonthlyPayroll = roundMoney(
     projectedSalaryMass +
       charges.totalMonthlyExtras +
@@ -318,12 +329,12 @@ export function simulate(input: SimulationInput): SimulationResult {
     {
       id: 'payroll-baseline',
       category: 'payroll',
-      label: 'Folha mensal baseline (salários)',
+      label: 'Folha mensal baseline (salários + encargos)',
       amount: baselineMonthlyPayroll,
       unit: 'BRL_month',
       detail: usedPayrollImport
-        ? `Σ(salario × quantidade) da folha importada — ${payrollRows!.length} linha(s), ${headcount} pessoas.`
-        : `${headcount} × R$ ${averageMonthlySalary.toLocaleString('pt-BR')} (sem encargos).`,
+        ? `Σ(salario × quantidade) da folha (${payrollRows!.length} linha(s), ${headcount} pessoas) + encargos/provisões na massa atual — mesma receita do proposto, para o Δ ser comparável.`
+        : `${headcount} × R$ ${averageMonthlySalary.toLocaleString('pt-BR')} + encargos/provisões na massa atual.`,
     },
     {
       id: 'payroll-projected',
@@ -348,7 +359,8 @@ export function simulate(input: SimulationInput): SimulationResult {
       label: 'Delta mensal de folha',
       amount: monthlyDelta,
       unit: 'BRL_month',
-      detail: 'Projetada − baseline.',
+      detail:
+        'Projetada − baseline (ambos com encargos/provisões). Com HC igual, só sobra Δ real: HE por divisor, onboarding de novas vagas ou Δ de massa.',
     },
     {
       id: 'payroll-delta-year',
@@ -523,7 +535,7 @@ export function simulate(input: SimulationInput): SimulationResult {
     ? byCostCenter.map((c) => {
         const avgSalary =
           c.currentHeadcount > 0
-            ? c.baselinePayroll / c.currentHeadcount
+            ? c.baselineSalaryMass / c.currentHeadcount
             : averageMonthlySalary
         const currentDays = estimateWorkDaysPerMonth(currentScale)
         const avgVr =
@@ -538,6 +550,7 @@ export function simulate(input: SimulationInput): SimulationResult {
           centroCusto: c.centroCusto,
           headcount: c.currentHeadcount,
           averageMonthlySalary: avgSalary,
+          // Comparable total (salary + encargos) vs candidate estimate×chargeFactor.
           currentMonthlyPayroll: c.baselinePayroll,
           avgVrValorDia: avgVr,
           avgVtValorDia: avgVt,
@@ -558,6 +571,7 @@ export function simulate(input: SimulationInput): SimulationResult {
     input: effectiveInput,
     ruleVersion,
     cost: {
+      baselineSalaryMass,
       baselineMonthlyPayroll,
       projectedMonthlyPayroll,
       monthlyDelta,
@@ -664,10 +678,18 @@ function buildCostCenterResults(
     const effectiveRequired = agg.headcount + additional
 
     const taxRegime = resolveCcTaxRegime(input, agg.cnpjCompleto)
+    const baselineSalaryMass = roundMoney(agg.baselinePayroll)
     const salaryMass = roundMoney(effectiveRequired * avgSalary)
+    const baselineCharges = computeChargeBreakdown({
+      projectedSalaryMass: baselineSalaryMass,
+      baselineSalaryMass,
+      additionalHeadcount: 0,
+      requiredHeadcount: agg.headcount,
+      taxRegime,
+    })
     const charges = computeChargeBreakdown({
       projectedSalaryMass: salaryMass,
-      baselineSalaryMass: agg.baselinePayroll,
+      baselineSalaryMass,
       additionalHeadcount: additional,
       requiredHeadcount: effectiveRequired,
       taxRegime,
@@ -683,7 +705,9 @@ function buildCostCenterResults(
         heCascade.heCostDelta +
         plan.heAbsorptionCost,
     )
-    const baselinePayroll = roundMoney(agg.baselinePayroll)
+    const baselinePayroll = roundMoney(
+      baselineSalaryMass + baselineCharges.totalMonthlyExtras,
+    )
 
     const vrProposedExisting = agg.vr.proposedMonthly
     const vrAdditional =
@@ -735,6 +759,7 @@ function buildCostCenterResults(
       currentHeadcount: agg.headcount,
       requiredHeadcount: effectiveRequired,
       additionalHeadcount: additional,
+      baselineSalaryMass,
       baselinePayroll,
       projectedPayroll,
       payrollMonthlyDelta: roundMoney(projectedPayroll - baselinePayroll),
