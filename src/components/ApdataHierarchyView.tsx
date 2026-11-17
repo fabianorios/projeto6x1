@@ -17,10 +17,13 @@ import {
   type SimulationResult,
 } from '../engine'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
+import { cnpjDigits } from '../apdata/cnpj'
 import {
+  OPERACIONAL_SEM_CNPJ_KEY,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
   resolveVisibleCentroCustos,
+  type DossierEstablishmentOption,
 } from '../utils/resultsDossier'
 
 interface ApdataHierarchyViewProps {
@@ -188,10 +191,13 @@ function HorarioSelectRow({
   candidate,
   checked,
   onToggle,
+  hideCcLabel = false,
 }: {
   candidate: ApdataHorarioCandidate
   checked: boolean
   onToggle: () => void
+  /** When nested under a CC header, skip repeating the CC code. */
+  hideCcLabel?: boolean
 }) {
   const turmas = candidate.turmaIndexes.map((i) => `T${i}`).join(', ')
   return (
@@ -211,13 +217,67 @@ function HorarioSelectRow({
             {candidate.codigo}
           </span>
           <span className="mt-0.5 block text-[11px] text-[var(--color-muted)]">
-            CC {candidate.centroCustoCodigo} · escala {candidate.escala} ·{' '}
-            {turmas} · liga {candidate.jornadaCodigos.length} jornada(s)
+            {hideCcLabel
+              ? null
+              : `CC ${candidate.centroCustoCodigo} · `}
+            escala {candidate.escala} · {turmas} · liga{' '}
+            {candidate.jornadaCodigos.length} jornada(s)
           </span>
         </span>
       </label>
     </li>
   )
+}
+
+/** Nest horário candidates: Filial → CC → horário (sort preserved). */
+function nestHorariosByFilialCc(
+  horarios: ApdataHorarioCandidate[],
+  establishments: DossierEstablishmentOption[],
+): Array<{
+  key: string
+  label: string
+  ccs: Array<{ code: string; horarios: ApdataHorarioCandidate[] }>
+}> {
+  const labelByKey = new Map(establishments.map((e) => [e.key, e.label]))
+  const filialMap = new Map<
+    string,
+    { key: string; label: string; ccMap: Map<string, ApdataHorarioCandidate[]> }
+  >()
+
+  for (const h of horarios) {
+    const dig = cnpjDigits(h.cnpjCompleto)
+    const key = dig.length >= 8 ? dig : OPERACIONAL_SEM_CNPJ_KEY
+    const label =
+      key === OPERACIONAL_SEM_CNPJ_KEY
+        ? 'Sem CNPJ / filial'
+        : (labelByKey.get(key) ?? `Filial · ${key}`)
+    let filial = filialMap.get(key)
+    if (!filial) {
+      filial = { key, label, ccMap: new Map() }
+      filialMap.set(key, filial)
+    }
+    const cc = h.centroCustoCodigo.trim() || 'SEM_CC'
+    const list = filial.ccMap.get(cc) ?? []
+    list.push(h)
+    filial.ccMap.set(cc, list)
+  }
+
+  return [...filialMap.values()]
+    .sort((a, b) => {
+      if (a.key === OPERACIONAL_SEM_CNPJ_KEY) return 1
+      if (b.key === OPERACIONAL_SEM_CNPJ_KEY) return -1
+      return a.label.localeCompare(b.label, 'pt-BR')
+    })
+    .map((f) => ({
+      key: f.key,
+      label: f.label,
+      ccs: [...f.ccMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+        .map(([code, list]) => ({
+          code,
+          horarios: list,
+        })),
+    }))
 }
 
 function WizardChrome({
@@ -328,10 +388,24 @@ export function ApdataHierarchyView({
   )
 
   const visibleHorarios = useMemo(() => {
-    if (!visibleCcs) return candidates.horarios
-    const allow = new Set(visibleCcs)
-    return candidates.horarios.filter((h) => allow.has(h.centroCustoCodigo))
-  }, [candidates.horarios, visibleCcs])
+    let list = candidates.horarios
+    if (filterCnpj) {
+      list = list.filter((h) => {
+        const dig = cnpjDigits(h.cnpjCompleto)
+        return dig.length >= 8 && dig === filterCnpj
+      })
+    }
+    if (visibleCcs) {
+      const allow = new Set(visibleCcs)
+      list = list.filter((h) => allow.has(h.centroCustoCodigo))
+    }
+    return list
+  }, [candidates.horarios, filterCnpj, visibleCcs])
+
+  const nestedHorarios = useMemo(
+    () => nestHorariosByFilialCc(visibleHorarios, establishments),
+    [visibleHorarios, establishments],
+  )
 
   // Keep selection intersection when lunch toggle / filters change candidates.
   useEffect(() => {
@@ -356,6 +430,37 @@ export function ApdataHierarchyView({
       selectedHorarioIds: selectedIds,
     })
   }, [generated, result, dataInicio, includeLunch, selectedIds])
+
+  const nestedTreeFiliais = useMemo(() => {
+    if (!tree) return []
+    const centers = tree.centers.filter((center) =>
+      visibleCcs ? visibleCcs.includes(center.centroCustoCodigo) : true,
+    )
+    const labelByKey = new Map(establishments.map((e) => [e.key, e.label]))
+    const map = new Map<
+      string,
+      { key: string; label: string; centers: typeof centers }
+    >()
+    for (const c of centers) {
+      const dig = cnpjDigits(c.cnpjCompleto)
+      const key = dig.length >= 8 ? dig : OPERACIONAL_SEM_CNPJ_KEY
+      const label =
+        key === OPERACIONAL_SEM_CNPJ_KEY
+          ? 'Sem CNPJ / filial'
+          : (labelByKey.get(key) ?? `Filial · ${key}`)
+      let entry = map.get(key)
+      if (!entry) {
+        entry = { key, label, centers: [] }
+        map.set(key, entry)
+      }
+      entry.centers.push(c)
+    }
+    return [...map.values()].sort((a, b) => {
+      if (a.key === OPERACIONAL_SEM_CNPJ_KEY) return 1
+      if (b.key === OPERACIONAL_SEM_CNPJ_KEY) return -1
+      return a.label.localeCompare(b.label, 'pt-BR')
+    })
+  }, [tree, visibleCcs, establishments])
 
   function setInicio(next: string) {
     if (onDataInicioChange) onDataInicioChange(next)
@@ -598,22 +703,47 @@ export function ApdataHierarchyView({
             </p>
           </div>
 
-          <ul className="space-y-2">
+          <div className="space-y-4">
             {visibleHorarios.length === 0 ? (
-              <li className="text-xs text-[var(--color-muted)]">
+              <p className="text-xs text-[var(--color-muted)]">
                 Nenhum horário nos filtros Filial/CNPJ ou Centro de custos.
-              </li>
+              </p>
             ) : (
-              visibleHorarios.map((h) => (
-                <HorarioSelectRow
-                  key={h.id}
-                  candidate={h}
-                  checked={selectedIds.includes(h.id)}
-                  onToggle={() => toggleHorario(h.id)}
-                />
+              nestedHorarios.map((filial) => (
+                <section
+                  key={filial.key}
+                  className="space-y-3 border border-[var(--color-line)] bg-[var(--color-surface)]/50 px-3 py-3"
+                >
+                  <header>
+                    <p className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Filial
+                    </p>
+                    <h4 className="text-sm font-semibold text-[var(--color-ink)]">
+                      {filial.label}
+                    </h4>
+                  </header>
+                  {filial.ccs.map((cc) => (
+                    <div key={`${filial.key}-${cc.code}`} className="space-y-2">
+                      <p className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                        Centro de custo {cc.code}
+                      </p>
+                      <ul className="space-y-2 border-l-2 border-[var(--color-accent)] pl-3">
+                        {cc.horarios.map((h) => (
+                          <HorarioSelectRow
+                            key={h.id}
+                            candidate={h}
+                            checked={selectedIds.includes(h.id)}
+                            onToggle={() => toggleHorario(h.id)}
+                            hideCcLabel
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </section>
               ))
             )}
-          </ul>
+          </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
@@ -697,38 +827,50 @@ export function ApdataHierarchyView({
           </div>
 
           <div className="space-y-5">
-            {tree.centers
-              .filter((center) =>
-                visibleCcs
-                  ? visibleCcs.includes(center.centroCustoCodigo)
-                  : true,
-              )
-              .map((center) => (
-                <section key={center.centroCustoCodigo}>
-                  <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                    CC {center.centroCustoCodigo}
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                    {REGIME_FUNCIONAMENTO_LABELS[center.regime]} · HC{' '}
-                    {center.currentHeadcount} → {center.requiredHeadcount} ·
-                    cobertura diária {center.dailyCoverageNeed}
+            {nestedTreeFiliais.map((filial) => (
+              <section
+                key={filial.key}
+                className="space-y-4 border border-[var(--color-line)] bg-[var(--color-surface)]/40 px-3 py-3"
+              >
+                <header>
+                  <p className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                    Filial
                   </p>
-                  {center.nodes.length === 0 ? (
-                    <p className="mt-2 text-xs text-[var(--color-muted)]">
-                      Nenhum horário selecionado para este CC.
+                  <h4 className="text-sm font-semibold text-[var(--color-ink)]">
+                    {filial.label}
+                  </h4>
+                </header>
+                {filial.centers.map((center) => (
+                  <div
+                    key={`${filial.key}-${center.centroCustoCodigo}`}
+                    className="space-y-2 border-l-2 border-[var(--color-accent)] pl-3"
+                  >
+                    <h5 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                      Centro de custo {center.centroCustoCodigo}
+                    </h5>
+                    <p className="text-[11px] text-[var(--color-muted)]">
+                      {REGIME_FUNCIONAMENTO_LABELS[center.regime]} · HC{' '}
+                      {center.currentHeadcount} → {center.requiredHeadcount} ·
+                      cobertura diária {center.dailyCoverageNeed}
                     </p>
-                  ) : (
-                    <ul className="mt-2 space-y-2">
-                      {center.nodes.map((node) => (
-                        <NodeBlock
-                          key={`${center.centroCustoCodigo}-${node.ciclo.codigo}-${node.grades[0]?.turma}`}
-                          node={node}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              ))}
+                    {center.nodes.length === 0 ? (
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Nenhum horário selecionado para este CC.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {center.nodes.map((node) => (
+                          <NodeBlock
+                            key={`${center.centroCustoCodigo}-${node.ciclo.codigo}-${node.grades[0]?.turma}-${node.horario.codigo}`}
+                            node={node}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </section>
+            ))}
           </div>
 
           <p className="border-l-2 border-[var(--color-accent)] pl-3 text-[11px] text-[var(--color-muted)]">

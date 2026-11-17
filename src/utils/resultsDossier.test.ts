@@ -8,7 +8,9 @@ import {
   dossierEstablishmentOptions,
   executiveImpactSummary,
   expandAllDossier,
+  groupFilialCcHorario,
   groupOperacionalByCnpj,
+  nestCentersByCc,
   OPERACIONAL_SEM_CNPJ_KEY,
   resolveVisibleCentroCustos,
   shouldShowFilialAccordion,
@@ -267,5 +269,104 @@ describe('resultsDossier helpers', () => {
       ]),
       true,
     )
+  })
+
+  it('nests horário slices under CC (not siblings of Filial)', () => {
+    const stub = (partial: Partial<CostCenterResult>): CostCenterResult => ({
+      centroCusto: 'X',
+      currentHeadcount: 1,
+      requiredHeadcount: 1,
+      additionalHeadcount: 0,
+      baselinePayroll: 0,
+      projectedPayroll: 0,
+      payrollMonthlyDelta: 0,
+      vr: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      vt: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      va: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      assistMedicaMonthly: 0,
+      assistOdontoMonthly: 0,
+      ...partial,
+    })
+
+    const nested = nestCentersByCc([
+      stub({
+        centroCusto: 'CC-A',
+        codHorarioAtual: '20',
+        cnpjCompleto: '12345678000190',
+      }),
+      stub({
+        centroCusto: 'CC-A',
+        codHorarioAtual: '10',
+        cnpjCompleto: '12345678000190',
+      }),
+      stub({
+        centroCusto: 'CC-B',
+        codHorarioAtual: '30',
+        cnpjCompleto: '12345678000190',
+      }),
+    ])
+    assert.equal(nested.length, 2)
+    assert.equal(nested[0]!.centroCusto, 'CC-A')
+    assert.deepEqual(
+      nested[0]!.horarios.map((h) => h.codHorarioAtual),
+      ['10', '20'],
+    )
+    assert.equal(nested[1]!.centroCusto, 'CC-B')
+
+    const tree = groupFilialCcHorario({
+      centers: [
+        stub({
+          centroCusto: 'CC-A',
+          codHorarioAtual: '10',
+          cnpjCompleto: '12345678000190',
+        }),
+        stub({
+          centroCusto: 'CC-A',
+          codHorarioAtual: '20',
+          cnpjCompleto: '12345678000190',
+        }),
+        stub({
+          centroCusto: 'CC-Z',
+          codHorarioAtual: '99',
+          cnpjCompleto: '98765432000111',
+        }),
+      ],
+      payrollRows: [
+        row({
+          cnpjCompleto: '12345678000190',
+          codFilial: '01',
+          centroCusto: 'CC-A',
+          codCc: 'CC-A',
+        }),
+        row({
+          cnpjCompleto: '98765432000111',
+          codFilial: '02',
+          centroCusto: 'CC-Z',
+          codCc: 'CC-Z',
+        }),
+      ],
+    })
+    assert.equal(tree.length, 2)
+    assert.equal(tree[0]!.centroCustos.length, 1)
+    assert.equal(tree[0]!.centroCustos[0]!.horarios.length, 2)
+    assert.equal(tree[1]!.centroCustos[0]!.centroCusto, 'CC-Z')
   })
 })

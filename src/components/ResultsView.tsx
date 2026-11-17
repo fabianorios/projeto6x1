@@ -39,6 +39,7 @@ import {
   expandAllDossier,
   OPERACIONAL_SEM_CNPJ_KEY,
   groupOperacionalByCnpj,
+  nestCentersByCc,
   shouldShowFilialAccordion,
   summarizeOperacionalTurmas,
   type DossierOpenState,
@@ -800,11 +801,14 @@ export function ResultsView({
                         <tbody>
                           {byCostCenter.map((c) => (
                             <tr
-                              key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}`}
+                              key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${c.codHorarioAtual ?? ''}`}
                               className="border-b border-[var(--color-line)]"
                             >
                               <td className="px-3 py-2 font-medium">
                                 {c.centroCusto}
+                                {c.codHorarioAtual?.trim()
+                                  ? ` · hor. ${c.codHorarioAtual.trim()}`
+                                  : ''}
                               </td>
                               <td className="px-3 py-2 tabular-nums">
                                 {c.currentHeadcount} → {c.requiredHeadcount}
@@ -1077,6 +1081,7 @@ function OperacionalFilialBody({
   globalTurmasNote?: string
 }) {
   const turmas = summarizeOperacionalTurmas(group.centers)
+  const ccGroups = nestCentersByCc(group.centers)
   const allow = new Set(group.centroCustos)
   const suggestions = scheduleSuggestions.filter((s) =>
     allow.has(s.centroCusto),
@@ -1102,6 +1107,7 @@ function OperacionalFilialBody({
       <ScheduleBuilderView
         result={result}
         centroCustoFilter={group.centroCustos}
+        cnpjFilter={group.key}
         embedded={embeddedSchedule}
       />
 
@@ -1119,28 +1125,35 @@ function OperacionalFilialBody({
             {globalTurmasNote}
           </p>
         ) : null}
-        <ul className="mt-2 space-y-1 text-xs text-[var(--color-muted)]">
-          {group.centers.map((c) => {
-            const d = c.distribuicaoTurmas
-            const escala = c.escalaAtual?.trim() || '—'
-            const carga =
-              c.cargaSemanalAtual != null
-                ? `${c.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
-                : '—'
-            const cod = c.codHorarioAtual?.trim() || '—'
-            return (
-              <li key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}`}>
-                <span className="font-medium text-[var(--color-ink)]">
-                  {c.centroCusto}
-                </span>
-                {' · '}
-                escala {escala} · horário {cod} · carga {carga}
-                {d
-                  ? ` · ${d.crewCount} turma(s) · HC ${d.totalHeadcount}`
-                  : ` · HC ${c.requiredHeadcount}`}
-              </li>
-            )
-          })}
+        <ul className="mt-2 space-y-2 text-xs text-[var(--color-muted)]">
+          {ccGroups.map((ccGroup) => (
+            <li key={ccGroup.centroCusto}>
+              <p className="font-medium text-[var(--color-ink)]">
+                CC {ccGroup.centroCusto}
+              </p>
+              <ul className="mt-1 space-y-0.5 border-l border-[var(--color-line)] pl-3">
+                {ccGroup.horarios.map((c) => {
+                  const d = c.distribuicaoTurmas
+                  const escala = c.escalaAtual?.trim() || '—'
+                  const carga =
+                    c.cargaSemanalAtual != null
+                      ? `${c.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
+                      : '—'
+                  const cod = c.codHorarioAtual?.trim() || '—'
+                  return (
+                    <li
+                      key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${cod}`}
+                    >
+                      Horário {cod} · escala {escala} · carga {carga}
+                      {d
+                        ? ` · ${d.crewCount} turma(s) · HC ${d.totalHeadcount}`
+                        : ` · HC ${c.requiredHeadcount}`}
+                    </li>
+                  )
+                })}
+              </ul>
+            </li>
+          ))}
         </ul>
       </div>
 

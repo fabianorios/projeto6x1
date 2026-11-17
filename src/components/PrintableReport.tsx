@@ -296,10 +296,15 @@ export function PrintableReport({
             <tbody>
               {byCostCenter.map((c) => (
                 <tr
-                  key={c.centroCusto}
+                  key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${c.codHorarioAtual ?? ''}`}
                   className="border-b border-neutral-200"
                 >
-                  <td className="py-1.5 pr-2 font-medium">{c.centroCusto}</td>
+                  <td className="py-1.5 pr-2 font-medium">
+                    {c.centroCusto}
+                    {c.codHorarioAtual?.trim()
+                      ? ` · hor. ${c.codHorarioAtual.trim()}`
+                      : ''}
+                  </td>
                   <td className="py-1.5 pr-2 tabular-nums">
                     {c.currentHeadcount}→{c.requiredHeadcount}
                   </td>
