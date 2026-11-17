@@ -60,9 +60,9 @@ WITH CTE_CICLO_HORARIO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN ISNULL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 )
@@ -121,9 +121,9 @@ WITH CTE_CICLO_HORARIO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN NVL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 )
@@ -182,9 +182,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN ISNULL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
@@ -248,9 +248,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN NVL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
@@ -314,9 +314,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN ISNULL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
@@ -376,9 +376,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN NVL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
@@ -438,9 +438,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN ISNULL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN ISNULL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),
@@ -504,9 +504,9 @@ WITH CTE_CICLO AS (
     SELECT
         hj.HRI_CdiHorario,
         COUNT(*) AS cycle_len,
-        SUM(CASE WHEN NVL(tdp.TDP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
+        SUM(CASE WHEN NVL(tdp.TIP_OplTrabalho, 0) = 1 THEN 1 ELSE 0 END) AS work_days
     FROM HorariosJornadas hj
-    INNER JOIN TiposDiasPonto tdp ON tdp.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    INNER JOIN TiposDiasPonto tdp ON tdp.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
     WHERE NVL(hj.HRI_OplDesativado, 0) = 0
     GROUP BY hj.HRI_CdiHorario
 ),

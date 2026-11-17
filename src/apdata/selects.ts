@@ -40,26 +40,26 @@ export const REVIEW_SELECTS: ReviewSelect[] = [
       'Deriva escala_atual (6x1 / 5x2 / 4x3 / other) a partir de HorariosJornadas × TiposDiasPonto.',
     sql: `SELECT hj.HRI_CdiHorario,
        COUNT(*) AS cycle_len,
-       SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-       SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
+       SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+       SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days,
        CASE
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 6
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 1
            THEN '6x1'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 5
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 2
            THEN '5x2'
          WHEN COUNT(*) = 7
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
-          AND SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) = 4
+          AND SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) = 3
            THEN '4x3'
          ELSE 'other'
        END AS escala_atual
 FROM dbo.HorariosJornadas hj
 JOIN dbo.TiposDiasPonto td
-  ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
 WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
 GROUP BY hj.HRI_CdiHorario`,
   },
@@ -71,10 +71,10 @@ GROUP BY hj.HRI_CdiHorario`,
     sql: `;WITH ciclo AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
-         SUM(CASE WHEN td.TDP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
-         SUM(CASE WHEN td.TDP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
+         SUM(CASE WHEN td.TIP_OplTrabalho = 1 THEN 1 ELSE 0 END) AS work_days,
+         SUM(CASE WHEN td.TIP_OplTrabalho = 0 THEN 1 ELSE 0 END) AS off_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -97,7 +97,7 @@ ciclo_vt AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
          SUM(CASE
-               WHEN td.TDP_OplTrabalho = 1
+               WHEN td.TIP_OplTrabalho = 1
                 AND (
                   EXISTS (
                     SELECT 1 FROM at_mask m
@@ -116,7 +116,7 @@ ciclo_vt AS (
                THEN 1 ELSE 0
              END) AS at_work_days
   FROM dbo.HorariosJornadas hj
-  JOIN dbo.TiposDiasPonto td ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+  JOIN dbo.TiposDiasPonto td ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 ),
@@ -266,7 +266,7 @@ GROUP BY pb.PLB_CdiPlanoBeneficio`,
     id: 'E',
     title: 'E) VT valor/dia + dias (ConATransportes × AT ∩ trabalho)',
     purpose:
-      'vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario) com CAS_DtdFim IS NULL. Dias = HorariosTiposDiasAT ∩ TDP_OplTrabalho=1. Sem ConCalculoATransportes.',
+      'vt_valor_dia = Σ(CAS_QtiPassesDia × MRI_VlnUnitario) com CAS_DtdFim IS NULL. Dias = HorariosTiposDiasAT ∩ TIP_OplTrabalho=1. Sem ConCalculoATransportes.',
     sql: `;WITH preco AS (
   SELECT MRI_CdiMeioTransporte, MRI_VlnUnitario,
          ROW_NUMBER() OVER (
@@ -295,7 +295,7 @@ ciclo_vt AS (
   SELECT hj.HRI_CdiHorario,
          COUNT(*) AS cycle_len,
          SUM(CASE
-               WHEN td.TDP_OplTrabalho = 1
+               WHEN td.TIP_OplTrabalho = 1
                 AND (
                   EXISTS (
                     SELECT 1 FROM at_mask m
@@ -315,7 +315,7 @@ ciclo_vt AS (
              END) AS at_work_days
   FROM dbo.HorariosJornadas hj
   JOIN dbo.TiposDiasPonto td
-    ON td.TDP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
+    ON td.TIP_CdiTipoDiaPonto = hj.HRI_CdiTipoDiaPonto
   WHERE ISNULL(hj.HRI_OplDesativado, 0) = 0
   GROUP BY hj.HRI_CdiHorario
 )
@@ -346,7 +346,7 @@ export const LIVE_SELECT_STEPS: {
     id: 'tipos-dia',
     label: 'TiposDiasPonto (trabalho vs folga)',
     table: 'TiposDiasPonto',
-    columns: ['TDP_CdiTipoDiaPonto', 'TDP_OplTrabalho'],
+    columns: ['TIP_CdiTipoDiaPonto', 'TIP_OplTrabalho'],
     note: 'Flags T/F — sem descrições de cliente.',
   },
   {
