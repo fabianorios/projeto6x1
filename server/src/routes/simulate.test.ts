@@ -9,7 +9,10 @@ import {
   DEFAULT_OPERATING_HOURS,
   simulate,
 } from "../lib/shared-engine.js";
-import { resetSimulateRateLimiter } from "./simulate.js";
+import {
+  resetSimulateRateLimiter,
+  resetSimulateResultCache,
+} from "./simulate.js";
 
 /** Synthetic Folha aggregates — no PII / no client names. */
 const FIXTURE_ROWS = [
@@ -98,9 +101,11 @@ describe("POST /api/simulate", () => {
     };
     ({ app } = createApp({ config }));
     resetSimulateRateLimiter();
+    resetSimulateResultCache();
   });
 
   after(async () => {
+    resetSimulateResultCache();
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -268,5 +273,100 @@ describe("POST /api/simulate", () => {
       }),
     });
     assert.equal(res.status, 400);
+  });
+
+  it("P4 progressive: shell + filial slice + full hydrate", async () => {
+    resetSimulateResultCache();
+    const multiBody = {
+      ...FIXTURE_BODY,
+      payrollRows: [
+        ...FIXTURE_ROWS,
+        {
+          ...FIXTURE_ROWS[0],
+          centroCusto: "2001",
+          descCc: "Loja B",
+          cnpjCompleto: "11111111000191",
+          quantidade: 5,
+          nome: null,
+        },
+        {
+          ...FIXTURE_ROWS[0],
+          centroCusto: "3001",
+          descCc: "Loja C",
+          cnpjCompleto: "22222222000191",
+          quantidade: 3,
+          nome: null,
+        },
+      ],
+      prefs: {
+        includeScheduleSuggestions: true,
+        progressivePayload: true,
+      },
+    };
+
+    const res = await app.request("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(multiBody),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.progressive, true);
+    assert.ok(typeof body.simulationId === "string");
+    assert.ok(Array.isArray(body.filialIndex));
+    assert.ok(body.filialIndex.length >= 3);
+    assert.equal(body.result.byCostCenter.length, 0);
+    assert.equal(body.result.scheduleSuggestions.length, 0);
+    assert.equal(body.result.input.payrollRows, undefined);
+    assert.ok(body.result.cost);
+    assert.ok(body.result.coverage);
+
+    const firstKey = body.filialIndex[0].key as string;
+    const sliceRes = await app.request(
+      `/api/simulate/${body.simulationId}/filial/${encodeURIComponent(firstKey)}`,
+    );
+    assert.equal(sliceRes.status, 200);
+    const slice = await sliceRes.json();
+    assert.equal(slice.ok, true);
+    assert.equal(slice.filialKey, firstKey);
+    assert.ok(slice.centers.length > 0);
+    assert.ok(
+      slice.centers.every(
+        (c: { cnpjCompleto?: string | null }) =>
+          (c.cnpjCompleto ?? "").replace(/\D/g, "") === firstKey ||
+          (c.cnpjCompleto ?? "").replace(/\D/g, "").length < 8,
+      ),
+    );
+
+    const fullRes = await app.request(`/api/simulate/${body.simulationId}`);
+    assert.equal(fullRes.status, 200);
+    const full = await fullRes.json();
+    assert.equal(full.ok, true);
+    assert.ok(full.result.byCostCenter.length >= 3);
+    assert.equal(
+      roundMoney(full.result.cost.monthlyDelta),
+      roundMoney(body.result.cost.monthlyDelta),
+    );
+  });
+
+  it("P4 progressive: single filial stays full payload", async () => {
+    resetSimulateResultCache();
+    const res = await app.request("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...FIXTURE_BODY,
+        prefs: {
+          includeScheduleSuggestions: true,
+          progressivePayload: true,
+        },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.notEqual(body.progressive, true);
+    assert.ok(body.result.byCostCenter.length >= 1);
   });
 });

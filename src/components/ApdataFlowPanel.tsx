@@ -21,6 +21,10 @@ import {
   postSimulate,
 } from '../api/simulate'
 import {
+  buildProgressiveShell,
+  shouldUseProgressivePayload,
+} from '../utils/progressiveFilial'
+import {
   isSimulateFromEphemeralNetworkFailure,
   postSimulateFromEphemeral,
 } from '../api/simulateFromEphemeral'
@@ -113,7 +117,10 @@ import {
   type EphemeralCredsFormValue,
 } from './EphemeralCredsFields'
 import { PayrollImport } from './PayrollImport'
-import { ResultsView } from './ResultsView'
+import {
+  ResultsView,
+  type ProgressivePasso5Meta,
+} from './ResultsView'
 import { SectorStep } from './SectorStep'
 
 type Phase =
@@ -279,6 +286,9 @@ export function ApdataFlowPanel({
   const [steps, setSteps] = useState<ExportProgressStep[]>([])
   const [exported, setExported] = useState<ExportResult | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
+  /** P4 progressive shell meta — cleared when full result is promoted. */
+  const [progressiveMeta, setProgressiveMeta] =
+    useState<ProgressivePasso5Meta | null>(null)
   const [basket, setBasket] = useState<ScenarioBasket | null>(() =>
     loadScenarioBasket(),
   )
@@ -431,6 +441,7 @@ export function ApdataFlowPanel({
       setBenefitOverrides({})
       setExported(null)
       setResult(null)
+      setProgressiveMeta(null)
       setSteps([])
       setError(null)
       setEscopoSearch('')
@@ -579,6 +590,7 @@ export function ApdataFlowPanel({
     setError(null)
     setExported(null)
     setResult(null)
+    setProgressiveMeta(null)
     if (establishments.length > 0 && selectedCnpjKeys.length === 0) {
       setError('Selecione ao menos um CNPJ (estabelecimento).')
       return
@@ -788,17 +800,26 @@ export function ApdataFlowPanel({
     return { payrollRows, dominant }
   }
 
+  type SimulatePathOutcome = {
+    /** Shell or full result for React state / KPIs. */
+    display: SimulationResult
+    /** Full result for basket fingerprint (always complete when available). */
+    fullForBasket: SimulationResult
+    progressive: ProgressivePasso5Meta | null
+  }
+
   /**
    * Passo 4→5: prefer POST /api/simulate (shared engine on server).
    * Decision: if the API is unreachable and the engine is still in the SPA
    * bundle, fall back to local `simulate()` so meetings without VPN still work;
    * show a clear notice. Validation (4xx) errors do not fall back.
    * Stages the visible progress bar: enviar → processar → montar.
+   * P4: request progressivePayload — shell + filial slices when many filiais.
    */
   async function runSimulatePath(
     nextAbs: EstrategiaAbsorcao,
     perfLabel: 'simulate' | 'simulate-absorcao',
-  ): Promise<SimulationResult | null> {
+  ): Promise<SimulatePathOutcome | null> {
     const built = buildSimulatePayrollRows()
     if (!built || !exported) return null
     const { payrollRows, dominant } = built
@@ -846,18 +867,43 @@ export function ApdataFlowPanel({
         defaultTaxRegime,
         defaultRegimeFuncionamento: defaultRegime,
         payrollRows: payrollRowsForApi(payrollRows),
-        prefs: { includeScheduleSuggestions: true },
+        prefs: {
+          includeScheduleSuggestions: true,
+          progressivePayload: true,
+        },
       })
       logPerf(perfLabel, performance.now() - t0, {
         rowCount: payrollRows.length,
         centerHint,
         via: 'api',
         apiLatencyMs: remote.latencyMs.total,
+        progressive: Boolean(remote.progressive),
+        filialCount: remote.filialIndex?.length,
       })
       setSimulateNotice(null)
       setSimulateProgress(SIMULATE_PROGRESS.assemble)
       await yieldForPaint()
-      return remote.result
+      if (
+        remote.progressive &&
+        remote.simulationId &&
+        remote.filialIndex &&
+        remote.filialIndex.length > 0
+      ) {
+        return {
+          display: remote.result,
+          fullForBasket: remote.result,
+          progressive: {
+            simulationId: remote.simulationId,
+            filialIndex: remote.filialIndex,
+            localFull: null,
+          },
+        }
+      }
+      return {
+        display: remote.result,
+        fullForBasket: remote.result,
+        progressive: null,
+      }
     } catch (err) {
       if (!isSimulateNetworkFailure(err)) {
         throw err
@@ -874,7 +920,23 @@ export function ApdataFlowPanel({
       )
       setSimulateProgress(SIMULATE_PROGRESS.assemble)
       await yieldForPaint()
-      return next
+      if (shouldUseProgressivePayload(next)) {
+        const bundle = buildProgressiveShell(next)
+        return {
+          display: bundle.shell,
+          fullForBasket: next,
+          progressive: {
+            simulationId: null,
+            filialIndex: bundle.filialIndex,
+            localFull: next,
+          },
+        }
+      }
+      return {
+        display: next,
+        fullForBasket: next,
+        progressive: null,
+      }
     }
   }
 
@@ -884,11 +946,15 @@ export function ApdataFlowPanel({
     setSimulateProgress(SIMULATE_PROGRESS.send)
     setError(null)
     try {
-      const next = await runSimulatePath(estrategiaAbsorcao, 'simulate')
-      if (!next) return
-      const nextBasket = upsertSimulationInBasket(next, basket)
+      const outcome = await runSimulatePath(estrategiaAbsorcao, 'simulate')
+      if (!outcome) return
+      const nextBasket = upsertSimulationInBasket(
+        outcome.fullForBasket,
+        basket,
+      )
       setBasket(nextBasket)
-      setResult(next)
+      setResult(outcome.display)
+      setProgressiveMeta(outcome.progressive)
       setPhase('resultados')
     } catch (err) {
       setSimulateNotice(null)
@@ -910,11 +976,15 @@ export function ApdataFlowPanel({
     setSimulateProgress(SIMULATE_PROGRESS.send)
     setError(null)
     try {
-      const next = await runSimulatePath(nextAbs, 'simulate-absorcao')
-      if (!next) return
-      const nextBasket = upsertSimulationInBasket(next, basket)
+      const outcome = await runSimulatePath(nextAbs, 'simulate-absorcao')
+      if (!outcome) return
+      const nextBasket = upsertSimulationInBasket(
+        outcome.fullForBasket,
+        basket,
+      )
       setBasket(nextBasket)
-      setResult(next)
+      setResult(outcome.display)
+      setProgressiveMeta(outcome.progressive)
     } catch (err) {
       setSimulateNotice(null)
       setError(
@@ -1064,6 +1134,7 @@ export function ApdataFlowPanel({
               onBack={() => setPhase('premissas')}
               onRestart={() => {
                 setResult(null)
+                setProgressiveMeta(null)
                 setExported(null)
                 setManualMode(false)
                 setBenefitOverrides({})
@@ -1075,6 +1146,11 @@ export function ApdataFlowPanel({
               }}
               estrategiaAbsorcao={estrategiaAbsorcao}
               onEstrategiaChange={resimulateWithAbsorcao}
+              progressive={progressiveMeta}
+              onPromoteFullResult={(full) => {
+                setResult(full)
+                setProgressiveMeta(null)
+              }}
             />
           </div>
         ) : (
