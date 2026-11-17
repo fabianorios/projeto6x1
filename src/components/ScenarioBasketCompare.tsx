@@ -8,6 +8,7 @@ import type {
   ScenarioRowMetrics,
 } from '../engine'
 import type { ScenarioId } from '../engine'
+import { ScenarioWhyPanel } from './ScenarioWhyPanel'
 
 export interface ScenarioBasketCompareProps {
   basket: ScenarioBasket
@@ -249,6 +250,14 @@ function MobileDeltaCard({
           </dd>
         </div>
       </dl>
+      {entry.whyBullets && entry.whyBullets.length > 0 ? (
+        <div className="mt-3">
+          <ScenarioWhyPanel
+            bullets={entry.whyBullets}
+            scenarioLabel={entry.label}
+          />
+        </div>
+      ) : null}
     </article>
   )
 }
@@ -572,6 +581,22 @@ export function ScenarioBasketCompare({
                 </tbody>
               </table>
             </div>
+            {basket.proposed.some(
+              (p) => p.whyBullets && p.whyBullets.length > 0,
+            ) ? (
+              <div className="mt-3 space-y-3">
+                {basket.proposed.map((p) =>
+                  p.whyBullets && p.whyBullets.length > 0 ? (
+                    <ScenarioWhyPanel
+                      key={`why-${p.scenarioId}`}
+                      bullets={p.whyBullets}
+                      scenarioLabel={p.label}
+                      variant={variant}
+                    />
+                  ) : null,
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
