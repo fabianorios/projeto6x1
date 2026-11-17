@@ -91,6 +91,29 @@ describe('extractor SQL (SPA)', () => {
     assert.match(mssql, /\bISNULL\s*\(/)
     assert.ok(!/\bLISTAGG\s*\(/i.test(mssql))
   })
+
+  it('Oracle Aptools Folha must not end with ; (ORA-00933) and LISTAGG parses', () => {
+    const oracle = getAptoolsExtractorScript('oracle')
+    const mssql = getAptoolsExtractorScript('mssql')
+    assert.ok(
+      !/;\s*$/.test(oracle),
+      'Oracle Aptools SQL must not end with semicolon (ORA-00933)',
+    )
+    assert.ok(
+      !oracle.trimEnd().endsWith(';'),
+      'Oracle Aptools SQL trimEnd must not end with ;',
+    )
+    // LISTAGG(expr, sep) WITHIN GROUP (ORDER BY …) — not mis-parenthesized
+    assert.match(
+      oracle,
+      /LISTAGG\s*\(\s*[\s\S]*?,\s*CHR\s*\(\s*59\s*\)\s*\)\s*WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+cod_tipo\s*\)/i,
+    )
+    assert.ok(!/\bISNULL\s*\(/i.test(oracle))
+    assert.ok(!/\bSTRING_AGG\s*\(/i.test(oracle))
+    assert.ok(!/\bCHAR\s*\(/i.test(oracle))
+    // MSSQL Aptools keeps historical trailing semicolon
+    assert.ok(/;\s*$/.test(mssql), 'MSSQL Aptools may keep trailing ;')
+  })
 })
 
 describe('mapExtractorAggregatesToPayroll', () => {

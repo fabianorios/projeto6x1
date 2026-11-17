@@ -433,10 +433,15 @@ export function getExtractorSelectBody(
   )
 }
 
-/** Full Aptools script — SELECT only (no SET TRANSACTION). */
+/**
+ * Full Aptools script — SELECT only (no SET TRANSACTION).
+ * Oracle: no trailing `;` — Aptools / thin clients raise ORA-00933 with it.
+ * MSSQL: keep trailing `;` (historical Aptools paste).
+ */
 export function getAptoolsExtractorScript(
   dialect: ExtractorDialect,
   filters: ExtractorSqlFilters = {},
 ): string {
-  return `${getExtractorSelectBody(dialect, filters)};\n`
+  const body = getExtractorSelectBody(dialect, filters)
+  return dialect === 'oracle' ? `${body}\n` : `${body};\n`
 }

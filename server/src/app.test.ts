@@ -190,6 +190,10 @@ describe("API routes", () => {
     assert.ok(!/\bISNULL\s*\(/i.test(sql));
     assert.ok(!/\bSTRING_AGG\s*\(/i.test(sql));
     assert.ok(!/\bCHAR\s*\(/i.test(sql));
+    assert.ok(
+      !/;\s*$/.test(sql),
+      "Oracle Aptools API SQL must not end with ; (ORA-00933)",
+    );
   });
 
   it("POST ephemeral validates body and never echoes password", async () => {
