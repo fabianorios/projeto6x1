@@ -16,6 +16,10 @@ export const AHR_HANDOFF_SCHEMA_VERSION = 'turnocheck-ahr-handoff-v2'
 export interface AhrHandoffExportOptions {
   /** Data Início for Ciclos de Horários (YYYY-MM-DD). */
   dataInicio?: string
+  /** Include jornada de almoço between manhã/tarde blocks. */
+  includeLunchJornada?: boolean
+  /** Horário candidate ids from the Passo 5 wizard selection. */
+  selectedHorarioIds?: string[]
 }
 
 export interface AhrHandoffPayload {
@@ -104,6 +108,8 @@ export function buildAhrHandoff(
 
   const apdataHierarchy = buildApdataHierarchy(result, {
     dataInicio: options.dataInicio,
+    includeLunchJornada: options.includeLunchJornada,
+    selectedHorarioIds: options.selectedHorarioIds,
   })
 
   return {

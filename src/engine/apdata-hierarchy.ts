@@ -1,13 +1,14 @@
 /**
  * Apdata-faithful cadastral hierarchy for ERP parametrization / carga.
  *
- * Tree (consultant “fiel da balança”):
- *   1. Jornadas e Steps — daily hours + sequential intervals
- *   2. Horários — bind jornadas
+ * Guided sequence (consultant UX):
+ *   1. Jornadas e Steps — work blocks named by start/end; optional lunch jornada
+ *   2. Horários — abbreviated workdays + entry/exit; user selects which to create
  *   3. Ciclos de Horários — work×off matrix + required Data Início
  *   4. Grades (Vagas) — turmas T1…T7 × CC codes (no PII)
  *
  * Derived from Quadro Proposto (ScheduleBuilder / crew-distribution).
+ * JSON/Excel download is an advanced export — not “enviar para o ERP”.
  */
 
 import type { RegimeFuncionamento } from '../types'
@@ -35,13 +36,16 @@ import { MAX_SUGGESTED_DAILY_HOURS } from './schedule-policy'
 import type { CostCenterResult, SimulationResult } from './types'
 
 export const APDATA_HIERARCHY_SCHEMA_VERSION =
-  'turnocheck-apdata-hierarchy-v1' as const
+  'turnocheck-apdata-hierarchy-v2' as const
 
 export type ApdataStepTipo =
   | 'ENTRADA'
   | 'INTERVALO_INICIO'
   | 'INTERVALO_FIM'
   | 'SAIDA'
+
+/** Work-block kind for split jornadas (Passo 1). */
+export type ApdataJornadaKind = 'MANHA' | 'ALMOCO' | 'TARDE' | 'INTEGRAL'
 
 export interface ApdataJornadaStep {
   /** 1-based sequential order (Apdata Steps). */
@@ -54,15 +58,17 @@ export interface ApdataJornadaStep {
 export interface ApdataJornada {
   codigo: string
   descricao: string
-  /** Planned daily work hours. */
+  /** Planned daily work hours for this block. */
   horasDia: number
   steps: ApdataJornadaStep[]
+  /** Split-block role (manhã / almoço / tarde / integral). */
+  kind: ApdataJornadaKind
 }
 
 export interface ApdataHorario {
   codigo: string
   descricao: string
-  /** Jornada codes bound to this horário. */
+  /** Jornada codes bound to this horário (manhã, [almoço], tarde). */
   jornadaCodigos: string[]
   cargaSemanalHoras: number | null
   /** Optional reference to dominant Apdata horário code (Atual). */
@@ -103,8 +109,11 @@ export interface ApdataGradeTurma {
   label: string
 }
 
-/** Nested review tree: Jornada → Horário → Ciclo → Grade/Turma. */
+/** Nested review tree: Jornadas → Horário → Ciclo → Grade/Turma. */
 export interface ApdataHierarchyNode {
+  /** Bound jornadas in order (manhã, [almoço], tarde) or single integral. */
+  jornadas: ApdataJornada[]
+  /** First work block — convenience for sheets that expect a single code. */
   jornada: ApdataJornada
   horario: ApdataHorario
   ciclo: ApdataCicloHorario
@@ -127,6 +136,8 @@ export interface ApdataHierarchyTree {
   scenarioId: string
   scenarioLabel: string
   regimeFuncionamento: RegimeFuncionamento
+  includeLunchJornada: boolean
+  selectedHorarioIds: string[]
   centers: ApdataHierarchyCenter[]
   /** Flat catalogs for ERP carga (deduped by codigo). */
   jornadas: ApdataJornada[]
@@ -141,12 +152,70 @@ export interface BuildApdataHierarchyOptions {
   dataInicio?: string
   /** Grade type — proposed quadro uses VAGAS (no PII). */
   tipoGrade?: ApdataGradeTipo
+  /**
+   * Create a separate jornada de almoço between manhã/tarde blocks.
+   * Default: true when the shift admits a meal window (≥6h and &lt;24h).
+   */
+  includeLunchJornada?: boolean
+  /**
+   * Horário candidate ids to materialize. Omit / empty = all candidates.
+   * Ids come from `deriveApdataCandidates`.
+   */
+  selectedHorarioIds?: string[]
+}
+
+/** Candidate jornada preview (Passo 1). */
+export interface ApdataJornadaCandidate {
+  codigo: string
+  descricao: string
+  kind: ApdataJornadaKind
+  startHour: number
+  endHour: number
+  horasDia: number
+  steps: ApdataJornadaStep[]
+}
+
+/** Candidate horário with selection id (Passo 2). */
+export interface ApdataHorarioCandidate {
+  /** Stable selection key (session UI). */
+  id: string
+  codigo: string
+  /** Human preview: abbreviated workdays + entry/exit. */
+  descricao: string
+  workDays: CoverageWeekday[]
+  workDaysLabel: string
+  startHour: number
+  endHour: number
+  centroCustoCodigo: string
+  escala: string
+  turmaIndexes: number[]
+  jornadaCodigos: string[]
+}
+
+export interface ApdataStructureCandidates {
+  shift: { startHour: number; endHour: number; hours: number }
+  meal: { breakStart: number; breakEnd: number } | null
+  /** Suggested default for lunch jornada toggle. */
+  includeLunchDefault: boolean
+  jornadas: ApdataJornadaCandidate[]
+  horarios: ApdataHorarioCandidate[]
 }
 
 const DISCLAIMER =
-  'Árvore cadastral Apdata (Jornada→Horário→Ciclo→Grade) gerada pelo Turnocheck ' +
+  'Estrutura cadastral Apdata (Jornadas→Horários→Ciclo→Grade) gerada pelo Turnocheck ' +
   'a partir do Quadro Proposto. Códigos e HC agregados por CC/turma — sem nomes ' +
-  'ou CPF. Validar Data Início e códigos com RH antes da carga no ERP.'
+  'ou CPF. Validar Data Início e códigos com RH antes da carga no ERP. ' +
+  'O JSON/Excel é exportação avançada — não envia dados ao ERP automaticamente.'
+
+const WEEKDAY_ABBREV: Record<CoverageWeekday, string> = {
+  seg: 'Seg',
+  ter: 'Ter',
+  qua: 'Qua',
+  qui: 'Qui',
+  sex: 'Sex',
+  sab: 'Sáb',
+  dom: 'Dom',
+}
 
 function slugCc(centroCusto: string): string {
   const s = centroCusto
@@ -165,15 +234,137 @@ function clockCode(h: number): string {
   return `${String(hh).padStart(2, '0')}${String(mm).padStart(2, '0')}`
 }
 
+function wrapHour(h: number): number {
+  if (h === 24) return 24
+  const x = ((h % 24) + 24) % 24
+  return Math.round(x * 100) / 100
+}
+
 function shiftHours(startHour: number, endHour: number): number {
   if (startHour === endHour) return 24
   if (endHour > startHour) return Math.round((endHour - startHour) * 100) / 100
   return Math.round((24 - startHour + endHour) * 100) / 100
 }
 
+/** Compact workday key for códigos (SEGSEX, TERSAB, SEGQUASEX…). */
+export function workdayKey(workDays: readonly string[]): string {
+  const set = new Set(
+    workDays.map((d) => d.toLowerCase()).filter((d): d is CoverageWeekday =>
+      (COVERAGE_WEEKDAYS as readonly string[]).includes(d),
+    ),
+  )
+  const ordered = COVERAGE_WEEKDAYS.filter((d) => set.has(d))
+  if (ordered.length === 0) return 'OFF'
+  if (ordered.length === 1) return ordered[0]!.toUpperCase()
+  const indexes = ordered.map((d) => COVERAGE_WEEKDAYS.indexOf(d))
+  const consecutive = indexes.every(
+    (idx, i) => i === 0 || idx === indexes[i - 1]! + 1,
+  )
+  // Consecutive runs → compact SEGSEX / TERSAB; gaps keep full SEGQUASEX.
+  if (consecutive && ordered.length >= 2) {
+    return `${ordered[0]!.toUpperCase()}${ordered.at(-1)!.toUpperCase()}`
+  }
+  return ordered.map((d) => d.toUpperCase()).join('')
+}
+
 /**
- * Sequential Apdata Steps for one jornada from entrada/saída.
+ * Abbreviated workday label for horário names.
+ * Consecutive runs collapse to Seg–Sex; gaps use · (Seg·Qua·Sex).
+ */
+export function formatWorkdayAbbrev(workDays: readonly string[]): string {
+  const set = new Set(
+    workDays.map((d) => d.toLowerCase()).filter((d): d is CoverageWeekday =>
+      (COVERAGE_WEEKDAYS as readonly string[]).includes(d),
+    ),
+  )
+  const ordered = COVERAGE_WEEKDAYS.filter((d) => set.has(d))
+  if (ordered.length === 0) return '—'
+  if (ordered.length === 1) return WEEKDAY_ABBREV[ordered[0]!]
+
+  const indexes = ordered.map((d) => COVERAGE_WEEKDAYS.indexOf(d))
+  const consecutive = indexes.every(
+    (idx, i) => i === 0 || idx === indexes[i - 1]! + 1,
+  )
+  if (consecutive) {
+    return `${WEEKDAY_ABBREV[ordered[0]!]}–${WEEKDAY_ABBREV[ordered.at(-1)!]!}`
+  }
+  return ordered.map((d) => WEEKDAY_ABBREV[d]).join('·')
+}
+
+/** Horário display name: abbreviated workdays + entry/exit. */
+export function formatHorarioLabel(
+  workDays: readonly string[],
+  startHour: number,
+  endHour: number,
+): string {
+  return `${formatWorkdayAbbrev(workDays)} ${formatHourClock(startHour)}–${formatHourClock(endHour)}`
+}
+
+/** Jornada display name from block start/end (or Almoço …). */
+export function formatJornadaLabel(
+  startHour: number,
+  endHour: number,
+  kind: ApdataJornadaKind = 'INTEGRAL',
+): string {
+  const range = `${formatHourClock(startHour)}–${formatHourClock(endHour)}`
+  if (kind === 'ALMOCO') return `Almoço ${range}`
+  return range
+}
+
+export function jornadaCodigoFor(
+  startHour: number,
+  endHour: number,
+  kind: ApdataJornadaKind = 'INTEGRAL',
+): string {
+  const base = `JOR-${clockCode(startHour)}-${clockCode(endHour)}`
+  if (kind === 'ALMOCO') return `JOR-ALM-${clockCode(startHour)}-${clockCode(endHour)}`
+  return base
+}
+
+export function horarioCodigoFor(
+  workDays: readonly string[],
+  startHour: number,
+  endHour: number,
+  centroCusto?: string,
+): string {
+  const days = workdayKey(workDays)
+  const core = `HOR-${days}-${clockCode(startHour)}-${clockCode(endHour)}`
+  if (!centroCusto) return core
+  return `${core}-${slugCc(centroCusto)}`
+}
+
+/**
+ * Meal window centered in the shift (1h) when span ≥6h and &lt;24h.
+ * Used to split manhã / almoço / tarde jornadas.
+ */
+export function resolveMealWindow(
+  startHour: number,
+  endHour: number,
+): { breakStart: number; breakEnd: number } | null {
+  const hours = shiftHours(startHour, endHour)
+  if (hours < 6 || hours >= 24) return null
+  const mid = startHour + hours / 2
+  return {
+    breakStart: wrapHour(mid - 0.5),
+    breakEnd: wrapHour(mid + 0.5),
+  }
+}
+
+/** Two-step block: entrada → saída (Passo 1 A/B and lunch). */
+export function buildBlockJornadaSteps(
+  startHour: number,
+  endHour: number,
+): ApdataJornadaStep[] {
+  return [
+    { ordem: 1, tipo: 'ENTRADA', hora: formatHourClock(startHour) },
+    { ordem: 2, tipo: 'SAIDA', hora: formatHourClock(endHour) },
+  ]
+}
+
+/**
+ * Sequential Apdata Steps for one monolithic jornada from entrada/saída.
  * Spans ≥6h insert a 1h meal interval centered in the shift.
+ * Kept for compatibility; preferred path uses split blocks + lunch jornada.
  */
 export function buildJornadaSteps(
   startHour: number,
@@ -188,20 +379,15 @@ export function buildJornadaSteps(
     const mid = startHour + hours / 2
     const breakStart = mid - 0.5
     const breakEnd = mid + 0.5
-    const wrap = (h: number) => {
-      if (h === 24) return 24
-      const x = ((h % 24) + 24) % 24
-      return Math.round(x * 100) / 100
-    }
     steps.push({
       ordem: 2,
       tipo: 'INTERVALO_INICIO',
-      hora: formatHourClock(wrap(breakStart)),
+      hora: formatHourClock(wrapHour(breakStart)),
     })
     steps.push({
       ordem: 3,
       tipo: 'INTERVALO_FIM',
-      hora: formatHourClock(wrap(breakEnd)),
+      hora: formatHourClock(wrapHour(breakEnd)),
     })
     steps.push({
       ordem: 4,
@@ -216,6 +402,43 @@ export function buildJornadaSteps(
     })
   }
   return steps
+}
+
+function candidateFromBlock(
+  startHour: number,
+  endHour: number,
+  kind: ApdataJornadaKind,
+): ApdataJornadaCandidate {
+  const horasDia = shiftHours(startHour, endHour)
+  return {
+    codigo: jornadaCodigoFor(startHour, endHour, kind),
+    descricao: formatJornadaLabel(startHour, endHour, kind),
+    kind,
+    startHour,
+    endHour,
+    horasDia,
+    steps: buildBlockJornadaSteps(startHour, endHour),
+  }
+}
+
+/** Build Passo 1 jornada candidates for a shift (+ optional lunch). */
+export function buildJornadaCandidates(
+  startHour: number,
+  endHour: number,
+  includeLunchJornada: boolean,
+): ApdataJornadaCandidate[] {
+  const meal = resolveMealWindow(startHour, endHour)
+  if (!meal) {
+    return [candidateFromBlock(startHour, endHour, 'INTEGRAL')]
+  }
+  const out: ApdataJornadaCandidate[] = [
+    candidateFromBlock(startHour, meal.breakStart, 'MANHA'),
+  ]
+  if (includeLunchJornada) {
+    out.push(candidateFromBlock(meal.breakStart, meal.breakEnd, 'ALMOCO'))
+  }
+  out.push(candidateFromBlock(meal.breakEnd, endHour, 'TARDE'))
+  return out
 }
 
 function defaultShiftFromOperatingHours(operatingHours: OperatingHours): {
@@ -297,6 +520,15 @@ function resolveDist(cc: CostCenterResult, fallback: TurmaDistribution): TurmaDi
   )
 }
 
+function normalizeWorkDays(days: readonly string[]): CoverageWeekday[] {
+  const set = new Set(
+    days.map((d) => d.toLowerCase()).filter((d): d is CoverageWeekday =>
+      (COVERAGE_WEEKDAYS as readonly string[]).includes(d),
+    ),
+  )
+  return COVERAGE_WEEKDAYS.filter((d) => set.has(d))
+}
+
 /** Default Data Início = day 1 of the scenario reference month. */
 export function defaultApdataDataInicio(scenarioId: string): string {
   const { year, month } = defaultReferencePeriod(scenarioId)
@@ -304,8 +536,92 @@ export function defaultApdataDataInicio(scenarioId: string): string {
 }
 
 /**
+ * Derive jornada + horário candidates from Quadro Proposto / simulation.
+ * Horário ids are stable for session selection UI.
+ */
+export function deriveApdataCandidates(
+  result: SimulationResult,
+  options: Pick<BuildApdataHierarchyOptions, 'includeLunchJornada'> = {},
+): ApdataStructureCandidates {
+  const operatingHours =
+    result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
+  const shift = defaultShiftFromOperatingHours(operatingHours)
+  const meal = resolveMealWindow(shift.startHour, shift.endHour)
+  const includeLunchDefault = meal != null
+  const includeLunch =
+    options.includeLunchJornada ?? includeLunchDefault
+
+  const jornadas = buildJornadaCandidates(
+    shift.startHour,
+    shift.endHour,
+    includeLunch && meal != null,
+  )
+  const jornadaCodigos = jornadas.map((j) => j.codigo)
+
+  const centersIn = centersFromResult(result)
+  const horarioMap = new Map<string, ApdataHorarioCandidate>()
+
+  for (const cc of centersIn) {
+    const dist = resolveDist(cc, result.distribuicaoTurmas)
+    // Group crews that share the same workday pattern + escala → one horário.
+    const groups = new Map<string, TurmaCrew[]>()
+    for (const crew of dist.crews) {
+      const work = normalizeWorkDays(crew.workDays)
+      const key = `${workdayKey(work)}|${crew.escala}`
+      const list = groups.get(key) ?? []
+      list.push(crew)
+      groups.set(key, list)
+    }
+
+    for (const crews of groups.values()) {
+      const lead = crews[0]!
+      const work = normalizeWorkDays(lead.workDays)
+      const codigo = horarioCodigoFor(
+        work,
+        shift.startHour,
+        shift.endHour,
+        cc.centroCusto,
+      )
+      const id = `${slugCc(cc.centroCusto)}::${workdayKey(work)}::${lead.escala}`
+      const existing = horarioMap.get(id)
+      if (existing) {
+        for (const c of crews) {
+          if (!existing.turmaIndexes.includes(c.turmaIndex)) {
+            existing.turmaIndexes.push(c.turmaIndex)
+          }
+        }
+        existing.turmaIndexes.sort((a, b) => a - b)
+        continue
+      }
+      horarioMap.set(id, {
+        id,
+        codigo,
+        descricao: formatHorarioLabel(work, shift.startHour, shift.endHour),
+        workDays: work,
+        workDaysLabel: formatWorkdayAbbrev(work),
+        startHour: shift.startHour,
+        endHour: shift.endHour,
+        centroCustoCodigo: cc.centroCusto,
+        escala: lead.escala,
+        turmaIndexes: crews.map((c) => c.turmaIndex).sort((a, b) => a - b),
+        jornadaCodigos: [...jornadaCodigos],
+      })
+    }
+  }
+
+  return {
+    shift,
+    meal,
+    includeLunchDefault,
+    jornadas,
+    horarios: [...horarioMap.values()],
+  }
+}
+
+/**
  * Build Apdata cadastral tree from Quadro Proposto (T1…T7).
  * LGPD-safe: CC codes, schedule codes, turmas, headcount — no names/CPF.
+ * Respects horário selection and lunch-jornada toggle from the wizard.
  */
 export function buildApdataHierarchy(
   result: SimulationResult,
@@ -315,91 +631,117 @@ export function buildApdataHierarchy(
     options.dataInicio?.trim() ||
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId)
   const tipoGrade = options.tipoGrade ?? 'VAGAS'
-  const operatingHours =
-    result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
-  const shift = defaultShiftFromOperatingHours(operatingHours)
-  const centersIn = centersFromResult(result)
-  const regimeRoot = result.distribuicaoTurmas.regime
+  const candidates = deriveApdataCandidates(result, {
+    includeLunchJornada: options.includeLunchJornada,
+  })
+  const includeLunchJornada =
+    options.includeLunchJornada ?? candidates.includeLunchDefault
+
+  const selectedSet =
+    options.selectedHorarioIds && options.selectedHorarioIds.length > 0
+      ? new Set(options.selectedHorarioIds)
+      : null
+  const selectedHorarios = candidates.horarios.filter((h) =>
+    selectedSet ? selectedSet.has(h.id) : true,
+  )
+  const selectedHorarioIds = selectedHorarios.map((h) => h.id)
+  const selectedByCc = new Map<string, ApdataHorarioCandidate[]>()
+  for (const h of selectedHorarios) {
+    const list = selectedByCc.get(h.centroCustoCodigo) ?? []
+    list.push(h)
+    selectedByCc.set(h.centroCustoCodigo, list)
+  }
 
   const jornadasByCode = new Map<string, ApdataJornada>()
+  for (const jc of candidates.jornadas) {
+    jornadasByCode.set(jc.codigo, {
+      codigo: jc.codigo,
+      descricao: jc.descricao,
+      horasDia: jc.horasDia,
+      steps: jc.steps,
+      kind: jc.kind,
+    })
+  }
+  const boundJornadas = candidates.jornadas.map((j) => jornadasByCode.get(j.codigo)!)
+
   const horariosByCode = new Map<string, ApdataHorario>()
   const ciclosByCode = new Map<string, ApdataCicloHorario>()
   const grades: ApdataGradeTurma[] = []
   const centers: ApdataHierarchyCenter[] = []
+  const centersIn = centersFromResult(result)
+  const regimeRoot = result.distribuicaoTurmas.regime
+  const shift = candidates.shift
 
   for (const cc of centersIn) {
     const dist = resolveDist(cc, result.distribuicaoTurmas)
     const ccSlug = slugCc(cc.centroCusto)
     const nodes: ApdataHierarchyNode[] = []
+    const ccHorarios = selectedByCc.get(cc.centroCusto) ?? []
 
-    // Group crews that share the same work×off pattern + escala → one ciclo each
-    // Distinct rest offsets (CONTINUO_7D) → distinct ciclos; shared jornada/horário.
-    const jornadaCodigo = `JOR-${clockCode(shift.startHour)}-${clockCode(shift.endHour)}`
-    if (!jornadasByCode.has(jornadaCodigo)) {
-      const steps = buildJornadaSteps(shift.startHour, shift.endHour)
-      jornadasByCode.set(jornadaCodigo, {
-        codigo: jornadaCodigo,
-        descricao: `Jornada ${formatHourClock(shift.startHour)}–${formatHourClock(shift.endHour)} (${shift.hours}h)`,
-        horasDia: shift.hours,
-        steps,
-      })
-    }
-    const jornada = jornadasByCode.get(jornadaCodigo)!
+    for (const cand of ccHorarios) {
+      if (!horariosByCode.has(cand.codigo)) {
+        const weekly =
+          cc.cargaSemanalAtual != null && Number.isFinite(cc.cargaSemanalAtual)
+            ? cc.cargaSemanalAtual
+            : Math.round(shift.hours * cand.workDays.length * 10) / 10
+        horariosByCode.set(cand.codigo, {
+          codigo: cand.codigo,
+          descricao: cand.descricao,
+          jornadaCodigos: [...cand.jornadaCodigos],
+          cargaSemanalHoras: weekly,
+          codHorarioAtualRef: cc.codHorarioAtual ?? null,
+        })
+      }
+      const horario = horariosByCode.get(cand.codigo)!
 
-    const horarioCodigo = `HOR-PROP-${ccSlug}`
-    if (!horariosByCode.has(horarioCodigo)) {
-      const weekly =
-        cc.cargaSemanalAtual != null && Number.isFinite(cc.cargaSemanalAtual)
-          ? cc.cargaSemanalAtual
-          : Math.round(shift.hours * 5 * 10) / 10
-      horariosByCode.set(horarioCodigo, {
-        codigo: horarioCodigo,
-        descricao: `Horário proposto · CC ${cc.centroCusto}`,
-        jornadaCodigos: [jornadaCodigo],
-        cargaSemanalHoras: weekly,
-        codHorarioAtualRef: cc.codHorarioAtual ?? null,
-      })
-    }
-    const horario = horariosByCode.get(horarioCodigo)!
+      const crewsForHorario = dist.crews.filter((c) =>
+        cand.turmaIndexes.includes(c.turmaIndex),
+      )
 
-    for (const crew of dist.crews) {
-      const dias = cycleDaysFromCrew(crew)
-      const workDays = dias.filter((d) => d.marca === 'T').length
-      const offDays = dias.filter((d) => d.marca === 'F').length
-      const restKey = crew.restDays
-        .map((d) => d.toLowerCase().slice(0, 3))
-        .join('')
-        .toUpperCase() || 'OFF'
-      const cicloCodigo = `CIC-${ccSlug}-T${crew.turmaIndex}-${crew.escala.replace(/×/g, 'x').toUpperCase()}-${restKey}`
+      for (const crew of crewsForHorario) {
+        const dias = cycleDaysFromCrew(crew)
+        const workDays = dias.filter((d) => d.marca === 'T').length
+        const offDays = dias.filter((d) => d.marca === 'F').length
+        const restKey = crew.restDays
+          .map((d) => d.toLowerCase().slice(0, 3))
+          .join('')
+          .toUpperCase() || 'OFF'
+        const cicloCodigo = `CIC-${ccSlug}-T${crew.turmaIndex}-${crew.escala.replace(/×/g, 'x').toUpperCase()}-${restKey}`
 
-      let ciclo = ciclosByCode.get(cicloCodigo)
-      if (!ciclo) {
-        ciclo = {
-          codigo: cicloCodigo,
-          horarioCodigo,
-          dataInicio,
-          escala: crew.escala,
-          workDays,
-          offDays,
-          dias,
+        let ciclo = ciclosByCode.get(cicloCodigo)
+        if (!ciclo) {
+          ciclo = {
+            codigo: cicloCodigo,
+            horarioCodigo: horario.codigo,
+            dataInicio,
+            escala: crew.escala,
+            workDays,
+            offDays,
+            dias,
+          }
+          ciclosByCode.set(cicloCodigo, ciclo)
+        } else {
+          ciclo.dataInicio = dataInicio
         }
-        ciclosByCode.set(cicloCodigo, ciclo)
-      } else {
-        // Keep Data Início in sync with the tree-level override.
-        ciclo.dataInicio = dataInicio
-      }
 
-      const grade: ApdataGradeTurma = {
-        turma: `T${crew.turmaIndex}`,
-        turmaIndex: crew.turmaIndex,
-        cicloCodigo,
-        centroCustoCodigo: cc.centroCusto,
-        headcountProposto: Math.max(0, Math.round(crew.headcount)),
-        tipoGrade,
-        label: crew.label,
+        const grade: ApdataGradeTurma = {
+          turma: `T${crew.turmaIndex}`,
+          turmaIndex: crew.turmaIndex,
+          cicloCodigo,
+          centroCustoCodigo: cc.centroCusto,
+          headcountProposto: Math.max(0, Math.round(crew.headcount)),
+          tipoGrade,
+          label: crew.label,
+        }
+        grades.push(grade)
+        nodes.push({
+          jornadas: boundJornadas,
+          jornada: boundJornadas[0]!,
+          horario,
+          ciclo,
+          grades: [grade],
+        })
       }
-      grades.push(grade)
-      nodes.push({ jornada, horario, ciclo, grades: [grade] })
     }
 
     centers.push({
@@ -418,6 +760,8 @@ export function buildApdataHierarchy(
     scenarioId: result.ruleVersion.params.scenarioId,
     scenarioLabel: result.ruleVersion.label,
     regimeFuncionamento: regimeRoot,
+    includeLunchJornada,
+    selectedHorarioIds,
     centers,
     jornadas: [...jornadasByCode.values()],
     horarios: [...horariosByCode.values()],

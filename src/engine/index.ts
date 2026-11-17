@@ -64,8 +64,18 @@ export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
 export {
   APDATA_HIERARCHY_SCHEMA_VERSION,
   buildApdataHierarchy,
+  buildBlockJornadaSteps,
+  buildJornadaCandidates,
   buildJornadaSteps,
   defaultApdataDataInicio,
+  deriveApdataCandidates,
+  formatHorarioLabel,
+  formatJornadaLabel,
+  formatWorkdayAbbrev,
+  horarioCodigoFor,
+  jornadaCodigoFor,
+  resolveMealWindow,
+  workdayKey,
 } from './apdata-hierarchy'
 export type {
   ApdataCicloDia,
@@ -76,9 +86,13 @@ export type {
   ApdataHierarchyNode,
   ApdataHierarchyTree,
   ApdataHorario,
+  ApdataHorarioCandidate,
   ApdataJornada,
+  ApdataJornadaCandidate,
+  ApdataJornadaKind,
   ApdataJornadaStep,
   ApdataStepTipo,
+  ApdataStructureCandidates,
   BuildApdataHierarchyOptions,
 } from './apdata-hierarchy'
 export {
