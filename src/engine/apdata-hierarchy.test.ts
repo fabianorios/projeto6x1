@@ -11,12 +11,15 @@ import {
   deriveApdataCandidates,
   formatHorarioLabel,
   formatJornadaLabel,
+  formatTurmaLabel,
   formatWorkdayAbbrev,
   horarioCodigoFor,
   jornadaCodigoFor,
+  resolveApdataShiftWindows,
   resolveMealWindow,
   workdayKey,
 } from './apdata-hierarchy'
+import { resolveShiftWindows } from './operating-hours'
 
 describe('apdata-hierarchy naming', () => {
   it('formatWorkdayAbbrev collapses consecutive days and dots gaps', () => {
@@ -31,12 +34,27 @@ describe('apdata-hierarchy naming', () => {
       formatHorarioLabel(['seg', 'ter', 'qua', 'qui', 'sex'], 9, 17),
       'Seg–Sex 09:00–17:00',
     )
+    assert.equal(
+      formatHorarioLabel(['seg', 'ter', 'qua', 'qui', 'sex'], 8, 16),
+      'Seg–Sex 08:00–16:00',
+    )
   })
 
   it('formatJornadaLabel names blocks; lunch prefixes Almoço', () => {
     assert.equal(formatJornadaLabel(9, 12, 'MANHA'), '09:00–12:00')
     assert.equal(formatJornadaLabel(12, 13, 'ALMOCO'), 'Almoço 12:00–13:00')
     assert.equal(formatJornadaLabel(13, 17, 'TARDE'), '13:00–17:00')
+  })
+
+  it('formatTurmaLabel prefixes entrada–saída before T# and CC', () => {
+    assert.equal(
+      formatTurmaLabel(9, 17, 1, 'Geral'),
+      '09:00–17:00 · T1 · Geral',
+    )
+    assert.equal(
+      formatTurmaLabel(13, 21, 3, 'CC-OPS'),
+      '13:00–21:00 · T3 · CC-OPS',
+    )
   })
 
   it('jornada/horario códigos follow clock + day keys', () => {
@@ -49,6 +67,31 @@ describe('apdata-hierarchy naming', () => {
       horarioCodigoFor(['seg', 'ter', 'qua', 'qui', 'sex'], 9, 17, 'Geral'),
       'HOR-SEGSEX-0900-1700-GERAL',
     )
+    assert.equal(
+      horarioCodigoFor(['seg', 'ter', 'qua', 'qui', 'sex'], 8, 16, 'Geral'),
+      'HOR-SEGSEX-0800-1600-GERAL',
+    )
+  })
+
+  it('resolveApdataShiftWindows uses Quadro window for 1 turno; tiles for 2+', () => {
+    const varejo = { default: { openHour: 9, closeHour: 21 } }
+    const one = resolveApdataShiftWindows(varejo, 1)
+    assert.equal(one.length, 1)
+    assert.equal(one[0]?.startHour, 9)
+    assert.equal(one[0]?.endHour, 17)
+
+    const two = resolveApdataShiftWindows(varejo, 2)
+    assert.equal(two.length, 2)
+    assert.equal(two[0]?.startHour, 9)
+    assert.equal(two[0]?.endHour, 17)
+    assert.equal(two[1]?.startHour, 13)
+    assert.equal(two[1]?.endHour, 21)
+
+    const shortDay = { default: { openHour: 8, closeHour: 16 } }
+    const short = resolveShiftWindows(shortDay, 1)
+    assert.equal(short.length, 1)
+    assert.equal(short[0]?.startHour, 8)
+    assert.equal(short[0]?.endHour, 16)
   })
 })
 
@@ -231,5 +274,59 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.equal(tree.ciclos[0]?.workDays, 5)
     assert.equal(tree.ciclos[0]?.offDays, 2)
     assert.equal(tree.horarios[0]?.descricao, 'Seg–Sex 09:00–17:00')
+    assert.equal(tree.grades[0]?.label, '09:00–17:00 · T1 · Geral')
+  })
+
+  it('custom operating hours drive jornada/horário clocks (not hardcoded 09–17)', () => {
+    const result = simulate({
+      sector: 'varejo',
+      headcount: 10,
+      currentScale: '5x2',
+      averageMonthlySalary: 2000,
+      units: 1,
+      shiftsPerDay: 1,
+      scenarioId: 'fase1_2026_42h',
+      operatingHours: { default: { openHour: 8, closeHour: 16 } },
+      defaultRegimeFuncionamento: 'SEG_SEX',
+    })
+    const cands = deriveApdataCandidates(result)
+    assert.equal(cands.shift.startHour, 8)
+    assert.equal(cands.shift.endHour, 16)
+    assert.equal(cands.horarios[0]?.descricao, 'Seg–Sex 08:00–16:00')
+    assert.ok(cands.jornadas.some((j) => j.descricao.startsWith('08:00')))
+    const tree = buildApdataHierarchy(result)
+    assert.equal(tree.grades[0]?.label, '08:00–16:00 · T1 · Geral')
+    assert.equal(tree.horarios[0]?.codigo, 'HOR-SEGSEX-0800-1600-GERAL')
+  })
+
+  it('shiftsPerDay 2 materializes both tiles with times on turma labels', () => {
+    const result = simulate({
+      sector: 'varejo',
+      headcount: 10,
+      currentScale: '5x2',
+      averageMonthlySalary: 2000,
+      units: 1,
+      shiftsPerDay: 2,
+      scenarioId: 'fase1_2026_42h',
+      operatingHours: DEFAULT_OPERATING_HOURS,
+      defaultRegimeFuncionamento: 'SEG_SEX',
+    })
+    const cands = deriveApdataCandidates(result)
+    assert.equal(cands.shifts.length, 2)
+    assert.equal(cands.horarios.length, 2)
+    const labels = cands.horarios.map((h) => h.descricao).sort()
+    assert.deepEqual(labels, [
+      'Seg–Sex 09:00–17:00',
+      'Seg–Sex 13:00–21:00',
+    ])
+    const tree = buildApdataHierarchy(result)
+    assert.equal(tree.grades.length, 2)
+    const gradeLabels = tree.grades.map((g) => g.label).sort()
+    assert.deepEqual(gradeLabels, [
+      '09:00–17:00 · T1 · Geral',
+      '13:00–21:00 · T1 · Geral',
+    ])
+    assert.ok(tree.jornadas.some((j) => j.codigo.includes('0900')))
+    assert.ok(tree.jornadas.some((j) => j.codigo.includes('2100') || j.codigo.includes('1300')))
   })
 })

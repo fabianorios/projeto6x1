@@ -28,8 +28,7 @@ import {
 import {
   DEFAULT_OPERATING_HOURS,
   formatHourClock,
-  tileCoverageWindow,
-  widestCoverageDay,
+  resolveShiftWindows,
   type OperatingHours,
 } from './operating-hours'
 import { MAX_SUGGESTED_DAILY_HOURS } from './schedule-policy'
@@ -192,8 +191,17 @@ export interface ApdataHorarioCandidate {
   jornadaCodigos: string[]
 }
 
+export interface ApdataShiftWindow {
+  startHour: number
+  endHour: number
+  hours: number
+}
+
 export interface ApdataStructureCandidates {
-  shift: { startHour: number; endHour: number; hours: number }
+  /** Primary / first shift (Passo 1 summary). */
+  shift: ApdataShiftWindow
+  /** All shift windows derived from operating hours × turnos/dia. */
+  shifts: ApdataShiftWindow[]
   meal: { breakStart: number; breakEnd: number } | null
   /** Suggested default for lunch jornada toggle. */
   includeLunchDefault: boolean
@@ -309,6 +317,21 @@ export function formatJornadaLabel(
   const range = `${formatHourClock(startHour)}–${formatHourClock(endHour)}`
   if (kind === 'ALMOCO') return `Almoço ${range}`
   return range
+}
+
+/**
+ * Grade/turma description with work times in front of the turma + CC.
+ * Example: `09:00–17:00 · T1 · GERAL`
+ */
+export function formatTurmaLabel(
+  startHour: number,
+  endHour: number,
+  turmaIndex: number,
+  centroCustoCodigo: string,
+): string {
+  const range = `${formatHourClock(startHour)}–${formatHourClock(endHour)}`
+  const cc = centroCustoCodigo.trim() || 'GERAL'
+  return `${range} · T${turmaIndex} · ${cc}`
 }
 
 export function jornadaCodigoFor(
@@ -441,21 +464,22 @@ export function buildJornadaCandidates(
   return out
 }
 
-function defaultShiftFromOperatingHours(operatingHours: OperatingHours): {
-  startHour: number
-  endHour: number
-  hours: number
-} {
-  const day = widestCoverageDay(operatingHours)
-  const tiles = tileCoverageWindow(day, MAX_SUGGESTED_DAILY_HOURS, 8)
-  if (tiles[0]) {
-    return {
-      startHour: tiles[0].startHour,
-      endHour: tiles[0].endHour,
-      hours: tiles[0].hours,
-    }
-  }
-  return { startHour: 8, endHour: 17, hours: 8 }
+/**
+ * Entrada/saída windows from Quadro / operating hours / shift tiles.
+ * Never invents a lone hardcoded 09–17 when hours or turnos/dia say otherwise.
+ */
+export function resolveApdataShiftWindows(
+  operatingHours: OperatingHours,
+  shiftsPerDay: number,
+): ApdataShiftWindow[] {
+  const windows = resolveShiftWindows(
+    operatingHours,
+    shiftsPerDay,
+    MAX_SUGGESTED_DAILY_HOURS,
+    8,
+  )
+  if (windows.length > 0) return windows
+  return [{ startHour: 8, endHour: 17, hours: 8 }]
 }
 
 function cycleDaysFromCrew(crew: TurmaCrew): ApdataCicloDia[] {
@@ -537,7 +561,8 @@ export function defaultApdataDataInicio(scenarioId: string): string {
 
 /**
  * Derive jornada + horário candidates from Quadro Proposto / simulation.
- * Horário ids are stable for session selection UI.
+ * Entrada/saída come from operating hours × turnos/dia (shift tiles), not a
+ * hardcoded 09–17. Horário ids are stable for session selection UI.
  */
 export function deriveApdataCandidates(
   result: SimulationResult,
@@ -545,25 +570,40 @@ export function deriveApdataCandidates(
 ): ApdataStructureCandidates {
   const operatingHours =
     result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
-  const shift = defaultShiftFromOperatingHours(operatingHours)
+  const shiftsPerDay = Math.max(1, result.input.shiftsPerDay || 1)
+  const shifts = resolveApdataShiftWindows(operatingHours, shiftsPerDay)
+  const shift = shifts[0]!
   const meal = resolveMealWindow(shift.startHour, shift.endHour)
-  const includeLunchDefault = meal != null
+  const includeLunchDefault = shifts.some(
+    (s) => resolveMealWindow(s.startHour, s.endHour) != null,
+  )
   const includeLunch =
     options.includeLunchJornada ?? includeLunchDefault
 
-  const jornadas = buildJornadaCandidates(
-    shift.startHour,
-    shift.endHour,
-    includeLunch && meal != null,
-  )
-  const jornadaCodigos = jornadas.map((j) => j.codigo)
+  const jornadasByCode = new Map<string, ApdataJornadaCandidate>()
+  const jornadasForShift = new Map<string, string[]>()
+  for (const s of shifts) {
+    const shiftMeal = resolveMealWindow(s.startHour, s.endHour)
+    const blocks = buildJornadaCandidates(
+      s.startHour,
+      s.endHour,
+      includeLunch && shiftMeal != null,
+    )
+    const codes: string[] = []
+    for (const b of blocks) {
+      if (!jornadasByCode.has(b.codigo)) jornadasByCode.set(b.codigo, b)
+      codes.push(b.codigo)
+    }
+    jornadasForShift.set(`${clockCode(s.startHour)}-${clockCode(s.endHour)}`, codes)
+  }
+  const jornadas = [...jornadasByCode.values()]
 
   const centersIn = centersFromResult(result)
   const horarioMap = new Map<string, ApdataHorarioCandidate>()
 
   for (const cc of centersIn) {
     const dist = resolveDist(cc, result.distribuicaoTurmas)
-    // Group crews that share the same workday pattern + escala → one horário.
+    // Group crews that share the same workday pattern + escala → one base group.
     const groups = new Map<string, TurmaCrew[]>()
     for (const crew of dist.crews) {
       const work = normalizeWorkDays(crew.workDays)
@@ -576,41 +616,46 @@ export function deriveApdataCandidates(
     for (const crews of groups.values()) {
       const lead = crews[0]!
       const work = normalizeWorkDays(lead.workDays)
-      const codigo = horarioCodigoFor(
-        work,
-        shift.startHour,
-        shift.endHour,
-        cc.centroCusto,
-      )
-      const id = `${slugCc(cc.centroCusto)}::${workdayKey(work)}::${lead.escala}`
-      const existing = horarioMap.get(id)
-      if (existing) {
-        for (const c of crews) {
-          if (!existing.turmaIndexes.includes(c.turmaIndex)) {
-            existing.turmaIndexes.push(c.turmaIndex)
+      for (const s of shifts) {
+        const shiftKey = `${clockCode(s.startHour)}-${clockCode(s.endHour)}`
+        const jornadaCodigos = jornadasForShift.get(shiftKey) ?? []
+        const codigo = horarioCodigoFor(
+          work,
+          s.startHour,
+          s.endHour,
+          cc.centroCusto,
+        )
+        const id = `${slugCc(cc.centroCusto)}::${workdayKey(work)}::${lead.escala}::${shiftKey}`
+        const existing = horarioMap.get(id)
+        if (existing) {
+          for (const c of crews) {
+            if (!existing.turmaIndexes.includes(c.turmaIndex)) {
+              existing.turmaIndexes.push(c.turmaIndex)
+            }
           }
+          existing.turmaIndexes.sort((a, b) => a - b)
+          continue
         }
-        existing.turmaIndexes.sort((a, b) => a - b)
-        continue
+        horarioMap.set(id, {
+          id,
+          codigo,
+          descricao: formatHorarioLabel(work, s.startHour, s.endHour),
+          workDays: work,
+          workDaysLabel: formatWorkdayAbbrev(work),
+          startHour: s.startHour,
+          endHour: s.endHour,
+          centroCustoCodigo: cc.centroCusto,
+          escala: lead.escala,
+          turmaIndexes: crews.map((c) => c.turmaIndex).sort((a, b) => a - b),
+          jornadaCodigos: [...jornadaCodigos],
+        })
       }
-      horarioMap.set(id, {
-        id,
-        codigo,
-        descricao: formatHorarioLabel(work, shift.startHour, shift.endHour),
-        workDays: work,
-        workDaysLabel: formatWorkdayAbbrev(work),
-        startHour: shift.startHour,
-        endHour: shift.endHour,
-        centroCustoCodigo: cc.centroCusto,
-        escala: lead.escala,
-        turmaIndexes: crews.map((c) => c.turmaIndex).sort((a, b) => a - b),
-        jornadaCodigos: [...jornadaCodigos],
-      })
     }
   }
 
   return {
     shift,
+    shifts,
     meal,
     includeLunchDefault,
     jornadas,
@@ -662,7 +707,6 @@ export function buildApdataHierarchy(
       kind: jc.kind,
     })
   }
-  const boundJornadas = candidates.jornadas.map((j) => jornadasByCode.get(j.codigo)!)
 
   const horariosByCode = new Map<string, ApdataHorario>()
   const ciclosByCode = new Map<string, ApdataCicloHorario>()
@@ -670,7 +714,8 @@ export function buildApdataHierarchy(
   const centers: ApdataHierarchyCenter[] = []
   const centersIn = centersFromResult(result)
   const regimeRoot = result.distribuicaoTurmas.regime
-  const shift = candidates.shift
+  // Only keep jornadas actually bound to selected horários.
+  const usedJornadaCodes = new Set<string>()
 
   for (const cc of centersIn) {
     const dist = resolveDist(cc, result.distribuicaoTurmas)
@@ -679,11 +724,12 @@ export function buildApdataHierarchy(
     const ccHorarios = selectedByCc.get(cc.centroCusto) ?? []
 
     for (const cand of ccHorarios) {
+      const candHours = shiftHours(cand.startHour, cand.endHour)
       if (!horariosByCode.has(cand.codigo)) {
         const weekly =
           cc.cargaSemanalAtual != null && Number.isFinite(cc.cargaSemanalAtual)
             ? cc.cargaSemanalAtual
-            : Math.round(shift.hours * cand.workDays.length * 10) / 10
+            : Math.round(candHours * cand.workDays.length * 10) / 10
         horariosByCode.set(cand.codigo, {
           codigo: cand.codigo,
           descricao: cand.descricao,
@@ -693,6 +739,11 @@ export function buildApdataHierarchy(
         })
       }
       const horario = horariosByCode.get(cand.codigo)!
+      for (const code of cand.jornadaCodigos) usedJornadaCodes.add(code)
+
+      const boundJornadas = cand.jornadaCodigos
+        .map((code) => jornadasByCode.get(code))
+        .filter((j): j is ApdataJornada => j != null)
 
       const crewsForHorario = dist.crews.filter((c) =>
         cand.turmaIndexes.includes(c.turmaIndex),
@@ -706,7 +757,8 @@ export function buildApdataHierarchy(
           .map((d) => d.toLowerCase().slice(0, 3))
           .join('')
           .toUpperCase() || 'OFF'
-        const cicloCodigo = `CIC-${ccSlug}-T${crew.turmaIndex}-${crew.escala.replace(/×/g, 'x').toUpperCase()}-${restKey}`
+        const shiftKey = `${clockCode(cand.startHour)}${clockCode(cand.endHour)}`
+        const cicloCodigo = `CIC-${ccSlug}-T${crew.turmaIndex}-${crew.escala.replace(/×/g, 'x').toUpperCase()}-${restKey}-${shiftKey}`
 
         let ciclo = ciclosByCode.get(cicloCodigo)
         if (!ciclo) {
@@ -731,7 +783,12 @@ export function buildApdataHierarchy(
           centroCustoCodigo: cc.centroCusto,
           headcountProposto: Math.max(0, Math.round(crew.headcount)),
           tipoGrade,
-          label: crew.label,
+          label: formatTurmaLabel(
+            cand.startHour,
+            cand.endHour,
+            crew.turmaIndex,
+            cc.centroCusto,
+          ),
         }
         grades.push(grade)
         nodes.push({
@@ -754,6 +811,11 @@ export function buildApdataHierarchy(
     })
   }
 
+  const catalogJornadas =
+    usedJornadaCodes.size > 0
+      ? [...jornadasByCode.values()].filter((j) => usedJornadaCodes.has(j.codigo))
+      : [...jornadasByCode.values()]
+
   return {
     schemaVersion: APDATA_HIERARCHY_SCHEMA_VERSION,
     dataInicio,
@@ -763,7 +825,7 @@ export function buildApdataHierarchy(
     includeLunchJornada,
     selectedHorarioIds,
     centers,
-    jornadas: [...jornadasByCode.values()],
+    jornadas: catalogJornadas,
     horarios: [...horariosByCode.values()],
     ciclos: [...ciclosByCode.values()].map((c) => ({
       ...c,

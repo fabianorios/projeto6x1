@@ -67,8 +67,9 @@ function NodeBlock({ node }: { node: ApdataHierarchyNode }) {
   return (
     <li className="border border-[var(--color-line)] bg-white/90 px-3 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-[var(--color-ink)]">
-          {grade?.turma ?? '—'} · {node.horario.descricao}
+        <p className="text-sm font-semibold tabular-nums text-[var(--color-ink)]">
+          {grade?.label ??
+            `${grade?.turma ?? '—'} · ${node.horario.descricao}`}
         </p>
         <p className="text-xs tabular-nums text-[var(--color-muted)]">
           HC {grade?.headcountProposto ?? 0} · {grade?.tipoGrade ?? 'VAGAS'}
@@ -140,10 +141,10 @@ function NodeBlock({ node }: { node: ApdataHierarchyNode }) {
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
             Grade
           </span>{' '}
-          <span className="font-medium">{grade?.turma}</span>
+          <span className="font-medium tabular-nums">{grade?.label ?? grade?.turma}</span>
           <span className="text-[var(--color-muted)]">
             {' '}
-            · CC {grade?.centroCustoCodigo} · {grade?.label}
+            · {node.horario.descricao}
           </span>
         </li>
       </ol>
