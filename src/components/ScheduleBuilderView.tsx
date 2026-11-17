@@ -5,6 +5,7 @@ import {
   MONTH_LABELS_PT,
   REGIME_FUNCIONAMENTO_LABELS,
   applyTurmaHourLabels,
+  centroCustoDisplayLabel,
   assignCrewWindowIndices,
   baselineCrewsForCalendar,
   buildMonthCalendarMatrix,
@@ -703,7 +704,7 @@ function CostCenterScheduleCard({
   const regimeLabel = REGIME_FUNCIONAMENTO_LABELS[regime]
   const title = nestedUnderCc
     ? `Horário ${codLabel}`
-    : cc.centroCusto
+    : centroCustoDisplayLabel(cc)
 
   return (
     <article
@@ -768,7 +769,9 @@ function CostCenterScheduleCard({
               >
                 Centro de custo
               </dt>
-              <dd className="font-medium tabular-nums">{cc.centroCusto}</dd>
+              <dd className="font-medium tabular-nums">
+                {centroCustoDisplayLabel(cc)}
+              </dd>
             </div>
           )}
           <div>

@@ -27,6 +27,8 @@ export interface HcCargoIncrease extends HcCountTriple {
 
 export interface HcCcIncrease extends HcCountTriple {
   centroCusto: string
+  /** Optional CC description for display. */
+  descCc?: string | null
   cargos: HcCargoIncrease[]
 }
 
@@ -140,10 +142,14 @@ export function buildHcIncreaseSummary(
       codFilial: string | null
     }
     const map = new Map<string, Acc>()
+    const descByCc = new Map<string, string>()
 
     for (const row of rows) {
       const dig = cnpjDigits(row.cnpjCompleto)
       const cc = (row.centroCusto || row.codCc || 'Geral').trim() || 'Geral'
+      if (row.descCc?.trim() && !descByCc.has(cc)) {
+        descByCc.set(cc, row.descCc.trim())
+      }
       const cargo = (row.cargo || row.descCargo || 'Sem cargo').trim() || 'Sem cargo'
       const key = `${dig}\u0001${cc}\u0001${cargo}`
       let acc = map.get(key)
@@ -256,6 +262,7 @@ export function buildHcIncreaseSummary(
             const proposto = sortedCargos.reduce((n, c) => n + c.proposto, 0)
             return {
               centroCusto,
+              descCc: descByCc.get(centroCusto) ?? null,
               cargos: sortedCargos,
               ...triple(atual, proposto),
             }

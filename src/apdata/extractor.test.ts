@@ -28,6 +28,12 @@ describe('extractor SQL (SPA)', () => {
     assert.match(oracle, /CHR\(9\)/)
     assert.match(oracle, /CHR\(10\)/)
     assert.match(oracle, /CHR\(13\)/)
+    // CC code + description (CCU_CosEstrutura / CCU_D1sCentroCusto).
+    assert.match(mssql, /CCU_CosEstrutura/)
+    assert.match(mssql, /CCU_D1sCentroCusto/)
+    assert.match(mssql, /AS desc_cc/)
+    assert.match(oracle, /CCU_D1sCentroCusto/)
+    assert.match(oracle, /AS desc_cc/)
   })
 
   it('uses TIP_* escalas with work_days x off_days concat', () => {
@@ -124,6 +130,7 @@ describe('mapExtractorAggregatesToPayroll', () => {
         cod_filial: '1',
         cnpj_completo: '12345678000190',
         cod_cc: 'CC-01',
+        desc_cc: 'Operacoes Loja',
         desc_cargo: 'Operador',
         qtd_colaboradores: 2,
         massa_salarial_base: 4400,
@@ -141,6 +148,23 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].nome, null)
     assert.equal(rows[0].cnpjCompleto, '12345678000190')
     assert.equal(rows[0].vrValorDia, 32)
+    assert.equal(rows[0].codCc, 'CC-01')
+    assert.equal(rows[0].descCc, 'Operacoes Loja')
+    assert.equal(rows[0].centroCusto, 'CC-01')
+  })
+
+  it('keeps desc_cc optional for backward-compatible CSV', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-99',
+        desc_cargo: 'Auxiliar',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 1800,
+        carga_semanal_atual: 44,
+      },
+    ])
+    assert.equal(rows[0].codCc, 'CC-99')
+    assert.equal(rows[0].descCc, null)
   })
 
   it('auto-classifies beneficios_agg into VR/VA/médica', () => {

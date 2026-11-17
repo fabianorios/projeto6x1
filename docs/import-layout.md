@@ -2,7 +2,7 @@
 
 Separador: `;` (ponto e vírgula) ou `,` (vírgula). Encoding: UTF-8 ou Windows-1252 (detecção automática no wizard). Números BR (`1.234,56`) aceitos. Primeira linha = cabeçalho.
 
-Também aceita colunas do extrator Aptools (`docs/apdata-extractor.sql`): `desc_cargo`, `cod_cc`, `qtd_colaboradores`, `massa_salarial_base`, `vr_dia_medio`, `vt_dia_medio`, `dias_trabalho_mes_atual`, etc. Use o modal **Extrair via Aptools** no wizard para copiar a query MSSQL|Oracle.
+Também aceita colunas do extrator Aptools (`docs/apdata-extractor.sql`): `desc_cargo`, `cod_cc`, `desc_cc` (opcional — descrição do CC via `CCU_D1sCentroCusto`), `qtd_colaboradores`, `massa_salarial_base`, `vr_dia_medio`, `vt_dia_medio`, `dias_trabalho_mes_atual`, etc. Use o modal **Extrair via Aptools** no wizard para copiar a query MSSQL|Oracle.
 
 ## Colunas obrigatórias
 
@@ -32,6 +32,7 @@ Se `vr_dias_mes_atual` / `vt_dias_mes_atual` vierem vazios, o motor estima pelos
 | `nome` | texto | Só para o relatório |
 | `quantidade` | número | Qtd de pessoas nessa linha (default 1) |
 | `escala_atual` | texto | Ex. `6x1`, `5x2` (default do wizard se vazio) |
+| `desc_cc` | texto | Descrição do centro de custo (`CCU_D1sCentroCusto`). Opcional; se ausente, a UI mostra `cod_cc` / `centro_custo`. |
 
 ## Exemplo
 

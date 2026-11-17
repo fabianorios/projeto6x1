@@ -307,6 +307,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
           "cod_filial",
           "cnpj_completo",
           "cod_cc",
+          "desc_cc",
           "cod_cargo",
           "desc_cargo",
           "cod_vinculo",

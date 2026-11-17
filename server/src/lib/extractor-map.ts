@@ -7,6 +7,7 @@ export type ExtractorAggregateRow = {
   cod_filial: string;
   cnpj_completo: string;
   cod_cc: string;
+  desc_cc: string;
   cod_cargo: string;
   desc_cargo: string;
   cod_vinculo: string;
@@ -60,6 +61,7 @@ export function mapExtractorRows(
     cod_filial: str(pick(row, "cod_filial")),
     cnpj_completo: str(pick(row, "cnpj_completo")),
     cod_cc: str(pick(row, "cod_cc"), "SEM_CC"),
+    desc_cc: str(pick(row, "desc_cc")),
     cod_cargo: str(pick(row, "cod_cargo")),
     desc_cargo: str(pick(row, "desc_cargo"), "NAO_INFORMADO"),
     cod_vinculo: str(pick(row, "cod_vinculo")),

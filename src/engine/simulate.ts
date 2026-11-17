@@ -766,6 +766,7 @@ function buildCostCenterResults(
 
     return {
       centroCusto: agg.centroCusto,
+      descCc: agg.descCc,
       currentHeadcount: agg.headcount,
       requiredHeadcount: effectiveRequired,
       additionalHeadcount: additional,

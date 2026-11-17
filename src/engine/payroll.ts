@@ -28,6 +28,7 @@ export const PAYROLL_CSV_HEADERS = [
   'cod_filial',
   'cnpj_completo',
   'cod_cc',
+  'desc_cc',
   'cod_cargo',
   'desc_cargo',
   'cod_vinculo',
@@ -87,6 +88,8 @@ export interface PayrollRow {
   codFilial: string | null
   cnpjCompleto: string | null
   codCc: string | null
+  /** CentrosCustos.CCU_D1sCentroCusto — optional; display when present. */
+  descCc: string | null
   codCargo: string | null
   descCargo: string | null
   codVinculo: string | null
@@ -131,6 +134,7 @@ export function emptyPayrollExtras(): Pick<
   | 'codFilial'
   | 'cnpjCompleto'
   | 'codCc'
+  | 'descCc'
   | 'codCargo'
   | 'descCargo'
   | 'codVinculo'
@@ -154,6 +158,7 @@ export function emptyPayrollExtras(): Pick<
     codFilial: null,
     cnpjCompleto: null,
     codCc: null,
+    descCc: null,
     codCargo: null,
     descCargo: null,
     codVinculo: null,
@@ -589,6 +594,7 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       codFilial: cell(cols, 'cod_filial') || null,
       cnpjCompleto: cell(cols, 'cnpj_completo') || null,
       codCc: cell(cols, 'cod_cc') || null,
+      descCc: cell(cols, 'desc_cc') || null,
       codCargo: cell(cols, 'cod_cargo') || null,
       descCargo,
       codVinculo: cell(cols, 'cod_vinculo') || null,
@@ -632,8 +638,22 @@ export interface BenefitLineTotals {
   proposedPersonDays: number
 }
 
+/** Prefer CC description for UI; keep code for aggregation keys. */
+export function centroCustoDisplayLabel(opts: {
+  centroCusto?: string | null
+  codCc?: string | null
+  descCc?: string | null
+}): string {
+  const desc = (opts.descCc ?? '').trim()
+  if (desc) return desc
+  const code = (opts.centroCusto || opts.codCc || 'SEM_CC').trim()
+  return code || 'SEM_CC'
+}
+
 export interface CostCenterTotals {
   centroCusto: string
+  /** Optional CC description (CCU_D1sCentroCusto). */
+  descCc: string | null
   headcount: number
   baselinePayroll: number
   /** Weighted sum of salaries for average (salario × qty). */
@@ -738,6 +758,7 @@ export function aggregateByCostCenter(
     if (!agg) {
       agg = {
         centroCusto: row.centroCusto,
+        descCc: row.descCc?.trim() || null,
         headcount: 0,
         baselinePayroll: 0,
         salaryMass: 0,
@@ -814,6 +835,9 @@ export function aggregateByCostCenter(
     }
     if (!agg.cnpjCompleto && row.cnpjCompleto) {
       agg.cnpjCompleto = row.cnpjCompleto
+    }
+    if (!agg.descCc && row.descCc?.trim()) {
+      agg.descCc = row.descCc.trim()
     }
 
     if (row.vrValorDia !== null) {
