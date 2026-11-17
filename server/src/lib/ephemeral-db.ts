@@ -26,7 +26,14 @@ export type EphemeralCreds = {
   trustServerCertificate?: boolean;
 };
 
+/** Catalog / CNPJ+ramos probes — keep snappy. */
 export const EPHEMERAL_TIMEOUT_MS = 15_000;
+
+/**
+ * Folha extract (Conexão Direta) — large bases often exceed 15s on the
+ * benefits/VT/horário CTEs. Dedicated ceiling so catalog stays short (P0).
+ */
+export const EPHEMERAL_FOLHA_TIMEOUT_MS = 60_000;
 
 /** Clear PT message for firewall/timeout/login failures (no driver internals). */
 export const EPHEMERAL_CONN_FAIL_MSG =

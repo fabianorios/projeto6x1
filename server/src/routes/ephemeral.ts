@@ -14,6 +14,7 @@ import {
 } from "@projeto-6x1/mcp";
 import {
   EPHEMERAL_CONN_FAIL_MSG,
+  EPHEMERAL_FOLHA_TIMEOUT_MS,
   EPHEMERAL_TIMEOUT_MS,
   applyReadIsolation,
   createEphemeralClient,
@@ -199,9 +200,11 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
       trustServerCertificate: data.trustServerCertificate,
     };
 
-    const client = createEphemeralClient(creds, EPHEMERAL_TIMEOUT_MS);
-    const started = Date.now();
     const mode = data.mode ?? "extract";
+    const timeoutMs =
+      mode === "extract" ? EPHEMERAL_FOLHA_TIMEOUT_MS : EPHEMERAL_TIMEOUT_MS;
+    const client = createEphemeralClient(creds, timeoutMs);
+    const started = Date.now();
 
     try {
       await applyReadIsolation(client);
@@ -217,12 +220,12 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
           }
         > = {};
 
-        const deadline = started + EPHEMERAL_TIMEOUT_MS;
+        const deadline = started + timeoutMs;
         for (const sel of CATALOG_SELECTS) {
           const remaining = deadline - Date.now();
           if (remaining <= 0) {
             throw new Error(
-              `ephemeral catalog timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+              `ephemeral catalog timeout (${timeoutMs}ms)`,
             );
           }
           const built = buildSelectRows(sel, maxRows, client.driver);
@@ -242,7 +245,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
                 () =>
                   reject(
                     new Error(
-                      `ephemeral catalog timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+                      `ephemeral catalog timeout (${timeoutMs}ms)`,
                     ),
                   ),
                 Math.max(1, remaining),
@@ -261,7 +264,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
           ok: true,
           mode: "catalog",
           engine: data.engine,
-          timeoutMs: EPHEMERAL_TIMEOUT_MS,
+          timeoutMs,
           latencyMs: Date.now() - started,
           tables,
           note: "Ephemeral catalog connection destroyed after response. Credentials were not persisted.",
@@ -284,10 +287,10 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
             () =>
               reject(
                 new Error(
-                  `ephemeral query timeout (${EPHEMERAL_TIMEOUT_MS}ms)`,
+                  `ephemeral query timeout (${timeoutMs}ms)`,
                 ),
               ),
-            EPHEMERAL_TIMEOUT_MS,
+            timeoutMs,
           );
         }),
       ]);
@@ -299,7 +302,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         ok: true,
         mode: "extract",
         engine: data.engine,
-        timeoutMs: EPHEMERAL_TIMEOUT_MS,
+        timeoutMs,
         latencyMs: Date.now() - started,
         rowCount: rows.length,
         columns: [

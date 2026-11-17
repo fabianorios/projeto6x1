@@ -1120,37 +1120,109 @@ export function ScheduleBuilderView({
         </div>
       ) : (
         <div className="mt-3 space-y-4">
-          {ccGroups.map((group) => (
-            <div
+          {ccGroups.map((group, idx) => (
+            <LazyCcSchedulePanel
               key={group.centroCusto}
-              className="space-y-3 border border-[var(--color-line)] bg-[var(--color-surface)]/60 px-3 py-3"
-            >
-              <header>
-                <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                  Centro de custo {group.centroCusto}
-                </h4>
-                <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                  {group.horarios.length} horário(s) neste CC
-                </p>
-              </header>
-              {group.horarios.map((cc) => (
-                <CostCenterScheduleCard
-                  key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
-                  cc={cc}
-                  operatingHours={result.input.operatingHours}
-                  shiftsPerDay={result.input.shiftsPerDay}
-                  variant="interactive"
-                  year={year}
-                  month={month}
-                  mode={mode}
-                  onModeChange={setMode}
-                  nestedUnderCc
-                />
-              ))}
-            </div>
+              group={group}
+              defaultOpen={idx === 0 || ccGroups.length === 1}
+              lazyMount={ccGroups.length > 1}
+              operatingHours={result.input.operatingHours}
+              shiftsPerDay={result.input.shiftsPerDay}
+              year={year}
+              month={month}
+              mode={mode}
+              onModeChange={setMode}
+            />
           ))}
         </div>
       )}
     </section>
+  )
+}
+
+/** Interactive CC block — lazy-mount calendars when several CCs share a filial (P0). */
+function LazyCcSchedulePanel({
+  group,
+  defaultOpen,
+  lazyMount,
+  operatingHours,
+  shiftsPerDay,
+  year,
+  month,
+  mode,
+  onModeChange,
+}: {
+  group: ReturnType<typeof nestCentersByCc>[number]
+  defaultOpen: boolean
+  lazyMount: boolean
+  operatingHours: OperatingHours
+  shiftsPerDay: number
+  year: number
+  month: number
+  mode: QuadroMode
+  onModeChange: (m: QuadroMode) => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const cards = (
+    <div className="space-y-3">
+      {group.horarios.map((cc) => (
+        <CostCenterScheduleCard
+          key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
+          cc={cc}
+          operatingHours={operatingHours}
+          shiftsPerDay={shiftsPerDay}
+          variant="interactive"
+          year={year}
+          month={month}
+          mode={mode}
+          onModeChange={onModeChange}
+          nestedUnderCc
+        />
+      ))}
+    </div>
+  )
+
+  if (!lazyMount) {
+    return (
+      <div className="space-y-3 border border-[var(--color-line)] bg-[var(--color-surface)]/60 px-3 py-3">
+        <header>
+          <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+            Centro de custo {group.centroCusto}
+          </h4>
+          <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+            {group.horarios.length} horário(s) neste CC
+          </p>
+        </header>
+        {cards}
+      </div>
+    )
+  }
+
+  return (
+    <details
+      className="border border-[var(--color-line)] bg-[var(--color-surface)]/60"
+      open={open}
+      onToggle={(e) => {
+        const next = e.currentTarget.open
+        if (next !== open) setOpen(next)
+      }}
+    >
+      <summary className="cursor-pointer list-none px-3 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+              Centro de custo {group.centroCusto}
+            </h4>
+            <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+              {group.horarios.length} horário(s) neste CC
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            {open ? 'Recolher' : 'Expandir'}
+          </span>
+        </div>
+      </summary>
+      {open ? <div className="space-y-3 border-t border-[var(--color-line)] px-3 py-3">{cards}</div> : null}
+    </details>
   )
 }

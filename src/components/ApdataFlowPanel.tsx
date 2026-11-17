@@ -77,6 +77,7 @@ import {
   normalizeBenefitParams,
   type SqlProfile,
 } from '../types/sql-profile'
+import { logPerf, measurePerf } from '../utils/perfTelemetry'
 import {
   applyBenefitOverrides,
   benefitsToPayrollScalars,
@@ -447,6 +448,9 @@ export function ApdataFlowPanel({
             },
           ],
         )
+        logPerf('ephemeral-extract', extracted.latencyMs, {
+          rowCount: extracted.rowCount,
+        })
         setExported(out)
         setSteps(out.steps)
         setPhase('premissas')
@@ -572,6 +576,9 @@ export function ApdataFlowPanel({
             detail: `${extracted.rowCount} linha(s) agregadas · ${extracted.latencyMs}ms`,
           },
         ]
+        logPerf('ephemeral-extract', extracted.latencyMs, {
+          rowCount: extracted.rowCount,
+        })
         const out = exportResultFromEphemeralRows(
           extracted.rows,
           overrides,
@@ -725,22 +732,30 @@ export function ApdataFlowPanel({
         dominant = code
       }
     }
-    const next = simulate({
-      sector,
-      sectorLabel: sectorLabel.trim() || undefined,
-      sectorBufferPct,
-      headcount: exported.stats.contratadosAtivos || 1,
-      currentScale: dominant,
-      averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
-      units: 1,
-      shiftsPerDay: 2,
-      operatingHours,
-      scenarioId,
-      payrollRows,
-      estrategiaAbsorcao,
-      defaultTaxRegime,
-      defaultRegimeFuncionamento: defaultRegime,
-    })
+    const next = measurePerf(
+      'simulate',
+      () =>
+        simulate({
+          sector,
+          sectorLabel: sectorLabel.trim() || undefined,
+          sectorBufferPct,
+          headcount: exported.stats.contratadosAtivos || 1,
+          currentScale: dominant,
+          averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
+          units: 1,
+          shiftsPerDay: 2,
+          operatingHours,
+          scenarioId,
+          payrollRows,
+          estrategiaAbsorcao,
+          defaultTaxRegime,
+          defaultRegimeFuncionamento: defaultRegime,
+        }),
+      {
+        rowCount: payrollRows.length,
+        centerHint: new Set(payrollRows.map((r) => r.centroCusto)).size,
+      },
+    )
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
@@ -773,22 +788,27 @@ export function ApdataFlowPanel({
         dominant = code
       }
     }
-    const next = simulate({
-      sector,
-      sectorLabel: sectorLabel.trim() || undefined,
-      sectorBufferPct,
-      headcount: exported.stats.contratadosAtivos || 1,
-      currentScale: dominant,
-      averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
-      units: 1,
-      shiftsPerDay: 2,
-      operatingHours,
-      scenarioId,
-      payrollRows,
-      estrategiaAbsorcao: nextAbs,
-      defaultTaxRegime,
-      defaultRegimeFuncionamento: defaultRegime,
-    })
+    const next = measurePerf(
+      'simulate-absorcao',
+      () =>
+        simulate({
+          sector,
+          sectorLabel: sectorLabel.trim() || undefined,
+          sectorBufferPct,
+          headcount: exported.stats.contratadosAtivos || 1,
+          currentScale: dominant,
+          averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
+          units: 1,
+          shiftsPerDay: 2,
+          operatingHours,
+          scenarioId,
+          payrollRows,
+          estrategiaAbsorcao: nextAbs,
+          defaultTaxRegime,
+          defaultRegimeFuncionamento: defaultRegime,
+        }),
+      { rowCount: payrollRows.length },
+    )
     const nextBasket = upsertSimulationInBasket(next, basket)
     setBasket(nextBasket)
     setResult(next)
