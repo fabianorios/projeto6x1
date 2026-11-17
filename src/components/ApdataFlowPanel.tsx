@@ -15,6 +15,11 @@ import {
   getActiveEnvironment,
   type EnvironmentPublic,
 } from '../api/environments'
+import {
+  isSimulateNetworkFailure,
+  payrollRowsForApi,
+  postSimulate,
+} from '../api/simulate'
 import { listSqlProfiles } from '../api/sql-profiles'
 import { cnpjDigits, type Establishment } from '../apdata/cnpj'
 import { enrichPayrollCnpjFromEscopo } from '../apdata/enrichPayrollCnpj'
@@ -196,6 +201,9 @@ export function ApdataFlowPanel({
   const [apiOk, setApiOk] = useState<boolean | null>(null)
   const [activeEnv, setActiveEnv] = useState<EnvironmentPublic | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Soft notice when Passo 4→5 fell back to in-bundle simulate (API down). */
+  const [simulateNotice, setSimulateNotice] = useState<string | null>(null)
+  const [simulating, setSimulating] = useState(false)
   const [steps, setSteps] = useState<ExportProgressStep[]>([])
   const [exported, setExported] = useState<ExportResult | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
@@ -706,8 +714,8 @@ export function ApdataFlowPanel({
     })
   }
 
-  function handleSimulate() {
-    if (!exported || exported.rows.length === 0) return
+  function buildSimulatePayrollRows() {
+    if (!exported || exported.rows.length === 0) return null
     const payrollRows = enrichPayrollCnpjFromEscopo(
       applyBenefitOverridesToRows(exported.rows),
       establishments.length > 0
@@ -732,86 +740,130 @@ export function ApdataFlowPanel({
         dominant = code
       }
     }
-    const next = measurePerf(
-      'simulate',
-      () =>
-        simulate({
-          sector,
-          sectorLabel: sectorLabel.trim() || undefined,
-          sectorBufferPct,
-          headcount: exported.stats.contratadosAtivos || 1,
-          currentScale: dominant,
-          averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
-          units: 1,
-          shiftsPerDay: 2,
-          operatingHours,
-          scenarioId,
-          payrollRows,
-          estrategiaAbsorcao,
-          defaultTaxRegime,
-          defaultRegimeFuncionamento: defaultRegime,
-        }),
-      {
-        rowCount: payrollRows.length,
-        centerHint: new Set(payrollRows.map((r) => r.centroCusto)).size,
-      },
-    )
-    const nextBasket = upsertSimulationInBasket(next, basket)
-    setBasket(nextBasket)
-    setResult(next)
-    setPhase('resultados')
+    return { payrollRows, dominant }
   }
 
-  function resimulateWithAbsorcao(nextAbs: EstrategiaAbsorcao) {
-    if (!exported) return
-    setEstrategiaAbsorcao(nextAbs)
-    const payrollRows = enrichPayrollCnpjFromEscopo(
-      applyBenefitOverridesToRows(exported.rows),
-      establishments.length > 0
-        ? establishments.filter(
-            (e) =>
-              selectedCnpjKeys.length === 0 ||
-              selectedCnpjKeys.includes(e.key),
-          )
-        : selectedCnpjKeys.map((key) => ({ key })),
-    )
-    const byScale = new Map<string, number>()
-    for (const r of payrollRows) {
-      const code = r.escalaAtual || '6x1'
-      byScale.set(code, (byScale.get(code) ?? 0) + r.quantidade)
+  /**
+   * Passo 4→5: prefer POST /api/simulate (shared engine on server).
+   * Decision: if the API is unreachable and the engine is still in the SPA
+   * bundle, fall back to local `simulate()` so meetings without VPN still work;
+   * show a clear notice. Validation (4xx) errors do not fall back.
+   */
+  async function runSimulatePath(
+    nextAbs: EstrategiaAbsorcao,
+    perfLabel: 'simulate' | 'simulate-absorcao',
+  ): Promise<SimulationResult | null> {
+    const built = buildSimulatePayrollRows()
+    if (!built || !exported) return null
+    const { payrollRows, dominant } = built
+    const headcount = exported.stats.contratadosAtivos || 1
+    const averageMonthlySalary =
+      Number(defaultSalario.replace(',', '.')) || 2200
+    const input = {
+      sector,
+      sectorLabel: sectorLabel.trim() || undefined,
+      sectorBufferPct,
+      headcount,
+      currentScale: dominant,
+      averageMonthlySalary,
+      units: 1,
+      shiftsPerDay: 2,
+      operatingHours,
+      scenarioId,
+      payrollRows,
+      estrategiaAbsorcao: nextAbs,
+      defaultTaxRegime,
+      defaultRegimeFuncionamento: defaultRegime,
     }
-    let dominant = '6x1'
-    let best = 0
-    for (const [code, n] of byScale) {
-      if (n > best) {
-        best = n
-        dominant = code
+    const centerHint = new Set(payrollRows.map((r) => r.centroCusto)).size
+    const t0 = performance.now()
+    try {
+      const remote = await postSimulate({
+        schemaVersion: 1,
+        scenarioId,
+        sector,
+        sectorLabel: sectorLabel.trim() || undefined,
+        sectorBufferPct,
+        headcount,
+        currentScale: dominant,
+        averageMonthlySalary,
+        units: 1,
+        shiftsPerDay: 2,
+        operatingHours,
+        estrategiaAbsorcao: nextAbs,
+        defaultTaxRegime,
+        defaultRegimeFuncionamento: defaultRegime,
+        payrollRows: payrollRowsForApi(payrollRows),
+        prefs: { includeScheduleSuggestions: true },
+      })
+      logPerf(perfLabel, performance.now() - t0, {
+        rowCount: payrollRows.length,
+        centerHint,
+        via: 'api',
+        apiLatencyMs: remote.latencyMs.total,
+      })
+      setSimulateNotice(null)
+      return remote.result
+    } catch (err) {
+      if (!isSimulateNetworkFailure(err)) {
+        throw err
       }
+      const next = measurePerf(
+        perfLabel,
+        () => simulate(input),
+        { rowCount: payrollRows.length, centerHint, via: 'local-fallback' },
+      )
+      setSimulateNotice(
+        'API de simulação indisponível — resultado calculado localmente neste navegador.',
+      )
+      return next
     }
-    const next = measurePerf(
-      'simulate-absorcao',
-      () =>
-        simulate({
-          sector,
-          sectorLabel: sectorLabel.trim() || undefined,
-          sectorBufferPct,
-          headcount: exported.stats.contratadosAtivos || 1,
-          currentScale: dominant,
-          averageMonthlySalary: Number(defaultSalario.replace(',', '.')) || 2200,
-          units: 1,
-          shiftsPerDay: 2,
-          operatingHours,
-          scenarioId,
-          payrollRows,
-          estrategiaAbsorcao: nextAbs,
-          defaultTaxRegime,
-          defaultRegimeFuncionamento: defaultRegime,
-        }),
-      { rowCount: payrollRows.length },
-    )
-    const nextBasket = upsertSimulationInBasket(next, basket)
-    setBasket(nextBasket)
-    setResult(next)
+  }
+
+  async function handleSimulate() {
+    if (!exported || exported.rows.length === 0 || simulating) return
+    setSimulating(true)
+    setError(null)
+    try {
+      const next = await runSimulatePath(estrategiaAbsorcao, 'simulate')
+      if (!next) return
+      const nextBasket = upsertSimulationInBasket(next, basket)
+      setBasket(nextBasket)
+      setResult(next)
+      setPhase('resultados')
+    } catch (err) {
+      setSimulateNotice(null)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Falha ao simular. Tente novamente.',
+      )
+    } finally {
+      setSimulating(false)
+    }
+  }
+
+  async function resimulateWithAbsorcao(nextAbs: EstrategiaAbsorcao) {
+    if (!exported || simulating) return
+    setEstrategiaAbsorcao(nextAbs)
+    setSimulating(true)
+    setError(null)
+    try {
+      const next = await runSimulatePath(nextAbs, 'simulate-absorcao')
+      if (!next) return
+      const nextBasket = upsertSimulationInBasket(next, basket)
+      setBasket(nextBasket)
+      setResult(next)
+    } catch (err) {
+      setSimulateNotice(null)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Falha ao re-simular. Tente novamente.',
+      )
+    } finally {
+      setSimulating(false)
+    }
   }
 
   const stepOrder: Phase[] = embedded
@@ -928,6 +980,11 @@ export function ApdataFlowPanel({
         {error && (
           <p className="mt-3 text-sm text-red-700" role="alert">
             {error}
+          </p>
+        )}
+        {simulateNotice && !error && (
+          <p className="mt-3 text-sm text-[var(--color-muted)]" role="status">
+            {simulateNotice}
           </p>
         )}
         {cnpjError && phase !== 'resultados' && (
@@ -1626,11 +1683,13 @@ export function ApdataFlowPanel({
                   </button>
                   <button
                     type="button"
-                    disabled={!exported || exported.rows.length === 0}
-                    onClick={handleSimulate}
+                    disabled={
+                      simulating || !exported || exported.rows.length === 0
+                    }
+                    onClick={() => void handleSimulate()}
                     className="bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    Gerar Resultados
+                    {simulating ? 'Simulando…' : 'Gerar Resultados'}
                   </button>
                 </div>
               </section>

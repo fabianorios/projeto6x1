@@ -6,6 +6,7 @@ import { SqlProfilesStore } from "./lib/sql-profiles-store.js";
 import { createEnvironmentRoutes } from "./routes/environments.js";
 import { createEphemeralRoutes } from "./routes/ephemeral.js";
 import { createQueryRoutes } from "./routes/query.js";
+import { createSimulateRoutes } from "./routes/simulate.js";
 import {
   createSqlProfileRoutes,
   createTestSlotRoute,
@@ -56,6 +57,10 @@ export function createApp(deps: AppDeps) {
     createEphemeralRoutes({ config: deps.config }),
   );
   app.route("/api/query", createTestSlotRoute(profileDeps));
+  app.route(
+    "/api/simulate",
+    createSimulateRoutes({ config: deps.config }),
+  );
 
   app.notFound((c) => c.json({ error: "not found" }, 404));
 
