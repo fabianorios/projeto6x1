@@ -14,6 +14,7 @@ import {
   type CalibrationFeedbackEntry,
   type EditedShiftFields,
   type EstrategiaAbsorcao,
+  type ExclusionHit,
   type FeedbackAction,
   type ResultLineItem,
   type ScenarioBasket,
@@ -34,8 +35,12 @@ import {
   collapseAllDossier,
   executiveImpactSummary,
   expandAllDossier,
+  OPERACIONAL_SEM_CNPJ_KEY,
+  groupOperacionalByCnpj,
+  summarizeOperacionalTurmas,
   type DossierOpenState,
   type DossierSectionId,
+  type OperacionalFilialGroup,
 } from '../utils/resultsDossier'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
@@ -285,7 +290,49 @@ export function ResultsView({
     }))
   }
 
-  const suggestionsByCenter = groupSuggestions(scheduleSuggestions)
+  const operacionalGroups = groupOperacionalByCnpj({
+    centers:
+      byCostCenter.length > 0
+        ? byCostCenter
+        : [
+            {
+              centroCusto: 'Geral',
+              currentHeadcount: coverage.currentHeadcount,
+              requiredHeadcount: coverage.requiredHeadcount,
+              additionalHeadcount: coverage.additionalHeadcount,
+              baselinePayroll: cost.baselineMonthlyPayroll,
+              projectedPayroll: cost.projectedMonthlyPayroll,
+              payrollMonthlyDelta: cost.monthlyDelta,
+              vr: vr ?? {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              vt: vt ?? {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              va: {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              assistMedicaMonthly: 0,
+              assistOdontoMonthly: 0,
+              regimeFuncionamento: distribuicaoTurmas.regime,
+              distribuicaoTurmas,
+            },
+          ],
+    payrollRows: input.payrollRows,
+  })
+  const multiFilial = operacionalGroups.length > 1
 
   const topSuggestion = scheduleSuggestions[0]
   const proposedScaleLabel = ruleVersion.params.preserveCurrentScale
@@ -810,137 +857,55 @@ export function ResultsView({
           sectionId="operacional"
           open={dossier.operacional}
           onToggle={() => toggleSection('operacional')}
-          collapsedSummary={`${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`}
+          collapsedSummary={
+            multiFilial
+              ? `${operacionalGroups.length} filiais/CNPJ · ${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · HC ${distribuicaoTurmas.totalHeadcount}`
+              : `${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`
+          }
         >
-          <ScheduleBuilderView result={result} />
-
-          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-            <h4 className="text-sm font-semibold text-[var(--color-ink)]">
-              Distribuição de turmas (agregado)
-            </h4>
-            <p className="mt-1 text-xs text-[var(--color-muted)]">
-              {REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} ·{' '}
-              {distribuicaoTurmas.crewCount} turma(s) · cobertura diária{' '}
-              {distribuicaoTurmas.dailyCoverageNeed} · HC total{' '}
-              {distribuicaoTurmas.totalHeadcount}
+          {multiFilial ? (
+            <p className="text-xs text-[var(--color-muted)]">
+              Horários, jornadas e escalas agrupados por Filial/CNPJ do escopo
+              da simulação ({operacionalGroups.length} estabelecimentos).
             </p>
-            <p className="mt-1 text-xs text-[var(--color-muted)]">
-              {distribuicaoTurmas.note}
-            </p>
-          </div>
+          ) : null}
 
           {excludedScheduleNotice ? (
-            <div
-              className={
-                excludedScheduleNotice.severity === 'soft'
-                  ? 'border border-[var(--color-line)] bg-white/80 px-4 py-3 text-sm text-[var(--color-ink)]'
-                  : 'border border-amber-700/40 bg-amber-50 px-4 py-3 text-sm text-amber-950'
-              }
-              role="status"
-            >
-              <p className="flex flex-wrap items-center gap-2">
-                <span
-                  className={
-                    excludedScheduleNotice.severity === 'soft'
-                      ? 'inline-block border border-[var(--color-line)] bg-white px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
-                      : 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
-                  }
-                >
-                  {excludedScheduleNotice.badge}
-                </span>
-                <span className="font-medium">
-                  {excludedScheduleNotice.label}
-                </span>
-              </p>
-              <p
-                className={
-                  excludedScheduleNotice.severity === 'soft'
-                    ? 'mt-1.5 text-xs leading-relaxed text-[var(--color-muted)]'
-                    : 'mt-1.5 text-xs leading-relaxed text-amber-900/90'
-                }
-              >
-                {excludedScheduleNotice.reason}{' '}
-                {excludedScheduleNotice.severity === 'soft'
-                  ? 'Permanece no lado Atual; as candidatas abaixo são só 5×2, turnos 8h e (se o cenário admitir) 4×3.'
-                  : 'Esta escala não é recomendada pelo motor; as candidatas abaixo respeitam a lista de exclusão (docs/schedule-policy.md).'}
-              </p>
-            </div>
+            <ExcludedScheduleNotice notice={excludedScheduleNotice} />
           ) : null}
 
-          {scheduleSuggestions.length > 0 ? (
-            <div>
-              <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                Escalas sugeridas
-              </h4>
-              <p className="mt-1 text-xs text-[var(--color-muted)]">
-                1–2 candidatas por centro (horário início/fim, HC por turno) com
-                custo estimado folha + VR/VT vs atual. Nunca inclui 6×1, 12×36,
-                24×48 nem jornada diária &gt; 10h.
-              </p>
-              <div className="mt-3 space-y-4">
-                {suggestionsByCenter.map(([centro, items]) => (
-                  <div
-                    key={centro}
-                    className="border border-[var(--color-line)] bg-white/70 p-4"
-                  >
-                    <p className="text-sm font-medium">{centro}</p>
-                    <ul className="mt-3 space-y-3">
-                      {items.map((s) => (
-                        <li
-                          key={`${s.centroCusto}-${s.code}`}
-                          className="border-t border-[var(--color-line)] pt-3 first:border-t-0 first:pt-0"
-                        >
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="text-sm font-semibold">{s.label}</p>
-                            <p className="text-sm tabular-nums">
-                              Δ total {brl(s.monthlyDeltaVsCurrent)}/mês
-                            </p>
-                          </div>
-                          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                            {s.description}
-                          </p>
-                          <p className="mt-2 text-xs text-[var(--color-muted)]">
-                            HC {s.totalHeadcount} · ~{s.workDaysPerMonth}{' '}
-                            dias/mês · folha {brl(s.estimated.monthlyPayroll)}
-                            {s.estimated.monthlyVr != null
-                              ? ` · VR ${brl(s.estimated.monthlyVr)}`
-                              : ''}
-                            {s.estimated.monthlyVt != null
-                              ? ` · VT ${brl(s.estimated.monthlyVt)}`
-                              : ''}
-                          </p>
-                          <ul className="mt-2 flex flex-wrap gap-2 text-xs">
-                            {s.shifts.map((w) => (
-                              <li
-                                key={`${s.code}-${w.label}`}
-                                className="border border-[var(--color-line)] bg-white px-2 py-1"
-                              >
-                                <span className="font-medium">{w.label}</span>{' '}
-                                {formatShiftRange(w)} · {w.hours}h ·{' '}
-                                {w.headcount} pess.
-                              </li>
-                            ))}
-                          </ul>
-                          <SuggestionFeedbackControls
-                            suggestion={s}
-                            recordedAction={recorded[suggestionKey(s)] ?? null}
-                            onAccept={() => recordFeedback(s, 'accepted')}
-                            onReject={() => recordFeedback(s, 'rejected')}
-                            onEditSave={(shifts) =>
-                              recordFeedback(s, 'edited', shifts)
-                            }
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
-                {scheduleSuggestionDisclaimer}
-              </p>
+          {multiFilial ? (
+            <div className="space-y-3">
+              {operacionalGroups.map((group, idx) => (
+                <OperacionalFilialPanel
+                  key={group.key}
+                  group={group}
+                  defaultOpen={idx === 0}
+                  result={result}
+                  scheduleSuggestions={scheduleSuggestions}
+                  scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+                  recorded={recorded}
+                  onFeedback={recordFeedback}
+                />
+              ))}
             </div>
-          ) : null}
+          ) : operacionalGroups[0] ? (
+            <OperacionalFilialBody
+              group={operacionalGroups[0]}
+              result={result}
+              embeddedSchedule={false}
+              showFilialHeader={
+                operacionalGroups[0].key !== OPERACIONAL_SEM_CNPJ_KEY
+              }
+              scheduleSuggestions={scheduleSuggestions}
+              scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+              recorded={recorded}
+              onFeedback={recordFeedback}
+              globalTurmasNote={distribuicaoTurmas.note}
+            />
+          ) : (
+            <ScheduleBuilderView result={result} />
+          )}
         </DossierSection>
 
         <DossierSection
@@ -972,4 +937,272 @@ function groupSuggestions(
     map.set(s.centroCusto, list)
   }
   return [...map.entries()]
+}
+
+function ExcludedScheduleNotice({ notice }: { notice: ExclusionHit }) {
+  return (
+    <div
+      className={
+        notice.severity === 'soft'
+          ? 'border border-[var(--color-line)] bg-white/80 px-4 py-3 text-sm text-[var(--color-ink)]'
+          : 'border border-amber-700/40 bg-amber-50 px-4 py-3 text-sm text-amber-950'
+      }
+      role="status"
+    >
+      <p className="flex flex-wrap items-center gap-2">
+        <span
+          className={
+            notice.severity === 'soft'
+              ? 'inline-block border border-[var(--color-line)] bg-white px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
+              : 'inline-block border border-amber-800/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase'
+          }
+        >
+          {notice.badge}
+        </span>
+        <span className="font-medium">{notice.label}</span>
+      </p>
+      <p
+        className={
+          notice.severity === 'soft'
+            ? 'mt-1.5 text-xs leading-relaxed text-[var(--color-muted)]'
+            : 'mt-1.5 text-xs leading-relaxed text-amber-900/90'
+        }
+      >
+        {notice.reason}{' '}
+        {notice.severity === 'soft'
+          ? 'Permanece no lado Atual; as candidatas abaixo são só 5×2, turnos 8h e (se o cenário admitir) 4×3.'
+          : 'Esta escala não é recomendada pelo motor; as candidatas abaixo respeitam a lista de exclusão (docs/schedule-policy.md).'}
+      </p>
+    </div>
+  )
+}
+
+function OperacionalFilialPanel({
+  group,
+  defaultOpen,
+  result,
+  scheduleSuggestions,
+  scheduleSuggestionDisclaimer,
+  recorded,
+  onFeedback,
+}: {
+  group: OperacionalFilialGroup
+  defaultOpen: boolean
+  result: SimulationResult
+  scheduleSuggestions: ScheduleSuggestion[]
+  scheduleSuggestionDisclaimer: string
+  recorded: Record<string, FeedbackAction>
+  onFeedback: (
+    suggestion: ScheduleSuggestion,
+    action: FeedbackAction,
+    editedShifts?: EditedShiftFields[],
+  ) => void
+}) {
+  const turmas = summarizeOperacionalTurmas(group.centers)
+  return (
+    <details
+      className="border border-[var(--color-line)] bg-white/90"
+      open={defaultOpen}
+    >
+      <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-[var(--color-ink)]">
+              {group.label}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {group.centroCustos.length} centro(s) · {turmas.crewCount}{' '}
+              turma(s) · HC {turmas.totalHeadcount}
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Abrir / recolher
+          </span>
+        </div>
+      </summary>
+      <div className="space-y-4 border-t border-[var(--color-line)] px-4 py-4">
+        <OperacionalFilialBody
+          group={group}
+          result={result}
+          embeddedSchedule
+          showFilialHeader={false}
+          scheduleSuggestions={scheduleSuggestions}
+          scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+          recorded={recorded}
+          onFeedback={onFeedback}
+        />
+      </div>
+    </details>
+  )
+}
+
+function OperacionalFilialBody({
+  group,
+  result,
+  embeddedSchedule,
+  showFilialHeader,
+  scheduleSuggestions,
+  scheduleSuggestionDisclaimer,
+  recorded,
+  onFeedback,
+  globalTurmasNote,
+}: {
+  group: OperacionalFilialGroup
+  result: SimulationResult
+  embeddedSchedule: boolean
+  showFilialHeader: boolean
+  scheduleSuggestions: ScheduleSuggestion[]
+  scheduleSuggestionDisclaimer: string
+  recorded: Record<string, FeedbackAction>
+  onFeedback: (
+    suggestion: ScheduleSuggestion,
+    action: FeedbackAction,
+    editedShifts?: EditedShiftFields[],
+  ) => void
+  globalTurmasNote?: string
+}) {
+  const turmas = summarizeOperacionalTurmas(group.centers)
+  const allow = new Set(group.centroCustos)
+  const suggestions = scheduleSuggestions.filter((s) =>
+    allow.has(s.centroCusto),
+  )
+  const suggestionsByCenter = groupSuggestions(suggestions)
+  const regimeLabels = turmas.regimes
+    .map((r) => REGIME_FUNCIONAMENTO_LABELS[r as keyof typeof REGIME_FUNCIONAMENTO_LABELS] ?? r)
+    .join(' · ')
+
+  return (
+    <div className="space-y-4">
+      {showFilialHeader ? (
+        <header className="border border-[var(--color-line)] bg-white/80 px-4 py-3">
+          <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Filial / CNPJ
+          </p>
+          <p className="mt-1 text-sm font-semibold text-[var(--color-ink)]">
+            {group.label}
+          </p>
+        </header>
+      ) : null}
+
+      <ScheduleBuilderView
+        result={result}
+        centroCustoFilter={group.centroCustos}
+        embedded={embeddedSchedule}
+      />
+
+      <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
+        <h4 className="text-sm font-semibold text-[var(--color-ink)]">
+          Distribuição de turmas
+          {embeddedSchedule || showFilialHeader ? ' (filial)' : ' (agregado)'}
+        </h4>
+        <p className="mt-1 text-xs text-[var(--color-muted)]">
+          {regimeLabels || '—'} · {turmas.crewCount} turma(s) · cobertura diária{' '}
+          {turmas.dailyCoverageNeed} · HC total {turmas.totalHeadcount}
+        </p>
+        {globalTurmasNote ? (
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            {globalTurmasNote}
+          </p>
+        ) : null}
+        <ul className="mt-2 space-y-1 text-xs text-[var(--color-muted)]">
+          {group.centers.map((c) => {
+            const d = c.distribuicaoTurmas
+            const escala = c.escalaAtual?.trim() || '—'
+            const carga =
+              c.cargaSemanalAtual != null
+                ? `${c.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
+                : '—'
+            const cod = c.codHorarioAtual?.trim() || '—'
+            return (
+              <li key={c.centroCusto}>
+                <span className="font-medium text-[var(--color-ink)]">
+                  {c.centroCusto}
+                </span>
+                {' · '}
+                escala {escala} · horário {cod} · carga {carga}
+                {d
+                  ? ` · ${d.crewCount} turma(s) · HC ${d.totalHeadcount}`
+                  : ` · HC ${c.requiredHeadcount}`}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
+      {suggestionsByCenter.length > 0 ? (
+        <div>
+          <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+            Escalas sugeridas
+          </h4>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            1–2 candidatas por centro (horário início/fim, HC por turno) com
+            custo estimado folha + VR/VT vs atual. Nunca inclui 6×1, 12×36,
+            24×48 nem jornada diária &gt; 10h.
+          </p>
+          <div className="mt-3 space-y-4">
+            {suggestionsByCenter.map(([centro, items]) => (
+              <div
+                key={centro}
+                className="border border-[var(--color-line)] bg-white/70 p-4"
+              >
+                <p className="text-sm font-medium">{centro}</p>
+                <ul className="mt-3 space-y-3">
+                  {items.map((s) => (
+                    <li
+                      key={`${s.centroCusto}-${s.code}`}
+                      className="border-t border-[var(--color-line)] pt-3 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-semibold">{s.label}</p>
+                        <p className="text-sm tabular-nums">
+                          Δ total {brl(s.monthlyDeltaVsCurrent)}/mês
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                        {s.description}
+                      </p>
+                      <p className="mt-2 text-xs text-[var(--color-muted)]">
+                        HC {s.totalHeadcount} · ~{s.workDaysPerMonth} dias/mês ·
+                        folha {brl(s.estimated.monthlyPayroll)}
+                        {s.estimated.monthlyVr != null
+                          ? ` · VR ${brl(s.estimated.monthlyVr)}`
+                          : ''}
+                        {s.estimated.monthlyVt != null
+                          ? ` · VT ${brl(s.estimated.monthlyVt)}`
+                          : ''}
+                      </p>
+                      <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+                        {s.shifts.map((w) => (
+                          <li
+                            key={`${s.code}-${w.label}`}
+                            className="border border-[var(--color-line)] bg-white px-2 py-1"
+                          >
+                            <span className="font-medium">{w.label}</span>{' '}
+                            {formatShiftRange(w)} · {w.hours}h · {w.headcount}{' '}
+                            pess.
+                          </li>
+                        ))}
+                      </ul>
+                      <SuggestionFeedbackControls
+                        suggestion={s}
+                        recordedAction={recorded[suggestionKey(s)] ?? null}
+                        onAccept={() => onFeedback(s, 'accepted')}
+                        onReject={() => onFeedback(s, 'rejected')}
+                        onEditSave={(shifts) =>
+                          onFeedback(s, 'edited', shifts)
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 border-l-2 border-[var(--color-accent)] pl-3 text-xs text-[var(--color-muted)]">
+            {scheduleSuggestionDisclaimer}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
 }

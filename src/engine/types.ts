@@ -188,6 +188,8 @@ export interface CostCenterResult {
    * Derived from cycle/regime when the CSV has no explicit matrix.
    */
   coberturaAtualPorDia?: CoberturaPorDia
+  /** Establishment CNPJ from folha (digits or formatted); used to group Seção 2. */
+  cnpjCompleto?: string | null
 }
 
 export interface CoverageGap {

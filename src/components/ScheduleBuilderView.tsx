@@ -42,6 +42,13 @@ interface ScheduleBuilderViewProps {
   result: SimulationResult
   /** Optional: print-friendly static summary (no inputs). */
   variant?: 'interactive' | 'print'
+  /**
+   * When set, only these centros de custo are shown (Seção 2 per CNPJ).
+   * `null` / omitted = all centers from the simulation.
+   */
+  centroCustoFilter?: string[] | null
+  /** Hide the outer title/export chrome when nested under a Filial accordion. */
+  embedded?: boolean
 }
 
 type QuadroMode = 'atual' | 'proposto'
@@ -865,8 +872,16 @@ function CostCenterScheduleCard({
 export function ScheduleBuilderView({
   result,
   variant = 'interactive',
+  centroCustoFilter = null,
+  embedded = false,
 }: ScheduleBuilderViewProps) {
-  const centers = centersFromResult(result)
+  const allCenters = centersFromResult(result)
+  const allowCc = centroCustoFilter?.length
+    ? new Set(centroCustoFilter.map((x) => x.trim()))
+    : null
+  const centers = allowCc
+    ? allCenters.filter((c) => allowCc.has(c.centroCusto.trim()))
+    : allCenters
   const print = variant === 'print'
   const defaults = defaultReferencePeriod(result.input.scenarioId)
   const [year, setYear] = useState(defaults.year)
@@ -889,42 +904,49 @@ export function ScheduleBuilderView({
       className={print ? 'mt-6' : ''}
       aria-label="Calendário mensal Escala Atual × Proposta"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3
-            className={
-              print
-                ? 'text-base font-semibold tracking-wide uppercase'
-                : 'text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase'
-            }
-          >
-            Calendário mensal — Atual × Proposto
-          </h3>
-          <p
-            className={
-              print
-                ? 'mt-1 text-xs text-neutral-600'
-                : 'mt-1 text-xs text-[var(--color-muted)]'
-            }
-          >
-            Projeção dia a dia (T/F) por turma (T1…T{maxCrews}) no período
-            selecionado, com total operacional vs mínimo do centro de custo.
-          </p>
+      {!embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3
+              className={
+                print
+                  ? 'text-base font-semibold tracking-wide uppercase'
+                  : 'text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase'
+              }
+            >
+              Calendário mensal — Atual × Proposto
+            </h3>
+            <p
+              className={
+                print
+                  ? 'mt-1 text-xs text-neutral-600'
+                  : 'mt-1 text-xs text-[var(--color-muted)]'
+              }
+            >
+              Projeção dia a dia (T/F) por turma (T1…T{maxCrews}) no período
+              selecionado, com total operacional vs mínimo do centro de custo.
+            </p>
+          </div>
+          {!print ? (
+            <button
+              type="button"
+              onClick={() =>
+                downloadEscalasTurmasExcel(result, { year, month })
+              }
+              className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
+            >
+              Exportar Excel (Escalas e Turmas)
+            </button>
+          ) : null}
         </div>
-        {!print ? (
-          <button
-            type="button"
-            onClick={() =>
-              downloadEscalasTurmasExcel(result, { year, month })
-            }
-            className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
-          >
-            Exportar Excel (Escalas e Turmas)
-          </button>
-        ) : null}
-      </div>
+      ) : null}
 
-      <div className={print ? 'mt-2' : 'mt-3'}>
+      <div
+        className={[
+          print || embedded ? 'mt-2' : 'mt-3',
+          'flex flex-wrap items-end justify-between gap-3',
+        ].join(' ')}
+      >
         <PeriodSelector
           year={year}
           month={month}
@@ -934,9 +956,30 @@ export function ScheduleBuilderView({
             setMonth(m)
           }}
         />
+        {embedded && !print ? (
+          <button
+            type="button"
+            onClick={() =>
+              downloadEscalasTurmasExcel(result, { year, month })
+            }
+            className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs"
+          >
+            Exportar Excel
+          </button>
+        ) : null}
       </div>
 
-      {print ? (
+      {centers.length === 0 ? (
+        <p
+          className={
+            print
+              ? 'mt-3 text-xs text-neutral-600'
+              : 'mt-3 text-xs text-[var(--color-muted)]'
+          }
+        >
+          Nenhum centro de custo neste estabelecimento.
+        </p>
+      ) : print ? (
         <div className="mt-3 space-y-4">
           {(['atual', 'proposto'] as const).map((m) => (
             <div key={m} className="space-y-3">

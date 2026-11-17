@@ -724,6 +724,7 @@ function buildCostCenterResults(
       escalaAtual: escalaLabel,
       cargaSemanalAtual: agg.cargaSemanalAtual,
       coberturaAtualPorDia,
+      cnpjCompleto: agg.cnpjCompleto,
     }
   })
 
