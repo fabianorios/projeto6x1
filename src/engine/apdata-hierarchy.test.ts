@@ -73,19 +73,17 @@ describe('apdata-hierarchy naming', () => {
     )
   })
 
-  it('resolveApdataShiftWindows uses Quadro window for 1 turno; tiles for 2+', () => {
+  it('resolveApdataShiftWindows always keeps OH tiles (09–21 → 09–17 + 13–21)', () => {
     const varejo = { default: { openHour: 9, closeHour: 21 } }
-    const one = resolveApdataShiftWindows(varejo, 1)
-    assert.equal(one.length, 1)
-    assert.equal(one[0]?.startHour, 9)
-    assert.equal(one[0]?.endHour, 17)
-
-    const two = resolveApdataShiftWindows(varejo, 2)
-    assert.equal(two.length, 2)
-    assert.equal(two[0]?.startHour, 9)
-    assert.equal(two[0]?.endHour, 17)
-    assert.equal(two[1]?.startHour, 13)
-    assert.equal(two[1]?.endHour, 21)
+    // turnos/dia must NOT collapse a long funcionamento to a lone 09–17
+    for (const turnos of [1, 2]) {
+      const windows = resolveApdataShiftWindows(varejo, turnos)
+      assert.equal(windows.length, 2, `turnos=${turnos}`)
+      assert.equal(windows[0]?.startHour, 9)
+      assert.equal(windows[0]?.endHour, 17)
+      assert.equal(windows[1]?.startHour, 13)
+      assert.equal(windows[1]?.endHour, 21)
+    }
 
     const shortDay = { default: { openHour: 8, closeHour: 16 } }
     const short = resolveShiftWindows(shortDay, 1)
@@ -170,10 +168,13 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.ok(tree.jornadas.some((j) => j.kind === 'TARDE'))
     assert.ok(tree.includeLunchJornada)
     assert.ok(tree.jornadas.some((j) => j.kind === 'ALMOCO'))
-    assert.ok(tree.horarios.length >= 1)
-    assert.equal(tree.grades.length, 7)
+    assert.ok(tree.horarios.length >= 2)
+    // DEFAULT OH 09–21 → 2 tiles × 7 turmas
+    assert.equal(tree.grades.length, 14)
     assert.ok(tree.grades.every((g) => /^T[1-7]$/.test(g.turma)))
     assert.ok(tree.grades.every((g) => g.tipoGrade === 'VAGAS'))
+    assert.ok(tree.grades.some((g) => g.label.startsWith('09:00–17:00')))
+    assert.ok(tree.grades.some((g) => g.label.startsWith('13:00–21:00')))
     assert.ok(tree.ciclos.every((c) => c.dataInicio === '2026-12-01'))
     assert.ok(tree.ciclos.every((c) => c.dias.length === 7))
     assert.ok(
@@ -184,7 +185,7 @@ describe('apdata-hierarchy selection + tree', () => {
     const json = JSON.stringify(tree)
     assert.ok(!/"cpf"\s*:/i.test(json))
     assert.ok(!/"nome"\s*:/i.test(json))
-    assert.ok(tree.centers[0]?.nodes.length === 7)
+    assert.ok(tree.centers[0]?.nodes.length === 14)
     assert.equal(tree.centers[0]?.nodes[0]?.jornadas[0]?.steps[0]?.tipo, 'ENTRADA')
     assert.ok(tree.horarios[0]?.descricao.includes('–'))
     assert.ok(tree.horarios[0]?.jornadaCodigos.length >= 2)
@@ -230,7 +231,7 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.deepEqual(tree.selectedHorarioIds, onlyFirst)
     assert.equal(tree.horarios.length, 1)
     assert.equal(tree.horarios[0]?.codigo, cands.horarios[0]!.codigo)
-    assert.ok(tree.grades.length < 7)
+    assert.ok(tree.grades.length < 14)
     assert.ok(
       tree.grades.every((g) =>
         cands.horarios[0]!.turmaIndexes.includes(g.turmaIndex),
@@ -253,10 +254,11 @@ describe('apdata-hierarchy selection + tree', () => {
     const tree = buildApdataHierarchy(result, { includeLunchJornada: false })
     assert.equal(tree.includeLunchJornada, false)
     assert.ok(!tree.jornadas.some((j) => j.kind === 'ALMOCO'))
-    assert.equal(tree.jornadas.length, 2)
+    // OH 09–21 → 2 tiles × (manhã+tarde) without lunch
+    assert.equal(tree.jornadas.length, 4)
   })
 
-  it('SEG_SEX yields a single turma grade', () => {
+  it('SEG_SEX with OH 09–21 yields T1 on both tiles (09–17 and 13–21)', () => {
     const result = simulate({
       sector: 'varejo',
       headcount: 10,
@@ -269,12 +271,20 @@ describe('apdata-hierarchy selection + tree', () => {
       defaultRegimeFuncionamento: 'SEG_SEX',
     })
     const tree = buildApdataHierarchy(result)
-    assert.equal(tree.grades.length, 1)
-    assert.equal(tree.grades[0]?.turma, 'T1')
+    assert.equal(tree.grades.length, 2)
+    assert.ok(tree.grades.every((g) => g.turma === 'T1'))
     assert.equal(tree.ciclos[0]?.workDays, 5)
     assert.equal(tree.ciclos[0]?.offDays, 2)
-    assert.equal(tree.horarios[0]?.descricao, 'Seg–Sex 09:00–17:00')
-    assert.equal(tree.grades[0]?.label, '09:00–17:00 · T1 · Geral')
+    const descs = tree.horarios.map((h) => h.descricao).sort()
+    assert.deepEqual(descs, [
+      'Seg–Sex 09:00–17:00',
+      'Seg–Sex 13:00–21:00',
+    ])
+    const labels = tree.grades.map((g) => g.label).sort()
+    assert.deepEqual(labels, [
+      '09:00–17:00 · T1 · Geral',
+      '13:00–21:00 · T1 · Geral',
+    ])
   })
 
   it('custom operating hours drive jornada/horário clocks (not hardcoded 09–17)', () => {

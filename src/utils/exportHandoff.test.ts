@@ -26,7 +26,8 @@ describe('exportHandoff AHR JSON', () => {
     assert.equal(payload.heCapBadge.estrategia, 'HORA_EXTRA_MAXIMA')
     assert.equal(payload.distribuicaoTurmas.crewCount, 7)
     assert.equal(payload.apdataHierarchy.dataInicio, '2026-12-01')
-    assert.equal(payload.apdataHierarchy.grades.length, 7)
+    // OH 09–21 → 2 shift tiles × 7 turmas
+    assert.equal(payload.apdataHierarchy.grades.length, 14)
     assert.ok(payload.apdataHierarchy.jornadas[0]?.steps.length >= 2)
     assert.ok(
       payload.apdataHierarchy.ciclos.every((c) => c.dataInicio === '2026-12-01'),

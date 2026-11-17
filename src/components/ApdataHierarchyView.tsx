@@ -10,6 +10,7 @@ import {
   buildApdataHierarchy,
   defaultApdataDataInicio,
   deriveApdataCandidates,
+  formatHourClock,
   type ApdataHierarchyNode,
   type ApdataHorarioCandidate,
   type ApdataJornadaCandidate,
@@ -430,6 +431,24 @@ export function ApdataHierarchyView({
           <p className="text-xs text-[var(--color-muted)]">
             Horários rotulados com dias abreviados + entrada/saída. Cada horário
             liga as jornadas acima ao ciclo da escala. Escolha quais criar.
+          </p>
+          <p className="text-xs text-[var(--color-ink)]">
+            <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+              Bandas (funcionamento)
+            </span>{' '}
+            <span className="tabular-nums">
+              {candidates.shifts
+                .map(
+                  (s) =>
+                    `${formatHourClock(s.startHour)}–${formatHourClock(s.endHour)}`,
+                )
+                .join(' · ')}
+            </span>
+            <span className="text-[var(--color-muted)]">
+              {' '}
+              — do horário de funcionamento (faixas ≤10h), não de um default
+              fixo 09–17.
+            </span>
           </p>
           <div className="flex flex-wrap gap-2 text-xs">
             <button
