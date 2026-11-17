@@ -78,21 +78,29 @@ const ABSORCAO_OPTIONS: { id: EstrategiaAbsorcao; label: string }[] = [
   { id: 'HIBRIDO_INTERMITENTE', label: 'Híbrido / intermitente' },
 ]
 
+type DossierTone = 'default' | 'emerald'
+
 const DOSSIER_META: Record<
   DossierSectionId,
-  { title: string; hint: string }
+  { title: string; hint: string; badge: string; tone: DossierTone }
 > = {
   executivo: {
-    title: 'Bloco Executivo (C-Level)',
+    title: '1. Visão Executiva & Impacto C-Level',
     hint: 'KPIs macro + estratégia de absorção',
+    badge: 'Atual vs. Proposto',
+    tone: 'default',
   },
   operacional: {
-    title: 'Bloco Operacional (Escalas & Turnos)',
+    title: '2. Calendário Operacional & Cobertura de Turnos',
     hint: 'Calendário Atual × Proposto · turmas com faixas OH',
+    badge: 'Escalas & turnos',
+    tone: 'default',
   },
   cadastral: {
-    title: 'Bloco Cadastral — Estrutura Apdata',
+    title: '3. Fiel da Balança — Assistente de Estrutura Apdata',
     hint: 'Jornadas → Horários → árvore · filtros Filial/CNPJ e CC',
+    badge: 'Jornadas → Horários → Ciclos → Grades',
+    tone: 'emerald',
   },
 }
 
@@ -150,18 +158,43 @@ function DossierSection({
   open,
   onToggle,
   collapsedSummary,
+  badge,
   children,
 }: {
   sectionId: DossierSectionId
   open: boolean
   onToggle: () => void
   collapsedSummary?: string | null
+  /** Override meta badge (e.g. live regimes in Operacional). */
+  badge?: string | null
   children: ReactNode
 }) {
   const meta = DOSSIER_META[sectionId]
   const panelId = `dossier-panel-${sectionId}`
+  const tone = meta.tone
+  const badgeText = badge === undefined ? meta.badge : badge
+  const shellClass =
+    tone === 'emerald'
+      ? 'overflow-hidden border border-[var(--color-teal)]/40 bg-white/90 shadow-sm'
+      : 'overflow-hidden border border-[var(--color-line)] bg-white/80 shadow-sm'
+  const headerClass =
+    tone === 'emerald'
+      ? 'flex min-h-11 w-full items-center justify-between gap-3 bg-[var(--color-accent-soft)]/80 px-4 py-3 text-left hover:bg-[var(--color-accent-soft)]'
+      : 'flex min-h-11 w-full items-center justify-between gap-3 bg-[color-mix(in_srgb,var(--color-paper)_70%,white)] px-4 py-3 text-left hover:bg-[color-mix(in_srgb,var(--color-paper)_85%,white)]'
+  const titleClass =
+    tone === 'emerald'
+      ? 'block text-sm font-semibold text-emerald-950'
+      : 'block text-sm font-semibold text-[var(--color-ink)]'
+  const badgeClass =
+    tone === 'emerald'
+      ? 'inline-block rounded-full bg-[var(--color-teal)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white'
+      : 'inline-block rounded-full bg-[var(--color-accent-soft)] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-[var(--color-ink)]'
+  const borderTone =
+    tone === 'emerald'
+      ? 'border-t border-[var(--color-teal)]/30'
+      : 'border-t border-[var(--color-line)]'
   return (
-    <div className="border border-[var(--color-line)] bg-white/80">
+    <div className={shellClass}>
       <h3 className="m-0">
         <button
           type="button"
@@ -169,24 +202,46 @@ function DossierSection({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
-          className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          className={headerClass}
         >
-          <span>
-            <span className="block text-sm font-semibold text-[var(--color-ink)]">
-              {meta.title}
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className={titleClass}>{meta.title}</span>
+              {badgeText ? (
+                <span className={badgeClass}>{badgeText}</span>
+              ) : null}
             </span>
             <span className="mt-0.5 block text-xs font-normal text-[var(--color-muted)]">
               {meta.hint}
             </span>
           </span>
-          <span className="shrink-0 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+          <span
+            className={
+              tone === 'emerald'
+                ? 'shrink-0 text-xs font-semibold tracking-wide text-emerald-800 uppercase'
+                : 'shrink-0 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase'
+            }
+          >
             {open ? 'Recolher' : 'Expandir'}
           </span>
         </button>
       </h3>
       {!open && collapsedSummary ? (
-        <p className="border-t border-[var(--color-line)] px-4 py-2.5 text-xs text-[var(--color-ink)]">
-          {collapsedSummary}
+        <p
+          className={`${borderTone} flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs text-[var(--color-ink)]`}
+        >
+          <span>{collapsedSummary}</span>
+          <button
+            type="button"
+            onClick={onToggle}
+            className={
+              tone === 'emerald'
+                ? 'font-medium text-[var(--color-teal)] underline'
+                : 'font-medium text-[var(--color-accent)] underline'
+            }
+          >
+            Expandir detalhes
+          </button>
         </p>
       ) : null}
       <div
@@ -194,9 +249,7 @@ function DossierSection({
         role="region"
         aria-labelledby={`dossier-trigger-${sectionId}`}
         className={
-          open
-            ? 'space-y-6 border-t border-[var(--color-line)] px-4 py-4'
-            : 'hidden'
+          open ? `space-y-6 ${borderTone} px-4 py-4` : 'hidden'
         }
         aria-hidden={!open}
       >
@@ -410,6 +463,21 @@ export function ResultsView({
     formatSigned: formatSignedExecutiveNumber,
   })
 
+  const operacionalTurmasSummary = summarizeOperacionalTurmas(
+    operacionalGroups.flatMap((g) => g.centers),
+  )
+  const operacionalBadgeParts = [
+    input.currentScale,
+    proposedScaleLabel !== input.currentScale ? proposedScaleLabel : null,
+    ...operacionalTurmasSummary.regimes.map(
+      (r) =>
+        REGIME_FUNCIONAMENTO_LABELS[
+          r as keyof typeof REGIME_FUNCIONAMENTO_LABELS
+        ] ?? r,
+    ),
+  ].filter((x): x is string => Boolean(x))
+  const operacionalBadge = [...new Set(operacionalBadgeParts)].join(' · ')
+
   return (
     <>
       <section className="no-print space-y-6 pb-24">
@@ -418,101 +486,126 @@ export function ResultsView({
           role="region"
           aria-label="Ações do resultado"
         >
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onBack}
-              className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
-            >
-              ◀ Voltar
-            </button>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="min-h-11 bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white"
-            >
-              🖨️ Imprimir PDF
-            </button>
-            <button
-              type="button"
-              title="Rola até o Bloco Cadastral (não envia ao ERP)"
-              onClick={handleIrParaEstruturaApdata}
-              className="min-h-11 border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--color-ink)]"
-            >
-              ⚙️ Ir para Estrutura Apdata
-            </button>
-            <details className="relative">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
-                📥 Exportação Avançada
-              </summary>
-              <div className="absolute left-0 z-30 mt-1 w-72 border border-[var(--color-line)] bg-white p-3 shadow-sm">
-                <p className="text-[11px] text-[var(--color-muted)]">
-                  JSON Handoff AHR offline. Não envia dados ao ERP — só download
-                  local para carga manual / Gerador AHR.
-                </p>
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onBack}
+                className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
+              >
+                ◀ Voltar
+              </button>
+              <span className="text-sm font-semibold text-[var(--color-ink)]">
+                Passo 5: Resultados & Parametrização
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden items-center gap-2 border-r border-[var(--color-line)] pr-3 md:flex">
                 <button
                   type="button"
-                  onClick={() =>
-                    downloadAhrHandoff(result, {
-                      dataInicio: apdataDataInicio,
-                    })
-                  }
-                  className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+                  onClick={() => setDossier(expandAllDossier())}
+                  className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                 >
-                  Baixar JSON Handoff (offline)
+                  Expandir Todos
+                </button>
+                <span className="text-[var(--color-line)]" aria-hidden="true">
+                  |
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDossier(collapseAllDossier())}
+                  className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                >
+                  Recolher Todos
                 </button>
               </div>
-            </details>
-            <button
-              type="button"
-              onClick={onRestart}
-              className="min-h-11 px-4 py-2.5 text-sm text-[var(--color-muted)] underline"
-            >
-              🔄 Nova Simulação
-            </button>
+              <div className="flex gap-2 md:hidden">
+                <button
+                  type="button"
+                  onClick={() => setDossier(expandAllDossier())}
+                  className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
+                >
+                  Expandir Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDossier(collapseAllDossier())}
+                  className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
+                >
+                  Recolher Todos
+                </button>
+              </div>
+              <button
+                type="button"
+                title="Rola até o Fiel da Balança / Estrutura Apdata (não envia ao ERP)"
+                onClick={handleIrParaEstruturaApdata}
+                className="min-h-11 border border-[var(--color-teal)]/50 bg-[var(--color-accent-soft)] px-4 py-2.5 text-sm font-medium text-emerald-900"
+              >
+                ⚙️ Ir para Estrutura Apdata
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm"
+              >
+                🖨️ Imprimir PDF
+              </button>
+              <details className="relative">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
+                  📥 Exportação Avançada
+                </summary>
+                <div className="absolute right-0 z-30 mt-1 w-72 border border-[var(--color-line)] bg-white p-3 shadow-sm sm:left-0 sm:right-auto">
+                  <p className="text-[11px] text-[var(--color-muted)]">
+                    JSON Handoff AHR offline. Não envia dados ao ERP — só
+                    download local para carga manual / Gerador AHR.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadAhrHandoff(result, {
+                        dataInicio: apdataDataInicio,
+                      })
+                    }
+                    className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+                  >
+                    Baixar JSON Handoff (offline)
+                  </button>
+                </div>
+              </details>
+              <button
+                type="button"
+                onClick={onRestart}
+                className="min-h-11 border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-800"
+              >
+                🔄 Nova Simulação
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold">Resultados da simulação</h2>
-            <p className="mt-1 text-sm text-[var(--color-muted)]">
-              {template?.resultBlurb ??
-                'Estimativas do motor com hipóteses explícitas.'}{' '}
-              Números são heurísticas — não parecer jurídico.
-            </p>
-            <p className="mt-2 text-sm">
-              <span className="text-[var(--color-muted)]">Cenário:</span>{' '}
-              <strong>{ruleVersion.label}</strong>
-              <span className="ml-2 font-mono text-xs text-[var(--color-muted)]">
-                {ruleVersion.id}
-              </span>
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-              {sectorDisplay} · escala {input.currentScale} ·{' '}
-              {input.headcount} pessoas
-              {usedPayrollImport ? ' · folha importada' : ''}
-              {input.sectorBufferPct != null
-                ? ` · buffer ${input.sectorBufferPct}%`
-                : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setDossier(expandAllDossier())}
-              className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
-            >
-              Expandir Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setDossier(collapseAllDossier())}
-              className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
-            >
-              Recolher Todos
-            </button>
-          </div>
+        <div>
+          <h2 className="text-xl font-semibold">Resultados da simulação</h2>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            {template?.resultBlurb ??
+              'Estimativas do motor com hipóteses explícitas.'}{' '}
+            Números são heurísticas — não parecer jurídico.
+          </p>
+          <p className="mt-2 text-sm">
+            <span className="text-[var(--color-muted)]">Cenário:</span>{' '}
+            <strong>{ruleVersion.label}</strong>
+            <span className="ml-2 font-mono text-xs text-[var(--color-muted)]">
+              {ruleVersion.id}
+            </span>
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+            {sectorDisplay} · escala {input.currentScale} ·{' '}
+            {input.headcount} pessoas
+            {usedPayrollImport ? ' · folha importada' : ''}
+            {input.sectorBufferPct != null
+              ? ` · buffer ${input.sectorBufferPct}%`
+              : ''}
+          </p>
         </div>
 
         <DossierSection
@@ -580,10 +673,15 @@ export function ResultsView({
             </div>
           </dl>
 
-          <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">
-            <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-              Estratégia de absorção
-            </p>
+          <div className="rounded-xl border border-[var(--color-accent)]/20 bg-[var(--color-accent-soft)]/40 px-4 py-4">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                Estratégia de absorção selecionada
+              </p>
+              <span className="rounded-lg bg-[var(--color-accent)] px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white uppercase">
+                Ativo no motor
+              </span>
+            </div>
             <div className="flex flex-wrap gap-2" role="tablist">
               {ABSORCAO_OPTIONS.map((o) => {
                 const selected = estrategiaAbsorcao === o.id
@@ -887,6 +985,7 @@ export function ResultsView({
           sectionId="operacional"
           open={dossier.operacional}
           onToggle={() => toggleSection('operacional')}
+          badge={operacionalBadge || null}
           collapsedSummary={
             filialAccordion
               ? `${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} filiais/CNPJ · ${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · HC ${distribuicaoTurmas.totalHeadcount}`
@@ -943,7 +1042,7 @@ export function ResultsView({
           sectionId="cadastral"
           open={dossier.cadastral}
           onToggle={() => toggleSection('cadastral')}
-          collapsedSummary="Assistente Jornadas → Horários → Estrutura (fechado). Use “Ir para Estrutura Apdata” ou Expandir."
+          collapsedSummary="Fiel da Balança fechado — Jornadas → Horários → Ciclos → Grades. Use “Ir para Estrutura Apdata” ou Expandir."
         >
           <ApdataHierarchyView
             result={result}

@@ -494,12 +494,12 @@ export function ApdataHierarchyView({
     <div
       id="hierarquia-apdata"
       tabIndex={-1}
-      className="border border-[var(--color-line)] bg-white/80 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+      className="outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-teal)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-[var(--color-ink)]">
-            Estrutura Apdata — Jornadas → Horários
+          <h3 className="text-sm font-semibold text-emerald-950">
+            Estrutura Apdata — Jornadas → Horários → Ciclos → Grades
           </h3>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
             Monte a estrutura cadastral a partir do Quadro Proposto. Isto{' '}
@@ -518,16 +518,16 @@ export function ApdataHierarchyView({
               setInicio(e.target.value)
               setGenerated(false)
             }}
-            className="mt-1 block min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+            className="mt-1 block min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
             required
           />
         </label>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-[var(--color-ink)]">
-          <span className="font-semibold tracking-wide uppercase">
-            Filial / CNPJ
+      <div className="mt-4 flex flex-col gap-4 rounded-xl border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-paper)_75%,white)] p-4 md:flex-row md:items-end">
+        <label className="block w-full text-xs text-[var(--color-ink)] md:w-1/2">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Filial / CNPJ de escopo
           </span>
           <select
             value={filterCnpj}
@@ -542,13 +542,13 @@ export function ApdataHierarchyView({
               }
               setGenerated(false)
             }}
-            className="mt-1 block min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+            className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
             disabled={establishments.length === 0}
           >
             <option value="">
               {establishments.length === 0
-                ? 'Todos (sem CNPJ na folha)'
-                : 'Todos'}
+                ? 'Todas as filiais (sem CNPJ na folha)'
+                : 'Todas as filiais (consolidado)'}
             </option>
             {establishments.map((e) => (
               <option key={e.key} value={e.key}>
@@ -557,9 +557,9 @@ export function ApdataHierarchyView({
             ))}
           </select>
         </label>
-        <label className="block text-xs text-[var(--color-ink)]">
-          <span className="font-semibold tracking-wide uppercase">
-            Centro de custos
+        <label className="block w-full text-xs text-[var(--color-ink)] md:w-1/2">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Centro de custo (CC)
           </span>
           <select
             value={filterCc}
@@ -567,9 +567,9 @@ export function ApdataHierarchyView({
               setFilterCc(e.target.value)
               setGenerated(false)
             }}
-            className="mt-1 block min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+            className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
           >
-            <option value="">Todos</option>
+            <option value="">Todos os centros de custo</option>
             {(visibleCcs ?? ccOptions).map((cc) => (
               <option key={cc} value={cc}>
                 {cc}
