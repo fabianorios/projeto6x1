@@ -9,14 +9,14 @@ import {
   coberturaPropostaFromCrews,
   compareCoverageDay,
   defaultReferencePeriod,
-  defaultShiftWindow,
   deriveCoberturaAtualPorDia,
   distributeCrews,
   formatHourClock,
+  formatTurmaLabel,
   hourToTimeInputValue,
   parseScale,
+  resolveShiftWindows,
   timeInputToHour,
-  widestCoverageDay,
   type CoberturaPorDia,
   type CostCenterResult,
   type CoverageWeekday,
@@ -49,20 +49,28 @@ type QuadroMode = 'atual' | 'proposto'
 function crewsToEditable(
   crews: TurmaCrew[],
   operatingHours: OperatingHours,
+  centroCusto: string,
+  shiftsPerDay: number,
 ): EditableTurmaRow[] {
-  const { startHour, endHour } = defaultShiftWindow(
-    widestCoverageDay(operatingHours),
-  )
-  return crews.map((c) => ({
-    turmaIndex: c.turmaIndex,
-    label: c.label,
-    escala: c.escala,
-    workDays: [...c.workDays],
-    restDays: [...c.restDays],
-    headcount: c.headcount,
-    startHour,
-    endHour,
-  }))
+  const windows = resolveShiftWindows(operatingHours, shiftsPerDay)
+  return crews.map((c, i) => {
+    const win = windows[i % windows.length] ?? windows[0]!
+    return {
+      turmaIndex: c.turmaIndex,
+      label: formatTurmaLabel(
+        win.startHour,
+        win.endHour,
+        c.turmaIndex,
+        centroCusto,
+      ),
+      escala: c.escala,
+      workDays: [...c.workDays],
+      restDays: [...c.restDays],
+      headcount: c.headcount,
+      startHour: win.startHour,
+      endHour: win.endHour,
+    }
+  })
 }
 
 function centersFromResult(result: SimulationResult): CostCenterResult[] {
@@ -349,7 +357,9 @@ function MonthlyCalendarGrid({
                     : 'border border-[var(--color-line)] bg-white'
                 }`}
               >
-                T{row.turmaIndex}
+                <span className="tabular-nums">
+                  {row.label?.trim() || `T${row.turmaIndex}`}
+                </span>
                 <span
                   className={`ml-1 font-normal ${
                     print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
@@ -544,6 +554,7 @@ function CoverageCompareFooter({
 function CostCenterScheduleCard({
   cc,
   operatingHours,
+  shiftsPerDay,
   variant,
   year,
   month,
@@ -552,6 +563,7 @@ function CostCenterScheduleCard({
 }: {
   cc: CostCenterResult
   operatingHours: OperatingHours
+  shiftsPerDay: number
   variant: 'interactive' | 'print'
   year: number
   month: number
@@ -565,14 +577,16 @@ function CostCenterScheduleCard({
   const atual = resolveAtualCoverage(cc)
   const regime = dist.regime
 
-  const crewSeed = `${cc.centroCusto}|${dist.regime}|${dist.totalHeadcount}|${dist.crews.map((c) => `${c.turmaIndex}:${c.headcount}`).join(',')}`
+  const crewSeed = `${cc.centroCusto}|${dist.regime}|${dist.totalHeadcount}|${shiftsPerDay}|${dist.crews.map((c) => `${c.turmaIndex}:${c.headcount}`).join(',')}`
   const [rows, setRows] = useState<EditableTurmaRow[]>(() =>
-    crewsToEditable(dist.crews, operatingHours),
+    crewsToEditable(dist.crews, operatingHours, cc.centroCusto, shiftsPerDay),
   )
 
   useEffect(() => {
-    setRows(crewsToEditable(dist.crews, operatingHours))
-  }, [crewSeed, dist.crews, operatingHours])
+    setRows(
+      crewsToEditable(dist.crews, operatingHours, cc.centroCusto, shiftsPerDay),
+    )
+  }, [crewSeed, dist.crews, operatingHours, cc.centroCusto, shiftsPerDay])
 
   const proposto = useMemo(() => coberturaPropostaFromCrews(rows), [rows])
 
@@ -751,8 +765,8 @@ function CostCenterScheduleCard({
                     key={row.turmaIndex}
                     className="border-b border-[var(--color-line)]"
                   >
-                    <td className="px-2 py-1.5 font-medium">
-                      T{row.turmaIndex}
+                    <td className="px-2 py-1.5 font-medium tabular-nums">
+                      {row.label || `T${row.turmaIndex}`}
                     </td>
                     <td className="px-2 py-1.5">
                       <label className="sr-only">
@@ -819,8 +833,8 @@ function CostCenterScheduleCard({
                   key={row.turmaIndex}
                   className="border-b border-neutral-200"
                 >
-                  <td className="py-1 pr-2 font-medium">
-                    T{row.turmaIndex}
+                  <td className="py-1 pr-2 font-medium tabular-nums">
+                    {row.label || `T${row.turmaIndex}`}
                     <span className="ml-1 font-normal text-neutral-600">
                       ({row.escala})
                     </span>
@@ -931,6 +945,7 @@ export function ScheduleBuilderView({
                   key={`${m}-${cc.centroCusto}`}
                   cc={cc}
                   operatingHours={result.input.operatingHours}
+                  shiftsPerDay={result.input.shiftsPerDay}
                   variant="print"
                   year={year}
                   month={month}
@@ -947,6 +962,7 @@ export function ScheduleBuilderView({
               key={cc.centroCusto}
               cc={cc}
               operatingHours={result.input.operatingHours}
+              shiftsPerDay={result.input.shiftsPerDay}
               variant="interactive"
               year={year}
               month={month}

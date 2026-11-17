@@ -17,6 +17,11 @@ import {
   type SimulationResult,
 } from '../engine'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
+import {
+  dossierCentroCustoOptions,
+  dossierEstablishmentOptions,
+  resolveVisibleCentroCustos,
+} from '../utils/resultsDossier'
 
 interface ApdataHierarchyViewProps {
   result: SimulationResult
@@ -272,6 +277,21 @@ export function ApdataHierarchyView({
     baseCandidates.horarios.map((h) => h.id),
   )
   const [generated, setGenerated] = useState(false)
+  const [filterCnpj, setFilterCnpj] = useState('')
+  const [filterCc, setFilterCc] = useState('')
+
+  const establishments = useMemo(
+    () => dossierEstablishmentOptions(result.input.payrollRows),
+    [result.input.payrollRows],
+  )
+  const ccOptions = useMemo(
+    () =>
+      dossierCentroCustoOptions(
+        result.byCostCenter,
+        result.input.payrollRows,
+      ),
+    [result.byCostCenter, result.input.payrollRows],
+  )
 
   // Reset selection when Quadro / scenario result identity changes.
   useEffect(() => {
@@ -280,6 +300,8 @@ export function ApdataHierarchyView({
     setSelectedIds(next.horarios.map((h) => h.id))
     setWizardStep(1)
     setGenerated(false)
+    setFilterCnpj('')
+    setFilterCc('')
   }, [result])
 
   const candidates = useMemo(
@@ -288,19 +310,42 @@ export function ApdataHierarchyView({
     [result, includeLunch],
   )
 
-  // Keep selection intersection when lunch toggle changes jornada codes on candidates.
+  const visibleCcs = useMemo(
+    () =>
+      resolveVisibleCentroCustos({
+        allCentroCustos: ccOptions.length
+          ? ccOptions
+          : [
+              ...new Set(
+                candidates.horarios.map((h) => h.centroCustoCodigo),
+              ),
+            ],
+        establishments,
+        filterCnpjKey: filterCnpj,
+        filterCc,
+      }),
+    [ccOptions, candidates.horarios, establishments, filterCnpj, filterCc],
+  )
+
+  const visibleHorarios = useMemo(() => {
+    if (!visibleCcs) return candidates.horarios
+    const allow = new Set(visibleCcs)
+    return candidates.horarios.filter((h) => allow.has(h.centroCustoCodigo))
+  }, [candidates.horarios, visibleCcs])
+
+  // Keep selection intersection when lunch toggle / filters change candidates.
   useEffect(() => {
-    const valid = new Set(candidates.horarios.map((h) => h.id))
+    const valid = new Set(visibleHorarios.map((h) => h.id))
     setSelectedIds((prev) => {
       const kept = prev.filter((id) => valid.has(id))
       if (kept.length > 0) return kept
-      return candidates.horarios.map((h) => h.id)
+      return visibleHorarios.map((h) => h.id)
     })
-  }, [candidates])
+  }, [visibleHorarios])
 
   const selectedHorarios = useMemo(
-    () => candidates.horarios.filter((h) => selectedIds.includes(h.id)),
-    [candidates.horarios, selectedIds],
+    () => visibleHorarios.filter((h) => selectedIds.includes(h.id)),
+    [visibleHorarios, selectedIds],
   )
 
   const tree = useMemo(() => {
@@ -325,7 +370,7 @@ export function ApdataHierarchyView({
   }
 
   function selectAllHorarios() {
-    setSelectedIds(candidates.horarios.map((h) => h.id))
+    setSelectedIds(visibleHorarios.map((h) => h.id))
     setGenerated(false)
   }
 
@@ -371,6 +416,61 @@ export function ApdataHierarchyView({
             className="mt-1 block min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
             required
           />
+        </label>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs text-[var(--color-ink)]">
+          <span className="font-semibold tracking-wide uppercase">
+            Filial / CNPJ
+          </span>
+          <select
+            value={filterCnpj}
+            onChange={(e) => {
+              const next = e.target.value
+              setFilterCnpj(next)
+              if (filterCc && next) {
+                const est = establishments.find((x) => x.key === next)
+                if (est && !est.centroCustos.includes(filterCc)) {
+                  setFilterCc('')
+                }
+              }
+              setGenerated(false)
+            }}
+            className="mt-1 block min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+            disabled={establishments.length === 0}
+          >
+            <option value="">
+              {establishments.length === 0
+                ? 'Todos (sem CNPJ na folha)'
+                : 'Todos'}
+            </option>
+            {establishments.map((e) => (
+              <option key={e.key} value={e.key}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-[var(--color-ink)]">
+          <span className="font-semibold tracking-wide uppercase">
+            Centro de custos
+          </span>
+          <select
+            value={filterCc}
+            onChange={(e) => {
+              setFilterCc(e.target.value)
+              setGenerated(false)
+            }}
+            className="mt-1 block min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Todos</option>
+            {(visibleCcs ?? ccOptions).map((cc) => (
+              <option key={cc} value={cc}>
+                {cc}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 
@@ -466,7 +566,7 @@ export function ApdataHierarchyView({
               Limpar
             </button>
             <span className="self-center text-[var(--color-muted)]">
-              {selectedHorarios.length} de {candidates.horarios.length}{' '}
+              {selectedHorarios.length} de {visibleHorarios.length}{' '}
               selecionado(s)
             </span>
           </div>
@@ -499,14 +599,20 @@ export function ApdataHierarchyView({
           </div>
 
           <ul className="space-y-2">
-            {candidates.horarios.map((h) => (
-              <HorarioSelectRow
-                key={h.id}
-                candidate={h}
-                checked={selectedIds.includes(h.id)}
-                onToggle={() => toggleHorario(h.id)}
-              />
-            ))}
+            {visibleHorarios.length === 0 ? (
+              <li className="text-xs text-[var(--color-muted)]">
+                Nenhum horário nos filtros Filial/CNPJ ou Centro de custos.
+              </li>
+            ) : (
+              visibleHorarios.map((h) => (
+                <HorarioSelectRow
+                  key={h.id}
+                  candidate={h}
+                  checked={selectedIds.includes(h.id)}
+                  onToggle={() => toggleHorario(h.id)}
+                />
+              ))
+            )}
           </ul>
 
           <div className="flex flex-wrap gap-2 pt-1">
@@ -591,32 +697,38 @@ export function ApdataHierarchyView({
           </div>
 
           <div className="space-y-5">
-            {tree.centers.map((center) => (
-              <section key={center.centroCustoCodigo}>
-                <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
-                  CC {center.centroCustoCodigo}
-                </h4>
-                <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                  {REGIME_FUNCIONAMENTO_LABELS[center.regime]} · HC{' '}
-                  {center.currentHeadcount} → {center.requiredHeadcount} ·
-                  cobertura diária {center.dailyCoverageNeed}
-                </p>
-                {center.nodes.length === 0 ? (
-                  <p className="mt-2 text-xs text-[var(--color-muted)]">
-                    Nenhum horário selecionado para este CC.
+            {tree.centers
+              .filter((center) =>
+                visibleCcs
+                  ? visibleCcs.includes(center.centroCustoCodigo)
+                  : true,
+              )
+              .map((center) => (
+                <section key={center.centroCustoCodigo}>
+                  <h4 className="text-xs font-semibold tracking-wide text-[var(--color-ink)] uppercase">
+                    CC {center.centroCustoCodigo}
+                  </h4>
+                  <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                    {REGIME_FUNCIONAMENTO_LABELS[center.regime]} · HC{' '}
+                    {center.currentHeadcount} → {center.requiredHeadcount} ·
+                    cobertura diária {center.dailyCoverageNeed}
                   </p>
-                ) : (
-                  <ul className="mt-2 space-y-2">
-                    {center.nodes.map((node) => (
-                      <NodeBlock
-                        key={`${center.centroCustoCodigo}-${node.ciclo.codigo}-${node.grades[0]?.turma}`}
-                        node={node}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </section>
-            ))}
+                  {center.nodes.length === 0 ? (
+                    <p className="mt-2 text-xs text-[var(--color-muted)]">
+                      Nenhum horário selecionado para este CC.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      {center.nodes.map((node) => (
+                        <NodeBlock
+                          key={`${center.centroCustoCodigo}-${node.ciclo.codigo}-${node.grades[0]?.turma}`}
+                          node={node}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ))}
           </div>
 
           <p className="border-l-2 border-[var(--color-accent)] pl-3 text-[11px] text-[var(--color-muted)]">
