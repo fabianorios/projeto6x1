@@ -28,6 +28,7 @@ export { simulate } from './simulate'
 export {
   PAYROLL_CSV_HEADERS,
   aggregateByCostCenter,
+  centroCustoDisplayLabel,
   detectPayrollDelimiter,
   emptyPayrollExtras,
   estimateWorkDaysPerMonth,

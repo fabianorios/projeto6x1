@@ -3,6 +3,7 @@ import {
   REGIME_FUNCIONAMENTO_LABELS,
   buildFeedbackEntry,
   buildScenarioWhyBullets,
+  centroCustoDisplayLabel,
   clearCalibrationHistory,
   defaultApdataDataInicio,
   downloadCalibrationJson,
@@ -921,7 +922,7 @@ export function ResultsView({
                               className="border-b border-[var(--color-line)]"
                             >
                               <td className="px-3 py-2 font-medium">
-                                {c.centroCusto}
+                                {centroCustoDisplayLabel(c)}
                                 {c.codHorarioAtual?.trim()
                                   ? ` · hor. ${c.codHorarioAtual.trim()}`
                                   : ''}
@@ -1246,7 +1247,11 @@ function OperacionalFilialBody({
           {ccGroups.map((ccGroup) => (
             <li key={ccGroup.centroCusto}>
               <p className="font-medium text-[var(--color-ink)]">
-                CC {ccGroup.centroCusto}
+                CC{' '}
+                {centroCustoDisplayLabel({
+                  centroCusto: ccGroup.centroCusto,
+                  descCc: ccGroup.descCc,
+                })}
               </p>
               <ul className="mt-1 space-y-0.5 border-l border-[var(--color-line)] pl-3">
                 {ccGroup.horarios.map((c) => {

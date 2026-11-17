@@ -170,6 +170,8 @@ export interface BenefitDelta {
 /** Totals for one centro de custo after scale + charge projection. */
 export interface CostCenterResult {
   centroCusto: string
+  /** Optional CC description (CCU_D1sCentroCusto) for UI. */
+  descCc?: string | null
   currentHeadcount: number
   requiredHeadcount: number
   additionalHeadcount: number

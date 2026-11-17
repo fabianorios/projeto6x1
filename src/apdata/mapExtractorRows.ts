@@ -22,6 +22,7 @@ export type ExtractorAggregate = {
   cod_filial?: string
   cnpj_completo?: string
   cod_cc?: string
+  desc_cc?: string
   cod_cargo?: string
   desc_cargo?: string
   cod_vinculo?: string
@@ -157,6 +158,7 @@ export function mapExtractorAggregatesToPayroll(
       codFilial: r.cod_filial || null,
       cnpjCompleto: r.cnpj_completo || null,
       codCc: r.cod_cc || null,
+      descCc: r.desc_cc?.trim() || null,
       codCargo: r.cod_cargo || null,
       descCargo: r.desc_cargo || null,
       codVinculo: r.cod_vinculo || null,

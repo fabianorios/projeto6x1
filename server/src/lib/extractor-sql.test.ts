@@ -139,6 +139,10 @@ describe("extractor SQL", () => {
     assert.ok(!mssql.includes("__VINCULO_JOINS__"));
     assert.match(mssql, /CHAR\(9\)/);
     assert.match(oracle, /CHR\(9\)/);
+    assert.match(mssql, /CCU_D1sCentroCusto/);
+    assert.match(mssql, /AS desc_cc/);
+    assert.match(oracle, /CCU_D1sCentroCusto/);
+    assert.match(oracle, /AS desc_cc/);
   });
 
   it("applies incluirAfastados=false and custom regime/categoria", () => {
@@ -162,6 +166,7 @@ describe("extractor map", () => {
         cod_filial: "2",
         cnpj_completo: "12345678000190",
         cod_cc: "CC-01",
+        DESC_CC: "Operacoes",
         desc_cargo: "Operador",
         qtd_colaboradores: 2,
         massa_salarial_base: 4400,
@@ -177,12 +182,15 @@ describe("extractor map", () => {
     ]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].desc_cargo, "Operador");
+    assert.equal(rows[0].desc_cc, "Operacoes");
     assert.equal(rows[0].qtd_colaboradores, 2);
     assert.equal(
       rows[0].beneficios_agg,
       "53|VALE REFEICAO|30.50;52|VALE ALIMENTACAO|300;10|UNIMED TITULAR|400",
     );
     assert.throws(() => assertNoPiiColumns(["nome", "cod_cc"]));
-    assert.doesNotThrow(() => assertNoPiiColumns(["cod_cc", "desc_cargo"]));
+    assert.doesNotThrow(() =>
+      assertNoPiiColumns(["cod_cc", "desc_cc", "desc_cargo"]),
+    );
   });
 });

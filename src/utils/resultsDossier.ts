@@ -152,6 +152,8 @@ export interface OperacionalFilialGroup {
 /** CC bucket with horário slices nested underneath (never siblings of Filial). */
 export interface OperacionalCcGroup {
   centroCusto: string
+  /** Optional CC description from Folha (CCU_D1sCentroCusto). */
+  descCc?: string | null
   /** One entry per horário under this CC (sorted by codHorarioAtual). */
   horarios: CostCenterResult[]
 }
@@ -191,6 +193,8 @@ export function nestCentersByCc(
     .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
     .map(([centroCusto, list]) => ({
       centroCusto,
+      descCc:
+        list.find((c) => (c.descCc ?? '').trim())?.descCc?.trim() || null,
       horarios: [...list].sort((a, b) =>
         (a.codHorarioAtual ?? '')
           .trim()

@@ -451,10 +451,10 @@ export const LIVE_SELECT_STEPS: {
   },
   {
     id: 'centros',
-    label: 'CentrosCustos (código interno)',
+    label: 'CentrosCustos (código + descrição)',
     table: 'CentrosCustos',
-    columns: ['CCU_CdiCentroCusto', 'CCU_CosEstrutura'],
-    note: 'CCU_CosEstrutura — evita nome de cliente em D1s.',
+    columns: ['CCU_CdiCentroCusto', 'CCU_CosEstrutura', 'CCU_D1sCentroCusto'],
+    note: 'cod_cc←CosEstrutura; desc_cc←D1sCentroCusto (estrutura org.).',
   },
   {
     id: 'hmv',

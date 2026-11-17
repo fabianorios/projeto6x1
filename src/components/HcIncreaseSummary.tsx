@@ -1,5 +1,6 @@
 /** Passo 5 — PT-BR summary of where HC sobe (Filial → CC → cargo). */
 
+import { centroCustoDisplayLabel } from '../engine'
 import {
   formatHcTriple,
   type HcIncreaseSummary as HcIncreaseSummaryData,
@@ -96,7 +97,9 @@ export function HcIncreaseSummary({
                         </div>
                       ) : (
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                          <span className="font-medium">{cc.centroCusto}</span>
+                          <span className="font-medium">
+                            {centroCustoDisplayLabel(cc)}
+                          </span>
                           <span
                             className={
                               isPrint

@@ -177,6 +177,7 @@ SELECT
     CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
+    ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')} AS desc_cc,
     CAST(ISNULL(c.CON_CdiCargo, 0) AS VARCHAR(20)) AS cod_cargo,
     ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     CAST(ISNULL(c.CON_CdiVinculo, 0) AS VARCHAR(20)) AS cod_vinculo,
@@ -227,6 +228,7 @@ GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')},
+    ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')},
     c.CON_CdiCargo, ${SANITIZE_MSSQL('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     ISNULL(h.HOR_QtnHorasSemanal, 44.0)
@@ -347,6 +349,7 @@ SELECT
     TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
+    ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')} AS desc_cc,
     TO_CHAR(NVL(c.CON_CdiCargo, 0)) AS cod_cargo,
     ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')} AS desc_cargo,
     TO_CHAR(NVL(c.CON_CdiVinculo, 0)) AS cod_vinculo,
@@ -397,6 +400,7 @@ GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')},
+    ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')},
     c.CON_CdiCargo, ${SANITIZE_ORACLE('cg.CAR_D1sCargo', 'NAO_INFORMADO')},
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
     NVL(h.HOR_QtnHorasSemanal, 44.0)

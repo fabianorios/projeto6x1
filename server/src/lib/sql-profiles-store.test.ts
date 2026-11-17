@@ -49,6 +49,9 @@ describe("SqlProfilesStore", () => {
     const slots = factoryDefaultSlots();
     assert.match(slots.FOLHA_E_ESCALAS.mssql, /TIP_OplTrabalho/);
     assert.match(slots.FOLHA_E_ESCALAS.mssql, /TIP_CdiTipoDiaPonto/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /CCU_D1sCentroCusto/);
+    assert.match(slots.FOLHA_E_ESCALAS.mssql, /AS desc_cc/);
+    assert.match(slots.FOLHA_E_ESCALAS.oracle, /AS desc_cc/);
     for (const id of SQL_SLOT_IDS) {
       for (const dialect of ["mssql", "oracle"] as const) {
         const sql = slots[id][dialect];
