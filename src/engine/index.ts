@@ -56,6 +56,7 @@ export type {
   ExclusionMiss,
 } from './schedule-policy'
 export {
+  assignCrewWindowIndices,
   continuo7dRosterFactor,
   crewsWithTotalHeadcount,
   distributeCrews,
@@ -63,6 +64,8 @@ export {
   fixedOffTargetCoversOperatingDays,
   requiredHeadcountAfterFactor,
   resolveRegime,
+  singleCollaboratorContinuoKeepsRoster,
+  staffedWindowCountForCoverage,
 } from './crew-distribution'
 export type { TurmaCrew, TurmaDistribution } from './crew-distribution'
 export {

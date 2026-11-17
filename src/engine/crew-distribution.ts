@@ -210,8 +210,9 @@ export function continuo7dRosterFactor(): number {
  *
  * Example: SEG_SEX + 5×2 (folga fixa sáb/dom, mesmo horário). Baseline 6×1
  * already puts the whole roster on Mon–Fri; migrating to 5×2 keeps that
- * coverage without hiring. CONTINUO_7D always needs the factor (rotating
- * offs). Shorter targets (e.g. 4×3 on SEG_SEX) still need more roster.
+ * coverage without hiring. Shorter targets (e.g. 4×3 on SEG_SEX) still need
+ * more roster. CONTINUO_7D is handled separately (see
+ * `singleCollaboratorContinuoKeepsRoster`).
  */
 export function fixedOffTargetCoversOperatingDays(
   regime: RegimeFuncionamento,
@@ -224,9 +225,27 @@ export function fixedOffTargetCoversOperatingDays(
 }
 
 /**
- * Required roster after scenario factor, with fixed-off coverage waiver.
- * When folga fixa + target already covers operating days, keep current HC
- * (ceil(1 × 1.2 × buffer) must not invent a second person).
+ * Single collaborator on CONTINUO → 5×2 (or longer) target: OH tiles
+ * (09–17 + 13–21) are legal jornada alternatives for a long funcionamento,
+ * not two simultaneous posts. Baseline daily need stays 1; ceil(1 × 1.2 ×
+ * buffer) must not invent a 2nd person that lands on the 2nd tile.
+ * Larger CONTINUO rosters still use the scale factor. 4×3 (shorter target)
+ * still inflates.
+ */
+export function singleCollaboratorContinuoKeepsRoster(
+  regime: RegimeFuncionamento,
+  currentHeadcount: number,
+  targetWorkDays: number,
+): boolean {
+  if (regime !== 'CONTINUO_7D') return false
+  if (Math.max(0, Math.round(currentHeadcount)) > 1) return false
+  return Math.max(0, Math.round(targetWorkDays)) >= 5
+}
+
+/**
+ * Required roster after scenario factor, with coverage waivers.
+ * - Folga fixa + target already covers operating days → keep HC.
+ * - Single-collaborator CONTINUO with 5×2+ target → keep HC (tiles ≠ posts).
  */
 export function requiredHeadcountAfterFactor(
   currentHeadcount: number,
@@ -242,5 +261,68 @@ export function requiredHeadcountAfterFactor(
   if (fixedOffTargetCoversOperatingDays(opts.regime, opts.targetWorkDays)) {
     return hc
   }
+  if (
+    singleCollaboratorContinuoKeepsRoster(
+      opts.regime,
+      hc,
+      opts.targetWorkDays,
+    )
+  ) {
+    return hc
+  }
   return Math.max(hc, Math.ceil(hc * headcountFactor))
+}
+
+/**
+ * How many OH tiles should receive headcount for a given daily post need.
+ * Never staff every tile just because the funcionamento tiled into N jornadas
+ * — a single-post CC keeps people on the first tile(s) only.
+ */
+export function staffedWindowCountForCoverage(
+  windowCount: number,
+  totalHeadcount: number,
+  dailyCoverageNeed?: number,
+): number {
+  const n = Math.max(0, Math.floor(windowCount))
+  if (n === 0) return 0
+  const hc = Math.max(0, Math.round(totalHeadcount))
+  if (hc <= 0) return 1
+  const need =
+    dailyCoverageNeed != null
+      ? Math.max(1, Math.round(dailyCoverageNeed))
+      : Math.max(1, hc)
+  return Math.min(n, need, hc)
+}
+
+/**
+ * Map each crew to a window index. Non-zero HC packs into the first
+ * `staffedCount` tiles (Σ HC per tile follows `distributeExactCounts`).
+ * Zero-HC structural turmas keep `i % allWindows` so the 7-turma template
+ * still shows alternating labels.
+ */
+export function assignCrewWindowIndices(
+  crews: readonly { headcount: number }[],
+  windowCount: number,
+  dailyCoverageNeed?: number,
+): number[] {
+  const n = Math.max(0, Math.floor(windowCount))
+  if (n === 0) return crews.map(() => 0)
+  const totalHc = crews.reduce(
+    (s, c) => s + Math.max(0, Math.round(c.headcount)),
+    0,
+  )
+  const staffed = staffedWindowCountForCoverage(n, totalHc, dailyCoverageNeed)
+  const budget = distributeExactCounts(totalHc, staffed)
+  const remaining = [...budget]
+  let fillTile = 0
+  return crews.map((c, i) => {
+    const hc = Math.max(0, Math.round(c.headcount))
+    if (hc === 0) return i % n
+    while (fillTile < staffed - 1 && (remaining[fillTile] ?? 0) <= 0) {
+      fillTile += 1
+    }
+    const assigned = Math.min(fillTile, staffed - 1)
+    remaining[assigned] = (remaining[assigned] ?? 0) - hc
+    return assigned
+  })
 }

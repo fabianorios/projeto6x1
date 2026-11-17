@@ -73,10 +73,19 @@ export function buildScenarioWhyBullets(
 
   const bullets: string[] = []
 
+  const continuoSingle =
+    distribuicaoTurmas.regime === 'CONTINUO_7D' &&
+    coverage.currentHeadcount <= 1 &&
+    coverage.additionalHeadcount <= 0
+
   // Escala
   if (!scaleChanged) {
     bullets.push(
       `Escala: mantém ${currentScale}. Neste cenário a gente não mexe no ciclo — o quadro atual é a referência.`,
+    )
+  } else if (continuoSingle) {
+    bullets.push(
+      `Escala: de ${currentScale} para ${proposedScale}. Com 1 colaborador no contínuo, o ciclo 5×2 rotativo entra sem inventar segunda vaga — janelas OH são jornadas alternativas, não dois postos.`,
     )
   } else if (coverage.additionalHeadcount <= 0) {
     bullets.push(
@@ -91,9 +100,11 @@ export function buildScenarioWhyBullets(
   // HC + cobertura mínima
   if (coverage.additionalHeadcount <= 0) {
     bullets.push(
-      scaleChanged
-        ? `HC: fica em ${coverage.currentHeadcount}. Mesmo horário e folga fixa já cobrem os dias de funcionamento — não precisa de segunda pessoa só por causa do fator 6×1→5×2.`
-        : `HC: fica em ${coverage.currentHeadcount}. Não há vaga adicional neste recorte — cobertura mínima já está ok com o quadro atual.`,
+      continuoSingle
+        ? `HC: fica em ${coverage.currentHeadcount}. Um posto efetivo (TOTAL /1) — 09–17 e 13–21 não pedem duas pessoas; folgas rotativas deixam buracos 0/1 nos dias de folga, sem contratar o 2º.`
+        : scaleChanged
+          ? `HC: fica em ${coverage.currentHeadcount}. Mesmo horário e folga fixa já cobrem os dias de funcionamento — não precisa de segunda pessoa só por causa do fator 6×1→5×2.`
+          : `HC: fica em ${coverage.currentHeadcount}. Não há vaga adicional neste recorte — cobertura mínima já está ok com o quadro atual.`,
     )
   } else {
     bullets.push(

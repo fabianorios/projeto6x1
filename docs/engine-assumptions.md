@@ -35,7 +35,8 @@ Encargos patronais vêm do **regime tributário por CNPJ** (Simples / Lucro Pres
 4. **Headcount requerido**:
    - `required = ceil( HC × scaleFactor × (1 + buffer) × atritoSetorial )`
    - piso no HC atual; no status quo o adicional é forçado a **0**.
-   - **Exceção (folga fixa):** se o regime já é coberto pelo padrão-alvo com o quadro atual — ex. `SEG_SEX` → 5×2 (folga sáb/dom) ou `SEG_SAB` → ciclo com ≥6 dias de trabalho — o fator **não** infla o HC. Cobertura Mon–Fri (ou Mon–Sáb) já fecha com as mesmas pessoas no mesmo horário; `ceil(1 × 1,2)` não deve inventar a 2ª vaga. `CONTINUO_7D` e alvos mais curtos (ex. 4×3 em SEG_SEX) continuam com o fator.
+   - **Exceção (folga fixa):** se o regime já é coberto pelo padrão-alvo com o quadro atual — ex. `SEG_SEX` → 5×2 (folga sáb/dom) ou `SEG_SAB` → ciclo com ≥6 dias de trabalho — o fator **não** infla o HC. Cobertura Mon–Fri (ou Mon–Sáb) já fecha com as mesmas pessoas no mesmo horário; `ceil(1 × 1,2)` não deve inventar a 2ª vaga.
+   - **Exceção (contínuo 1 colaborador):** `CONTINUO_7D` com HC atual ≤ 1 e alvo ≥5 dias (5×2) **também** mantém HC=1. Janelas OH longas (09–21 → tiles 09–17 e 13–21) são jornadas legais alternativas, **não** dois postos simultâneos; uma pessoa não ocupa os dois no mesmo dia. O fator CONTINUO segue valendo para quadros maiores e para alvos mais curtos (ex. 4×3).
 5. **Folha (salários + encargos)**:
    - Massa salarial atual: sem import = `HC × salário médio`; com import = `Σ(salario × quantidade)` (HC = `Σ quantidade`).
    - **Baseline e projetada** usam a **mesma receita** de encargos/provisões (regime tributário + férias/13º + onboarding + benefícios fixos proxy) sobre a massa respectiva — o Δ não compara “só salário” com “salário+encargos”.
@@ -63,7 +64,7 @@ Política versionada em `docs/schedule-policy.md` e `src/engine/schedule-policy.
 1. **Allowlist** (únicas candidatas): `5x2`, `turnos_8h`, `4x3` (cenário agressivo).
 2. **Blocklist** (nunca sugeridas): `6x1` / `6x1_ajustada` (só como **Atual** — PEC aboliria), `12x36`, `24x48`, `sobreaviso_puro`, jornada diária padrão **> 10h**.
 3. Por `centro_custo` (folha) ou grupo **Geral** (wizard): o motor propõe **1–2** candidatas com horário início/fim, HC por turno e custo estimado (folha × fator de encargos + VR/VT se houver) vs atual.
-4. **Janelas de turno** vêm do horário de funcionamento informado (abertura/fechamento; opcional por weekday). Preferência **8h** (teto 10h): janela ≤10h = 1 turno; &gt;10h = N×8h com sobreposição para cobrir as pontas (ex. 09–21 → 09–17 + 13–21) — sem equal-split encurtado (nunca 2×6h). O HC do quadro é **repartido** entre as janelas (Σ = HC requerido); não se inventa 1 pessoa por tile nem se usa `unidades × turnos/dia` como piso de HC.
+4. **Janelas de turno** vêm do horário de funcionamento informado (abertura/fechamento; opcional por weekday). Preferência **8h** (teto 10h): janela ≤10h = 1 turno; &gt;10h = N×8h com sobreposição para cobrir as pontas (ex. 09–21 → 09–17 + 13–21) — sem equal-split encurtado (nunca 2×6h). O HC do quadro é **repartido** entre as janelas (Σ = HC requerido); não se inventa 1 pessoa por tile nem se usa `unidades × turnos/dia` como piso de HC. No calendário/Apdata, gente só ocupa quantos tiles a **cobertura diária** pede (posto único → só o 1º tile; tiles vazios ficam HC=0).
 5. Ranking: preferido do cenário + menor Δ de custo total mensal (folha+VR+VT). HC da candidata usa o mesmo fator de escala/buffer/atrito do cenário (com waiver de folga fixa).
 6. Se o usuário informar uma escala excluída (ex. `12x36`) no wizard, a UI mostra badge **“Excluído da sugestão”** e o motor **não** a recomenda — só candidatas da allowlist.
 

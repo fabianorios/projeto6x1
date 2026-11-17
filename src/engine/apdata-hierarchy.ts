@@ -18,6 +18,7 @@ import {
   type CoverageWeekday,
 } from './coverage-days'
 import {
+  assignCrewWindowIndices,
   distributeCrews,
   distributeExactCounts,
   type TurmaCrew,
@@ -341,17 +342,25 @@ export function formatTurmaLabel(
 
 /**
  * Apply the same `09:00–17:00 · T# · CC` prefix used on Quadro Proposto to any
- * crew list (incl. Quadro Atual / baseline). Windows cycle when there are more
- * turmas than shift tiles (same rule as ScheduleBuilder editable rows).
+ * crew list (incl. Quadro Atual / baseline).
+ *
+ * Non-zero HC packs into the first tiles needed for daily coverage (tiles ≠
+ * posts). Empty structural turmas still alternate labels across all OH tiles.
  */
 export function applyTurmaHourLabels(
   crews: TurmaCrew[],
   windows: readonly { startHour: number; endHour: number }[],
   centroCustoCodigo: string,
+  opts?: { dailyCoverageNeed?: number },
 ): TurmaCrew[] {
   if (windows.length === 0) return crews
+  const indices = assignCrewWindowIndices(
+    crews,
+    windows.length,
+    opts?.dailyCoverageNeed,
+  )
   return crews.map((c, i) => {
-    const win = windows[i % windows.length] ?? windows[0]!
+    const win = windows[indices[i] ?? 0] ?? windows[0]!
     return {
       ...c,
       label: formatTurmaLabel(

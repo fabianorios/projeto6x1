@@ -374,6 +374,7 @@ export function buildEscalasTurmasSpreadsheetXml(
       }),
       shiftWindows,
       cc.centroCusto,
+      { dailyCoverageNeed: dist.dailyCoverageNeed },
     )
     const atualMatrix = buildMonthCalendarMatrix({
       year: period.year,
@@ -389,6 +390,7 @@ export function buildEscalasTurmasSpreadsheetXml(
       dist.crews,
       shiftWindows,
       cc.centroCusto,
+      { dailyCoverageNeed: dist.dailyCoverageNeed },
     )
     const propostoMatrix = buildMonthCalendarMatrix({
       year: period.year,

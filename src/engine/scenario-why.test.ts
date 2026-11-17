@@ -97,4 +97,18 @@ describe('buildScenarioWhyBullets', () => {
     const bullets = buildScenarioWhyBullets(r)
     assert.ok(bullets.some((b) => /Turmas:.*contínuo/i.test(b)))
   })
+
+  it('explains CONTINUO HC=1 stays put (tiles ≠ posts)', () => {
+    const r = simulate(
+      baseInput({
+        scenarioId: 'fase1_2026_42h',
+        headcount: 1,
+        defaultRegimeFuncionamento: 'CONTINUO_7D',
+      }),
+    )
+    assert.equal(r.coverage.requiredHeadcount, 1)
+    const bullets = buildScenarioWhyBullets(r)
+    assert.ok(bullets.some((b) => /HC:.*fica em 1/i.test(b)))
+    assert.ok(bullets.some((b) => /jornadas alternativas|posto efetivo/i.test(b)))
+  })
 })
