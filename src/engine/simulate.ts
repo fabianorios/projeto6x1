@@ -8,6 +8,7 @@ import {
   fixedOffTargetCoversOperatingDays,
   requiredHeadcountAfterFactor,
   resolveRegime,
+  singleCollaboratorContinuoKeepsRoster,
 } from './crew-distribution'
 import { deriveCoberturaAtualPorDia } from './coverage-days'
 import {
@@ -114,11 +115,16 @@ export function simulate(input: SimulationInput): SimulationResult {
     input.defaultRegimeFuncionamento ??
       payrollRows?.find((r) => r.regimeFuncionamento)?.regimeFuncionamento,
   )
-  // Folga fixa + alvo que já cobre os dias do regime (ex. SEG_SEX→5×2):
-  // não aplicar fator de person-days — cobertura diária já fecha com o HC atual.
+  // Folga fixa + alvo que já cobre os dias do regime (ex. SEG_SEX→5×2),
+  // ou CONTINUO com 1 colaborador (tiles OH ≠ postos): não aplicar fator.
   const waiveScaleInflation =
     !params.preserveCurrentScale &&
-    fixedOffTargetCoversOperatingDays(defaultRegime, targetScale.workDays)
+    (fixedOffTargetCoversOperatingDays(defaultRegime, targetScale.workDays) ||
+      singleCollaboratorContinuoKeepsRoster(
+        defaultRegime,
+        headcount,
+        targetScale.workDays,
+      ))
 
   const headcountFactor = waiveScaleInflation ? 1 : rawHeadcountFactor
 
@@ -277,7 +283,9 @@ export function simulate(input: SimulationInput): SimulationResult {
       amount: scaleFactor,
       unit: 'factor',
       detail: waiveScaleInflation
-        ? `Razão bruta ${formatRatio(scaleFactor)}, mas regime ${defaultRegime} com folga fixa já cobre os dias de operação com o HC atual — fator de person-days não infla o quadro.`
+        ? defaultRegime === 'CONTINUO_7D'
+          ? `Razão bruta ${formatRatio(scaleFactor)}, mas CONTINUO com 1 colaborador mantém HC — janelas OH são jornadas alternativas, não dois postos.`
+          : `Razão bruta ${formatRatio(scaleFactor)}, mas regime ${defaultRegime} com folga fixa já cobre os dias de operação com o HC atual — fator de person-days não infla o quadro.`
         : 'Mantém os mesmos person-days de cobertura ao reduzir a fração de dias trabalhados por pessoa.',
     },
     {
@@ -287,7 +295,9 @@ export function simulate(input: SimulationInput): SimulationResult {
       amount: params.coverageBuffer,
       unit: 'factor',
       detail: waiveScaleInflation
-        ? 'Buffer do cenário não soma vaga extra quando a cobertura diária do regime já fecha com o quadro atual (folga fixa).'
+        ? defaultRegime === 'CONTINUO_7D'
+          ? 'Buffer do cenário não inventa 2ª vaga quando o contínuo tem um único colaborador/posto efetivo.'
+          : 'Buffer do cenário não soma vaga extra quando a cobertura diária do regime já fecha com o quadro atual (folga fixa).'
         : `${pct(params.coverageBuffer)} sobre o headcount após o fator de escala (folgas/atritos de escala).`,
     },
     {

@@ -5,11 +5,15 @@ import {
   planAbsorption,
 } from './absorption'
 import {
+  assignCrewWindowIndices,
   distributeCrews,
   distributeExactCounts,
   fixedOffTargetCoversOperatingDays,
   requiredHeadcountAfterFactor,
+  staffedWindowCountForCoverage,
 } from './crew-distribution'
+import { applyTurmaHourLabels } from './apdata-hierarchy'
+import { DEFAULT_OPERATING_HOURS, resolveShiftWindows } from './operating-hours'
 import { parsePayrollCsv } from './payroll'
 import {
   RULE_VERSIONS,
@@ -18,7 +22,6 @@ import {
 } from './rules'
 import { listSuggestableCodes } from './schedule-policy'
 import { simulate } from './simulate'
-import { DEFAULT_OPERATING_HOURS } from './operating-hours'
 import { HE_LEGAL_CAP_HOURS_MONTH } from '../types'
 import type { SimulationInput } from './types'
 
@@ -174,7 +177,7 @@ describe('crew distribution', () => {
     )
   })
 
-  it('fixed-off SEG_SEX→5×2 waives scale factor; CONTINUO keeps it', () => {
+  it('fixed-off SEG_SEX→5×2 waives scale factor; CONTINUO multi keeps it', () => {
     assert.equal(fixedOffTargetCoversOperatingDays('SEG_SEX', 5), true)
     assert.equal(fixedOffTargetCoversOperatingDays('SEG_SEX', 4), false)
     assert.equal(fixedOffTargetCoversOperatingDays('CONTINUO_7D', 5), false)
@@ -186,11 +189,30 @@ describe('crew distribution', () => {
       }),
       1,
     )
+    // Single collaborator CONTINUO→5×2: tiles ≠ posts → keep HC=1
     assert.equal(
       requiredHeadcountAfterFactor(1, 1.26, {
         preserveCurrentScale: false,
         regime: 'CONTINUO_7D',
         targetWorkDays: 5,
+      }),
+      1,
+    )
+    // Larger CONTINUO roster still takes the factor
+    assert.equal(
+      requiredHeadcountAfterFactor(8, 1.26, {
+        preserveCurrentScale: false,
+        regime: 'CONTINUO_7D',
+        targetWorkDays: 5,
+      }),
+      11,
+    )
+    // CONTINUO→4×3 still inflates even for HC=1
+    assert.equal(
+      requiredHeadcountAfterFactor(1, 1.5, {
+        preserveCurrentScale: false,
+        regime: 'CONTINUO_7D',
+        targetWorkDays: 4,
       }),
       2,
     )
@@ -262,6 +284,50 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.coverage.requiredHeadcount, 1)
     assert.equal(r.coverage.additionalHeadcount, 0)
     assert.equal(r.coverage.headcountFactor, 1)
+  })
+
+  it('fase1 CONTINUO HC=1 + two OH tiles keeps HC (no 1→2 invent)', () => {
+    const r = simulate(
+      baseInput({
+        scenarioId: 'fase1_2026_42h',
+        headcount: 1,
+        defaultRegimeFuncionamento: 'CONTINUO_7D',
+        operatingHours: DEFAULT_OPERATING_HOURS, // 09–21 → 2 tiles
+      }),
+    )
+    assert.equal(r.coverage.currentHeadcount, 1)
+    assert.equal(r.coverage.requiredHeadcount, 1)
+    assert.equal(r.coverage.additionalHeadcount, 0)
+    assert.equal(r.distribuicaoTurmas.totalHeadcount, 1)
+    assert.equal(r.distribuicaoTurmas.dailyCoverageNeed, 1)
+    const nonZero = r.distribuicaoTurmas.crews.filter((c) => c.headcount > 0)
+    assert.equal(nonZero.length, 1)
+
+    const windows = resolveShiftWindows(DEFAULT_OPERATING_HOURS, 1)
+    assert.ok(windows.length >= 2, 'OH 09–21 yields two tiles')
+    const labeled = applyTurmaHourLabels(
+      r.distribuicaoTurmas.crews,
+      windows,
+      '58001320',
+      { dailyCoverageNeed: r.distribuicaoTurmas.dailyCoverageNeed },
+    )
+    const staffed = labeled.filter((c) => c.headcount > 0)
+    assert.equal(staffed.length, 1)
+    assert.match(staffed[0]!.label, /^09:00–17:00/)
+    // Second tile must not receive the single person
+    assert.ok(!staffed.some((c) => /13:00–21:00/.test(c.label)))
+  })
+
+  it('assignCrewWindowIndices packs small roster onto first tile', () => {
+    assert.equal(staffedWindowCountForCoverage(2, 1, 1), 1)
+    assert.equal(staffedWindowCountForCoverage(2, 2, 1), 1)
+    assert.equal(staffedWindowCountForCoverage(2, 10, 10), 2)
+    const crews = distributeCrews('CONTINUO_7D', 1).crews
+    const idx = assignCrewWindowIndices(crews, 2, 1)
+    const staffedIdx = crews
+      .map((c, i) => (c.headcount > 0 ? idx[i] : null))
+      .filter((x) => x != null)
+    assert.deepEqual(staffedIdx, [0])
   })
 
   it('same HC + no HE → Δ folha ≈ 0 (encargos on both sides)', () => {

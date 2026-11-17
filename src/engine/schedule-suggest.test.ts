@@ -52,7 +52,7 @@ describe('suggestSchedules no invent', () => {
     }
   })
 
-  it('CONTINUO_7D still applies scale factor on HC=1', () => {
+  it('CONTINUO_7D + HC=1 + two OH tiles keeps roster at 1 (tiles ≠ posts)', () => {
     const result = suggestSchedules({
       sector: 'varejo',
       scenarioId: 'fase1_2026_42h',
@@ -68,6 +68,31 @@ describe('suggestSchedules no invent', () => {
     })
     const fiveByTwo = result.suggestions.find((s) => s.code === '5x2')
     assert.ok(fiveByTwo)
-    assert.ok(fiveByTwo!.totalHeadcount >= 2)
+    assert.equal(fiveByTwo!.totalHeadcount, 1)
+    assert.ok(fiveByTwo!.shifts.length >= 2, '09–21 yields two tiles')
+    assert.equal(
+      fiveByTwo!.shifts.reduce((s, w) => s + w.headcount, 0),
+      1,
+    )
+    assert.ok(fiveByTwo!.shifts.some((w) => w.headcount === 0))
+  })
+
+  it('CONTINUO_7D still applies scale factor when HC > 1', () => {
+    const result = suggestSchedules({
+      sector: 'varejo',
+      scenarioId: 'fase1_2026_42h',
+      currentScale: '6x1',
+      headcount: 8,
+      averageMonthlySalary: 2000,
+      units: 1,
+      shiftsPerDay: 1,
+      operatingHours: DEFAULT_OPERATING_HOURS,
+      projectedChargeFactor: 1.6,
+      coverageBuffer: 0.05,
+      defaultRegimeFuncionamento: 'CONTINUO_7D',
+    })
+    const fiveByTwo = result.suggestions.find((s) => s.code === '5x2')
+    assert.ok(fiveByTwo)
+    assert.ok(fiveByTwo!.totalHeadcount > 8)
   })
 })

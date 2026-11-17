@@ -5,6 +5,7 @@ import {
   MONTH_LABELS_PT,
   REGIME_FUNCIONAMENTO_LABELS,
   applyTurmaHourLabels,
+  assignCrewWindowIndices,
   baselineCrewsForCalendar,
   buildMonthCalendarMatrix,
   coberturaPropostaFromCrews,
@@ -69,10 +70,28 @@ function crewsToEditable(
   operatingHours: OperatingHours,
   centroCusto: string,
   shiftsPerDay: number,
+  dailyCoverageNeed?: number,
 ): EditableTurmaRow[] {
   const windows = resolveShiftWindows(operatingHours, shiftsPerDay)
+  if (windows.length === 0) {
+    return crews.map((c) => ({
+      turmaIndex: c.turmaIndex,
+      label: formatTurmaLabel(9, 17, c.turmaIndex, centroCusto),
+      escala: c.escala,
+      workDays: [...c.workDays],
+      restDays: [...c.restDays],
+      headcount: c.headcount,
+      startHour: 9,
+      endHour: 17,
+    }))
+  }
+  const indices = assignCrewWindowIndices(
+    crews,
+    windows.length,
+    dailyCoverageNeed,
+  )
   return crews.map((c, i) => {
-    const win = windows[i % windows.length] ?? windows[0]!
+    const win = windows[indices[i] ?? 0] ?? windows[0]!
     return {
       turmaIndex: c.turmaIndex,
       label: formatTurmaLabel(
@@ -601,16 +620,35 @@ function CostCenterScheduleCard({
   const atual = resolveAtualCoverage(cc)
   const regime = dist.regime
 
-  const crewSeed = `${cc.centroCusto}|${dist.regime}|${dist.totalHeadcount}|${shiftsPerDay}|${dist.crews.map((c) => `${c.turmaIndex}:${c.headcount}`).join(',')}`
+  const crewSeed = `${cc.centroCusto}|${dist.regime}|${dist.totalHeadcount}|${dist.dailyCoverageNeed}|${shiftsPerDay}|${dist.crews.map((c) => `${c.turmaIndex}:${c.headcount}`).join(',')}`
   const [rows, setRows] = useState<EditableTurmaRow[]>(() =>
-    crewsToEditable(dist.crews, operatingHours, cc.centroCusto, shiftsPerDay),
+    crewsToEditable(
+      dist.crews,
+      operatingHours,
+      cc.centroCusto,
+      shiftsPerDay,
+      dist.dailyCoverageNeed,
+    ),
   )
 
   useEffect(() => {
     setRows(
-      crewsToEditable(dist.crews, operatingHours, cc.centroCusto, shiftsPerDay),
+      crewsToEditable(
+        dist.crews,
+        operatingHours,
+        cc.centroCusto,
+        shiftsPerDay,
+        dist.dailyCoverageNeed,
+      ),
     )
-  }, [crewSeed, dist.crews, operatingHours, cc.centroCusto, shiftsPerDay])
+  }, [
+    crewSeed,
+    dist.crews,
+    dist.dailyCoverageNeed,
+    operatingHours,
+    cc.centroCusto,
+    shiftsPerDay,
+  ])
 
   const proposto = useMemo(() => coberturaPropostaFromCrews(rows), [rows])
 
@@ -621,7 +659,9 @@ function CostCenterScheduleCard({
       regime,
     })
     const windows = resolveShiftWindows(operatingHours, shiftsPerDay)
-    return applyTurmaHourLabels(raw, windows, cc.centroCusto)
+    return applyTurmaHourLabels(raw, windows, cc.centroCusto, {
+      dailyCoverageNeed: dist.dailyCoverageNeed,
+    })
   }, [
     cc.currentHeadcount,
     cc.escalaAtual,
@@ -629,6 +669,7 @@ function CostCenterScheduleCard({
     regime,
     operatingHours,
     shiftsPerDay,
+    dist.dailyCoverageNeed,
   ])
 
   const matrix = useMemo(() => {
