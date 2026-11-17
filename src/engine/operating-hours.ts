@@ -270,9 +270,15 @@ function shiftSpanHours(startHour: number, endHour: number): number {
 }
 
 /**
- * Resolve work-shift windows from establishment hours + turnos/dia.
- * - 1 turno: Quadro-aligned single window (`defaultShiftWindow`)
- * - 2+ turnos: `tileCoverageWindow` tiles (≤ turnos/dia), never invent clocks
+ * Resolve work-shift windows from establishment operating hours.
+ *
+ * Same tiling as schedule suggestions (`buildShiftWindows` / `tileCoverageWindow`):
+ * a long funcionamento (e.g. 09–21) yields one legal jornada per tile
+ * (09–17 and 13–21), never a silent collapse to a lone 09–17.
+ *
+ * `shiftsPerDay` is a **floor** when the OH window fits in one tile (request
+ * more copies only if tiles already exist — it cannot invent clocks outside
+ * the coverage window, and cannot hide tiles the window requires).
  */
 export function resolveShiftWindows(
   hours: OperatingHours,
@@ -281,15 +287,18 @@ export function resolveShiftWindows(
   preferredBlockHours = 8,
 ): { startHour: number; endHour: number; hours: number }[] {
   const day = widestCoverageDay(hours)
-  const n = Math.max(1, Math.floor(Number.isFinite(shiftsPerDay) ? shiftsPerDay : 1))
-  if (n <= 1) {
-    return [defaultShiftWindow(day)]
-  }
   const tiles = tileCoverageWindow(day, maxHours, preferredBlockHours)
   if (tiles.length === 0) {
     return [defaultShiftWindow(day)]
   }
-  return tiles.slice(0, n)
+  const requested = Math.max(
+    1,
+    Math.floor(Number.isFinite(shiftsPerDay) ? shiftsPerDay : 1),
+  )
+  // Always keep every coverage tile (matches sugestões de escala).
+  // shiftsPerDay cannot collapse multi-tile OH back to the first 8h block.
+  const count = Math.min(tiles.length, Math.max(requested, tiles.length))
+  return tiles.slice(0, count)
 }
 
 /** Short summary for UI/report (default + optional weekday notes). */

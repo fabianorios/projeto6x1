@@ -465,8 +465,9 @@ export function buildJornadaCandidates(
 }
 
 /**
- * Entrada/saída windows from Quadro / operating hours / shift tiles.
- * Never invents a lone hardcoded 09–17 when hours or turnos/dia say otherwise.
+ * Entrada/saída windows from operating hours / shift tiles.
+ * Long funcionamento (09–21) → tiles 09–17 + 13–21 even when turnos/dia = 1,
+ * matching schedule suggestions — never a silent lone 09–17.
  */
 export function resolveApdataShiftWindows(
   operatingHours: OperatingHours,
