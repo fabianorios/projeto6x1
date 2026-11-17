@@ -1756,21 +1756,21 @@ type SimulateProgressStage = {
 }
 
 const SIMULATE_PROGRESS = {
-  send: { step: 1, label: 'Enviando…', pct: 18 } satisfies SimulateProgressStage,
+  send: { step: 1, label: 'Enviando…', pct: 28 } satisfies SimulateProgressStage,
   calcApi: {
     step: 2,
     label: 'Calculando no servidor…',
-    pct: 58,
+    pct: 62,
   } satisfies SimulateProgressStage,
   calcLocal: {
     step: 2,
     label: 'Calculando neste navegador…',
-    pct: 58,
+    pct: 62,
   } satisfies SimulateProgressStage,
   assemble: {
     step: 3,
     label: 'Montando resultados…',
-    pct: 88,
+    pct: 92,
   } satisfies SimulateProgressStage,
 } as const
 
@@ -1778,7 +1778,8 @@ const SIMULATE_PROGRESS = {
 function yieldForPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
-      window.setTimeout(resolve, 48)
+      // ~160ms keeps PT labels readable on fast API / local fallback.
+      window.setTimeout(resolve, 160)
     })
   })
 }
@@ -1789,15 +1790,15 @@ function SimulateProgressBar({
   progress: SimulateProgressStage
 }) {
   return (
-    <div className="mt-3 space-y-1.5" role="status" aria-live="polite">
+    <div className="mt-3 space-y-2" role="status" aria-live="polite">
       <div className="flex items-baseline justify-between gap-3 text-sm">
-        <p className="text-[var(--color-ink)]">{progress.label}</p>
+        <p className="font-medium text-[var(--color-ink)]">{progress.label}</p>
         <p className="shrink-0 text-xs text-[var(--color-muted)] tabular-nums">
           Etapa {progress.step} de 3
         </p>
       </div>
       <div
-        className="h-2.5 w-full overflow-hidden border border-[var(--color-line)] bg-white"
+        className="h-3.5 w-full overflow-hidden border border-[var(--color-line)] bg-[var(--color-accent-soft)]"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -1805,7 +1806,7 @@ function SimulateProgressBar({
         aria-label={progress.label}
       >
         <div
-          className="h-full bg-[var(--color-accent)] transition-[width] duration-300 ease-out"
+          className="h-full bg-[var(--color-teal)] transition-[width] duration-300 ease-out"
           style={{ width: `${progress.pct}%` }}
         />
       </div>
