@@ -28,7 +28,16 @@ describe('exportHandoff AHR JSON', () => {
     assert.equal(payload.apdataHierarchy.dataInicio, '2026-12-01')
     // OH 09–21 → 2 shift tiles × 7 turmas
     assert.equal(payload.apdataHierarchy.grades.length, 14)
-    assert.ok(payload.apdataHierarchy.jornadas[0]?.steps.length >= 2)
+    assert.ok(
+      payload.apdataHierarchy.jornadas.every(
+        (j) => j.workPeriods.length === 1 || j.workPeriods.length === 2,
+      ),
+    )
+    assert.ok(
+      payload.apdataHierarchy.jornadas.every(
+        (j) => !/Almo[cç]o/i.test(j.descricao) && !j.codigo.includes('ALM'),
+      ),
+    )
     assert.ok(
       payload.apdataHierarchy.ciclos.every((c) => c.dataInicio === '2026-12-01'),
     )

@@ -151,6 +151,16 @@ describe('exportRotina1215Jornadas', () => {
     assert.ok(tree.jornadas.length >= 1)
     assert.ok(tree.jornadas.every((j) => j.kind === 'COMPOSTA' || j.kind === 'INTEGRAL'))
     assert.ok(!tree.jornadas.some((j) => j.codigo.includes('ALM')))
+    // PX-182: never “Almoço …” as a jornada piece / third top-level block
+    for (const j of tree.jornadas) {
+      assert.doesNotMatch(j.descricao, /Almo[cç]o/i)
+      assert.ok(!j.descricao.includes(' · '))
+      assert.ok(j.workPeriods.length === 1 || j.workPeriods.length === 2)
+    }
+    assert.equal(
+      tree.jornadas.map((j) => j.descricao).join(' · '),
+      '09:00–12:30 / 13:30–17:00 · 13:00–16:30 / 17:30–21:00',
+    )
 
     const text = buildRotina1215JornadasFromResult(result, {
       dataInicio: '2026-12-01',
@@ -159,18 +169,26 @@ describe('exportRotina1215Jornadas', () => {
     assert.ok(!/INSERT\s+INTO/i.test(text))
     assert.ok(!/"cpf"/i.test(text))
     assert.ok(!/CON_DssNome/i.test(text))
+    assert.doesNotMatch(text, /Almo[cç]o/i)
+    assert.ok(!/JOR-ALM-/i.test(text))
 
     const lines = text.trim().split('\n').filter(Boolean)
     const jLines = lines.filter((l) => l.startsWith(`${TX_INCLUSAO_JORNADAS};`))
     const iLines = lines.filter((l) =>
       l.startsWith(`${TX_INCLUSAO_JORNADAS_ITENS};`),
     )
-    assert.equal(jLines.length, tree.jornadas.length)
-    const expectedItems = tree.jornadas.reduce(
-      (n, j) => n + j.workPeriods.length,
-      0,
-    )
-    assert.equal(iLines.length, expectedItems)
+    assert.equal(jLines.length, 2)
+    assert.equal(iLines.length, 4) // 2 work steps × 2 tiles
+    assert.deepEqual(jLines, [
+      '29752;120531;(JOR-0900-1700)45025;(09:00–12:30 / 13:30–17:00)116457;(07:00:00)10808;(1)126242;(0)10847;(0)',
+      '29752;120531;(JOR-1300-2100)45025;(13:00–16:30 / 17:30–21:00)116457;(07:00:00)10808;(1)126242;(0)10847;(0)',
+    ])
+    assert.deepEqual(iLines, [
+      `29762;${JORNADAS_ITENS_1215_CAMPOS.cdiJornada.id};(JOR-0900-1700)${JORNADAS_ITENS_1215_CAMPOS.cdiTipoJornada.id};(1)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoInicio.id};(09:00:00)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoFim.id};(12:30:00)${JORNADAS_ITENS_1215_CAMPOS.nuiOrdem.id};(1)${JORNADAS_ITENS_1215_CAMPOS.oplDesativado.id};(0)`,
+      `29762;${JORNADAS_ITENS_1215_CAMPOS.cdiJornada.id};(JOR-0900-1700)${JORNADAS_ITENS_1215_CAMPOS.cdiTipoJornada.id};(1)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoInicio.id};(13:30:00)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoFim.id};(17:00:00)${JORNADAS_ITENS_1215_CAMPOS.nuiOrdem.id};(2)${JORNADAS_ITENS_1215_CAMPOS.oplDesativado.id};(0)`,
+      `29762;${JORNADAS_ITENS_1215_CAMPOS.cdiJornada.id};(JOR-1300-2100)${JORNADAS_ITENS_1215_CAMPOS.cdiTipoJornada.id};(1)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoInicio.id};(13:00:00)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoFim.id};(16:30:00)${JORNADAS_ITENS_1215_CAMPOS.nuiOrdem.id};(1)${JORNADAS_ITENS_1215_CAMPOS.oplDesativado.id};(0)`,
+      `29762;${JORNADAS_ITENS_1215_CAMPOS.cdiJornada.id};(JOR-1300-2100)${JORNADAS_ITENS_1215_CAMPOS.cdiTipoJornada.id};(1)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoInicio.id};(17:30:00)${JORNADAS_ITENS_1215_CAMPOS.hrdHoraMinutoFim.id};(21:00:00)${JORNADAS_ITENS_1215_CAMPOS.nuiOrdem.id};(2)${JORNADAS_ITENS_1215_CAMPOS.oplDesativado.id};(0)`,
+    ])
     // All 29752 before 29762
     const firstItemIdx = lines.findIndex((l) =>
       l.startsWith(`${TX_INCLUSAO_JORNADAS_ITENS};`),

@@ -283,6 +283,13 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.ok(tree.jornadas.every((j) => j.workPeriods.length === 2))
     assert.ok(tree.jornadas.some((j) => j.descricao.includes(' / ')))
     assert.ok(!tree.jornadas.some((j) => j.codigo.includes('ALM')))
+    assert.deepEqual(
+      tree.jornadas.map((j) => j.descricao).sort(),
+      ['09:00–12:30 / 13:30–17:00', '13:00–16:30 / 17:30–21:00'].sort(),
+    )
+    for (const j of tree.jornadas) {
+      assert.doesNotMatch(j.descricao, /Almo[cç]o/i)
+    }
     assert.ok(tree.horarios.length >= 2)
     // DEFAULT OH 09–21 → 2 tiles × 7 turmas
     assert.equal(tree.grades.length, 14)
