@@ -1,14 +1,17 @@
 /**
- * Passo 5 — Filial / CC / Sindicato filters (Etapa 4).
- * Reflects segmented OH + collective framing when narrowing results.
+ * Passo 5 — Filial / CC / Sindicato filters.
+ * CC supports busca por código e/ou descrição (dual-label options).
  */
 
-import type { DossierEstablishmentOption } from '../utils/resultsDossier'
-import type { DossierSindicatoOption } from '../utils/resultsDossier'
+import type {
+  DossierCentroCustoOption,
+  DossierEstablishmentOption,
+  DossierSindicatoOption,
+} from '../utils/resultsDossier'
 
 export type ResultsScopeFiltersProps = {
   establishments: DossierEstablishmentOption[]
-  ccOptions: string[]
+  ccOptions: DossierCentroCustoOption[]
   sindicatoOptions: DossierSindicatoOption[]
   filterCnpj: string
   filterCc: string
@@ -34,6 +37,10 @@ export function ResultsScopeFilters({
   totalCount,
 }: ResultsScopeFiltersProps) {
   const active = Boolean(filterCnpj || filterCc || filterSindicato)
+
+  const ccSelectValue = ccOptions.some((o) => o.key === filterCc)
+    ? filterCc
+    : ''
 
   return (
     <div
@@ -62,8 +69,17 @@ export function ResultsScopeFilters({
               onFilterCnpj(next)
               if (filterCc && next) {
                 const est = establishments.find((x) => x.key === next)
-                if (est && !est.centroCustos.includes(filterCc)) {
-                  onFilterCc('')
+                if (
+                  est &&
+                  !est.centroCustos.includes(filterCc) &&
+                  !ccOptions.some(
+                    (o) =>
+                      o.key === filterCc &&
+                      est.centroCustos.includes(o.key),
+                  )
+                ) {
+                  // Keep free-text search; clear only exact picks outside filial.
+                  if (ccSelectValue) onFilterCc('')
                 }
               }
             }}
@@ -87,17 +103,26 @@ export function ResultsScopeFilters({
             Centro de custo
           </span>
           <select
-            value={filterCc}
+            value={ccSelectValue}
             onChange={(e) => onFilterCc(e.target.value)}
             className="mt-1 block min-h-10 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm"
           >
             <option value="">Todos os centros</option>
             {ccOptions.map((cc) => (
-              <option key={cc} value={cc}>
-                {cc}
+              <option key={cc.key} value={cc.key}>
+                {cc.label}
               </option>
             ))}
           </select>
+          <input
+            type="search"
+            value={filterCc}
+            onChange={(e) => onFilterCc(e.target.value)}
+            placeholder="Buscar código ou descrição…"
+            className="mt-1 block min-h-9 w-full border border-[var(--color-line)] bg-white px-2 py-1 text-sm"
+            aria-label="Buscar centro de custo por código ou descrição"
+            data-testid="results-cc-search"
+          />
         </label>
         <label className="block text-xs text-[var(--color-ink)]">
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">

@@ -24,15 +24,17 @@ describe('OHScopeRule helpers (Etapa 1)', () => {
     assert.equal(isOHScopeType('global'), true)
     assert.equal(isOHScopeType('cargo'), true)
     assert.equal(isOHScopeType('centro_custo'), true)
+    assert.equal(isOHScopeType('sindicato'), true)
     assert.equal(isOHScopeType('publico'), true)
     assert.equal(isOHScopeType('filial'), false)
     assert.equal(isOHScopeType(null), false)
   })
 
-  it('documents cascade priority cargo → CC → publico → global', () => {
+  it('documents cascade priority cargo → CC → sindicato → publico → global', () => {
     assert.deepEqual([...OH_SCOPE_CASCADE_PRIORITY], [
       'cargo',
       'centro_custo',
+      'sindicato',
       'publico',
       'global',
     ])
@@ -254,6 +256,16 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
       dias_semana: [],
     },
   }
+  const sindicatoRule: OHScopeRule = {
+    scope_type: 'sindicato',
+    target_value: '12',
+    target_label: 'Sindicato Metalúrgicos',
+    operating_hours: {
+      abertura: '07:30',
+      fechamento: '16:30',
+      dias_semana: [],
+    },
+  }
   const publicoRule: OHScopeRule = {
     scope_type: 'publico',
     target_value: 'Administrativo',
@@ -272,7 +284,13 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
       dias_semana: [],
     },
   }
-  const allRules = [globalRule, publicoRule, ccRule, cargoRule]
+  const allRules = [
+    globalRule,
+    publicoRule,
+    sindicatoRule,
+    ccRule,
+    cargoRule,
+  ]
 
   it('falls back to wizard operatingHours when ohScopeRules omitted', () => {
     const r = resolveOperatingHoursForEntity(
@@ -344,10 +362,46 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
     assert.deepEqual(r.hours.default, { openHour: 9.5, closeHour: 18.5 })
   })
 
-  it('falls through to publico when cargo and CC miss', () => {
+  it('falls through to sindicato when cargo and CC miss', () => {
     const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
       cargo: 'Gerente',
       centroCusto: 'CC-999',
+      codSindicato: '12',
+      nomeSindicato: 'Sindicato Metalúrgicos',
+      publico: 'administrativo',
+    })
+    assert.equal(r.scopeType, 'sindicato')
+    assert.equal(r.targetValue, '12')
+    assert.equal(r.targetLabel, 'Sindicato Metalúrgicos')
+    assert.deepEqual(r.hours.default, { openHour: 7.5, closeHour: 16.5 })
+  })
+
+  it('matches sindicato by nome when cod differs', () => {
+    const rules: OHScopeRule[] = [
+      globalRule,
+      {
+        scope_type: 'sindicato',
+        target_value: 'Sindicato Metalúrgicos',
+        operating_hours: {
+          abertura: '08:15',
+          fechamento: '17:15',
+          dias_semana: [],
+        },
+      },
+    ]
+    const r = resolveOperatingHoursForEntity(rules, DEFAULT_OPERATING_HOURS, {
+      codSindicato: '99',
+      nomeSindicato: 'sindicato  metalúrgicos',
+    })
+    assert.equal(r.scopeType, 'sindicato')
+    assert.deepEqual(r.hours.default, { openHour: 8.25, closeHour: 17.25 })
+  })
+
+  it('falls through to publico when cargo, CC and sindicato miss', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'Gerente',
+      centroCusto: 'CC-999',
+      codSindicato: '0',
       publico: 'administrativo',
     })
     assert.equal(r.scopeType, 'publico')
@@ -372,6 +426,7 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
       cargo: 'Operador',
       codCc: 'CC-102',
       centroCusto: 'CC-102',
+      codSindicato: '12',
     })
     const r = resolveOperatingHoursForEntity(
       allRules,
@@ -381,22 +436,48 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
     assert.equal(r.scopeType, 'cargo')
   })
 
-  it('conflict: CC wins over publico when both match (cargo misses)', () => {
+  it('conflict: CC wins over sindicato and publico when cargo misses', () => {
     const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
       cargo: 'Gerente',
       centroCusto: 'CC-102',
+      codSindicato: '12',
       publico: 'Administrativo',
     })
     assert.equal(r.scopeType, 'centro_custo')
     assert.deepEqual(r.hours.default, { openHour: 7, closeHour: 15 })
   })
 
-  it('conflict: publico wins over global when cargo and CC miss', () => {
+  it('conflict: sindicato wins over publico when cargo and CC miss', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      codSindicato: '12',
+      publico: 'Administrativo',
+    })
+    assert.equal(r.scopeType, 'sindicato')
+    assert.equal(r.hours.default.openHour, 7.5)
+  })
+
+  it('conflict: publico wins over global when higher scopes miss', () => {
     const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
       publico: 'Administrativo',
     })
     assert.equal(r.scopeType, 'publico')
     assert.equal(r.hours.default.openHour, 8)
+  })
+
+  it('parseOHScopeRule keeps optional target_label for CC dual display', () => {
+    const rule = parseOHScopeRule({
+      scope_type: 'centro_custo',
+      target_value: '01.02',
+      target_label: 'Loja Centro',
+      operating_hours: {
+        abertura: '09:00',
+        fechamento: '18:00',
+        dias_semana: [],
+      },
+    })
+    assert.ok(rule)
+    assert.equal(rule!.target_value, '01.02')
+    assert.equal(rule!.target_label, 'Loja Centro')
   })
 
   it('empty rules array uses wizard OH (global fallback)', () => {

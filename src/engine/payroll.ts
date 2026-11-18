@@ -674,6 +674,27 @@ export function centroCustoDisplayLabel(opts: {
   return code || 'SEM_CC'
 }
 
+/**
+ * Dual-label CC for pickers / filters: `CODE — Descrição` when both exist
+ * and differ; otherwise code or description alone.
+ */
+export function formatCentroCustoCodeDesc(opts: {
+  centroCusto?: string | null
+  codCc?: string | null
+  descCc?: string | null
+}): string {
+  const code = (opts.codCc ?? opts.centroCusto ?? '').trim()
+  const desc = (opts.descCc ?? '').trim()
+  if (
+    code &&
+    desc &&
+    code.toLocaleLowerCase('pt-BR') !== desc.toLocaleLowerCase('pt-BR')
+  ) {
+    return `${code} — ${desc}`
+  }
+  return desc || code || 'SEM_CC'
+}
+
 export interface CostCenterTotals {
   centroCusto: string
   /** Optional CC code from Folha `cod_cc` (when distinct from centroCusto). */

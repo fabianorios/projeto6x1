@@ -294,6 +294,7 @@ function resolveDemandOperatingHours(
     ohScopeMatch: {
       scopeType: resolved.scopeType,
       targetValue: resolved.targetValue,
+      ...(resolved.targetLabel ? { targetLabel: resolved.targetLabel } : {}),
     },
   }
 }

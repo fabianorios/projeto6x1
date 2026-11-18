@@ -3,7 +3,10 @@
  */
 
 import { cnpjDigits, formatCnpjDisplay } from '../apdata/cnpj'
-import type { PayrollRow } from '../engine/payroll'
+import {
+  formatCentroCustoCodeDesc,
+  type PayrollRow,
+} from '../engine/payroll'
 import type { CostCenterResult } from '../engine/types'
 
 export type DossierSectionId = 'executivo' | 'operacional' | 'cadastral'
@@ -87,23 +90,98 @@ export function dossierEstablishmentOptions(
     .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
 }
 
-/** Centro de custo options for cadastral filter. */
+export interface DossierCentroCustoOption {
+  /** Filter key — prefer `cod_cc`, else `centro_custo`. */
+  key: string
+  /** Dual label: `CODE — Descrição` when both exist. */
+  label: string
+  code: string
+  desc: string
+}
+
+/** Centro de custo options for Results filter (código + descrição). */
 export function dossierCentroCustoOptions(
   byCostCenter: CostCenterResult[],
   payrollRows?: PayrollRow[] | null,
-): string[] {
-  const set = new Set<string>()
+): DossierCentroCustoOption[] {
+  const map = new Map<string, DossierCentroCustoOption>()
+
+  function upsert(opts: {
+    key: string
+    code: string
+    desc: string
+  }) {
+    const key = opts.key.trim()
+    if (!key) return
+    const prev = map.get(key)
+    const desc = opts.desc.trim() || prev?.desc || ''
+    const code = opts.code.trim() || prev?.code || key
+    map.set(key, {
+      key,
+      code,
+      desc,
+      label: formatCentroCustoCodeDesc({
+        codCc: code,
+        centroCusto: key,
+        descCc: desc,
+      }),
+    })
+  }
+
   for (const c of byCostCenter) {
-    const cc = c.centroCusto.trim()
-    if (cc) set.add(cc)
+    const key = (c.codCc ?? c.centroCusto ?? '').trim() || c.centroCusto.trim()
+    upsert({
+      key: key || c.centroCusto.trim(),
+      code: (c.codCc ?? c.centroCusto ?? '').trim(),
+      desc: (c.descCc ?? '').trim(),
+    })
   }
   if (payrollRows) {
     for (const r of payrollRows) {
-      const cc = (r.codCc ?? r.centroCusto ?? '').trim()
-      if (cc) set.add(cc)
+      const key = (r.codCc ?? r.centroCusto ?? '').trim()
+      if (!key) continue
+      upsert({
+        key,
+        code: (r.codCc ?? r.centroCusto ?? '').trim(),
+        desc: (r.descCc ?? '').trim(),
+      })
     }
   }
-  return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  return [...map.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, 'pt-BR'),
+  )
+}
+
+/** Keys only — for hierarchy / resolveVisible helpers. */
+export function dossierCentroCustoKeys(
+  options: DossierCentroCustoOption[],
+): string[] {
+  return options.map((o) => o.key)
+}
+
+/**
+ * True when a cost-center row matches the CC filter/search string.
+ * Exact key/code match, or case-insensitive substring on code / description.
+ */
+export function centroCustoMatchesSearch(
+  c: {
+    centroCusto?: string | null
+    codCc?: string | null
+    descCc?: string | null
+  },
+  filterCc: string,
+): boolean {
+  const q = filterCc.trim()
+  if (!q) return true
+  const key = (c.centroCusto ?? '').trim()
+  const code = (c.codCc ?? c.centroCusto ?? '').trim()
+  const desc = (c.descCc ?? '').trim()
+  if (key === q || code === q) return true
+  const nq = q.toLocaleLowerCase('pt-BR')
+  if (code.toLocaleLowerCase('pt-BR').includes(nq)) return true
+  if (key.toLocaleLowerCase('pt-BR').includes(nq)) return true
+  if (desc.toLocaleLowerCase('pt-BR').includes(nq)) return true
+  return false
 }
 
 export interface DossierSindicatoOption {
@@ -143,9 +221,10 @@ export function dossierSindicatoOptions(
 }
 
 /**
- * Filter CostCenterResult rows by Filial/CNPJ, CC, and/or Sindicato.
- * Empty string on an axis = no restriction. Uses dominant sindicato on CC
- * plus Folha rows when present (pass-through without regrouping HC).
+ * Filter CostCenterResult rows by Filial/CNPJ, CC (code/desc search),
+ * and/or Sindicato. Empty string on an axis = no restriction. Uses dominant
+ * sindicato on CC plus Folha rows when present (pass-through without
+ * regrouping HC).
  */
 export function filterCostCentersByDossier(opts: {
   centers: CostCenterResult[]
@@ -183,10 +262,31 @@ export function filterCostCentersByDossier(opts: {
       const dig = cnpjDigits(c.cnpjCompleto)
       if (dig !== filterCnpjKey) return false
     }
-    if (filterCc) {
-      const cc = c.centroCusto.trim()
-      const cod = (c.codCc ?? '').trim()
-      if (cc !== filterCc && cod !== filterCc) return false
+    if (filterCc && !centroCustoMatchesSearch(c, filterCc)) {
+      // Folha may carry desc_cc when the CC aggregate does not.
+      if (payrollRows?.length) {
+        const dig = cnpjDigits(c.cnpjCompleto)
+        const key = c.centroCusto.trim()
+        const hit = payrollRows.some((r) => {
+          const rCc = (r.centroCusto ?? r.codCc ?? '').trim()
+          if (rCc !== key && (r.codCc ?? '').trim() !== key) return false
+          if (dig.length >= 8) {
+            const rDig = cnpjDigits(r.cnpjCompleto)
+            if (rDig.length >= 8 && rDig !== dig) return false
+          }
+          return centroCustoMatchesSearch(
+            {
+              centroCusto: r.centroCusto,
+              codCc: r.codCc,
+              descCc: r.descCc ?? c.descCc,
+            },
+            filterCc,
+          )
+        })
+        if (!hit) return false
+      } else {
+        return false
+      }
     }
     if (filterSindicatoKey) {
       const cod = (c.codSindicato ?? '').trim()
@@ -208,14 +308,23 @@ export function filterCostCentersByDossier(opts: {
 /**
  * Which CC codes remain visible given Filial/CNPJ + CC filters.
  * Empty filter string = no restriction on that axis.
+ * `filterCc` accepts exact key or substring search on code/desc via
+ * `ccOptions` when provided.
  */
 export function resolveVisibleCentroCustos(opts: {
   allCentroCustos: string[]
   establishments: DossierEstablishmentOption[]
   filterCnpjKey: string
   filterCc: string
+  ccOptions?: DossierCentroCustoOption[]
 }): string[] | null {
-  const { allCentroCustos, establishments, filterCnpjKey, filterCc } = opts
+  const {
+    allCentroCustos,
+    establishments,
+    filterCnpjKey,
+    filterCc,
+    ccOptions,
+  } = opts
   let allowed: Set<string> | null = null
 
   if (filterCnpjKey) {
@@ -225,10 +334,22 @@ export function resolveVisibleCentroCustos(opts: {
   }
 
   if (filterCc) {
+    const q = filterCc.trim()
+    const matched = allCentroCustos.filter((cc) => {
+      if (cc === q) return true
+      const opt = ccOptions?.find((o) => o.key === cc)
+      if (!opt) {
+        return cc.toLocaleLowerCase('pt-BR').includes(q.toLocaleLowerCase('pt-BR'))
+      }
+      return centroCustoMatchesSearch(
+        { centroCusto: opt.key, codCc: opt.code, descCc: opt.desc },
+        q,
+      )
+    })
     if (allowed) {
-      return allowed.has(filterCc) ? [filterCc] : []
+      return matched.filter((cc) => allowed!.has(cc))
     }
-    return allCentroCustos.includes(filterCc) ? [filterCc] : []
+    return matched
   }
 
   if (allowed) {

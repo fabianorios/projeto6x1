@@ -581,6 +581,8 @@ export function simulate(input: SimulationInput): SimulationResult {
             cargo: c.cargo,
             codCargo: c.codCargo,
             descCargo: c.descCargo,
+            codSindicato: c.codSindicato,
+            nomeSindicato: c.nomeSindicato,
           }),
         }
       })
@@ -789,6 +791,8 @@ function buildCostCenterResults(
         cargo: agg.cargo,
         codCargo: agg.codCargo,
         descCargo: agg.descCargo,
+        codSindicato: agg.codSindicato,
+        nomeSindicato: agg.nomeSindicato,
       }),
     )
 
@@ -822,6 +826,9 @@ function buildCostCenterResults(
       ohScopeMatch: {
         scopeType: ohResolution.scopeType,
         targetValue: ohResolution.targetValue,
+        ...(ohResolution.targetLabel
+          ? { targetLabel: ohResolution.targetLabel }
+          : {}),
       },
       operatingHours: ohResolution.hours,
       codSindicato: agg.codSindicato,

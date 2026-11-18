@@ -58,8 +58,16 @@ const ohScopeWindowSchema = z.object({
 });
 
 const ohScopeRuleSchema = z.object({
-  scope_type: z.enum(["global", "publico", "centro_custo", "cargo"]),
+  scope_type: z.enum([
+    "global",
+    "publico",
+    "centro_custo",
+    "sindicato",
+    "cargo",
+  ]),
   target_value: z.string(),
+  /** Optional companion label (CC description / sindicato name). */
+  target_label: z.string().optional(),
   operating_hours: ohScopeWindowSchema,
 });
 

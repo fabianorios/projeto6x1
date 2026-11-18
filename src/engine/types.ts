@@ -127,9 +127,9 @@ export interface SimulationInput {
    */
   operatingHours: OperatingHours
   /**
-   * Optional segmented OH rules (cargo → centro_custo → publico → global).
-   * Motor resolves per Folha row / CC via cascade; sims without this field
-   * keep using `operatingHours` alone.
+   * Optional segmented OH rules (cargo → centro_custo → sindicato →
+   * publico → global). Motor resolves per Folha row / CC via cascade; sims
+   * without this field keep using `operatingHours` alone.
    */
   ohScopeRules?: OHScopeRule[]
   /**
