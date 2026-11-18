@@ -23,6 +23,8 @@ Transações de inclusão usadas na carga de horários (ids via botão `?` no ob
 
 Prioridade de afinamento: `29752` → `29762` → `15932`/`19762`.
 
+**Modelo Jornada + Steps (Turnocheck):** uma jornada (29752) com descrição composta (`09:00–13:00 / 14:00–18:00`); steps (29762) = 1 período contínuo ou 2 períodos de trabalho (almoço = gap, não jornada top-level). Dedup global por `JOR-{HHMM}-{HHMM}`. Horários (15932/19762) depois.
+
 Geradores de referência no Gestão: `interface-objeto` / `interface-consultar` / `interface-gerar` (`fabianorios/gestaoconsultoria-core`).
 
 ---

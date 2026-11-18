@@ -80,6 +80,7 @@ export {
   defaultApdataDataInicio,
   deriveApdataCandidates,
   formatHorarioLabel,
+  formatJornadaCompositionLabel,
   formatJornadaLabel,
   formatTurmaLabel,
   formatWorkdayAbbrev,
@@ -106,6 +107,7 @@ export type {
   ApdataShiftWindow,
   ApdataStepTipo,
   ApdataStructureCandidates,
+  ApdataWorkPeriod,
   BuildApdataHierarchyOptions,
 } from './apdata-hierarchy'
 export {

@@ -2,7 +2,8 @@
  * Apdata-faithful cadastral hierarchy for ERP parametrization / carga.
  *
  * Guided sequence (consultant UX):
- *   1. Jornadas e Steps — work blocks named by start/end; optional lunch jornada
+ *   1. Jornadas + Steps — one jornada per shift clock; work periods as steps
+ *      (continuous OR two work blocks with lunch gap — never lunch as top-level jornada)
  *   2. Horários — abbreviated workdays + entry/exit; user selects which to create
  *   3. Ciclos de Horários — work×off matrix + required Data Início
  *   4. Grades (Vagas) — turmas T1…T7 × CC codes (no PII)
@@ -45,11 +46,27 @@ export type ApdataStepTipo =
   | 'INTERVALO_FIM'
   | 'SAIDA'
 
-/** Work-block kind for split jornadas (Passo 1). */
-export type ApdataJornadaKind = 'MANHA' | 'ALMOCO' | 'TARDE' | 'INTEGRAL'
+/**
+ * Jornada shape (Passo 1 / rotina 1215).
+ * - INTEGRAL: one continuous work period
+ * - COMPOSTA: two work periods with lunch gap (no separate almoço jornada)
+ */
+export type ApdataJornadaKind = 'INTEGRAL' | 'COMPOSTA'
+
+/** One work window under a jornada → JornadasItens (29762) row. */
+export interface ApdataWorkPeriod {
+  /** 1-based order among work periods (JOI_NuiOrdem). */
+  ordem: number
+  startHour: number
+  endHour: number
+  /** Clock HH:MM. */
+  inicio: string
+  /** Clock HH:MM. */
+  fim: string
+}
 
 export interface ApdataJornadaStep {
-  /** 1-based sequential order (Apdata Steps). */
+  /** 1-based sequential order (UI punch preview). */
   ordem: number
   tipo: ApdataStepTipo
   /** Clock HH:MM (24:00 allowed as end-of-day). */
@@ -58,18 +75,21 @@ export interface ApdataJornadaStep {
 
 export interface ApdataJornada {
   codigo: string
+  /** Composition label, e.g. `09:00–13:00 / 14:00–18:00` or `09:00–18:00`. */
   descricao: string
-  /** Planned daily work hours for this block. */
+  /** Planned daily *work* hours (excludes lunch gap). */
   horasDia: number
+  /** Work periods → JornadasItens (unique with the parent jornada). */
+  workPeriods: ApdataWorkPeriod[]
+  /** Punch preview derived from work periods (entrada/saída per period). */
   steps: ApdataJornadaStep[]
-  /** Split-block role (manhã / almoço / tarde / integral). */
   kind: ApdataJornadaKind
 }
 
 export interface ApdataHorario {
   codigo: string
   descricao: string
-  /** Jornada codes bound to this horário (manhã, [almoço], tarde). */
+  /** Bound jornada codes (one composite jornada per shift clock). */
   jornadaCodigos: string[]
   cargaSemanalHoras: number | null
   /** Optional reference to dominant Apdata horário code (Atual). */
@@ -156,8 +176,9 @@ export interface BuildApdataHierarchyOptions {
   /** Grade type — proposed quadro uses VAGAS (no PII). */
   tipoGrade?: ApdataGradeTipo
   /**
-   * Create a separate jornada de almoço between manhã/tarde blocks.
-   * Default: true when the shift admits a meal window (≥6h and &lt;24h).
+   * When true (default if shift ≥6h): split into two work periods with lunch gap.
+   * When false: one continuous work period (outer entrada→saída).
+   * Never creates a top-level “jornada de almoço”.
    */
   includeLunchJornada?: boolean
   /**
@@ -172,9 +193,11 @@ export interface ApdataJornadaCandidate {
   codigo: string
   descricao: string
   kind: ApdataJornadaKind
+  /** Outer shift clock (código JOR-{start}-{end}). */
   startHour: number
   endHour: number
   horasDia: number
+  workPeriods: ApdataWorkPeriod[]
   steps: ApdataJornadaStep[]
 }
 
@@ -314,15 +337,13 @@ export function formatHorarioLabel(
   return `${formatWorkdayAbbrev(workDays)} ${formatHourClock(startHour)}–${formatHourClock(endHour)}`
 }
 
-/** Jornada display name from block start/end (or Almoço …). */
+/** Single-period jornada label (`HH:MM–HH:MM`). */
 export function formatJornadaLabel(
   startHour: number,
   endHour: number,
-  kind: ApdataJornadaKind = 'INTEGRAL',
+  _kind: ApdataJornadaKind = 'INTEGRAL',
 ): string {
-  const range = `${formatHourClock(startHour)}–${formatHourClock(endHour)}`
-  if (kind === 'ALMOCO') return `Almoço ${range}`
-  return range
+  return `${formatHourClock(startHour)}–${formatHourClock(endHour)}`
 }
 
 /**
@@ -376,11 +397,10 @@ export function applyTurmaHourLabels(
 export function jornadaCodigoFor(
   startHour: number,
   endHour: number,
-  kind: ApdataJornadaKind = 'INTEGRAL',
+  _kind: ApdataJornadaKind = 'INTEGRAL',
 ): string {
-  const base = `JOR-${clockCode(startHour)}-${clockCode(endHour)}`
-  if (kind === 'ALMOCO') return `JOR-ALM-${clockCode(startHour)}-${clockCode(endHour)}`
-  return base
+  // One jornada identity per outer clock — never JOR-ALM-* top-level.
+  return `JOR-${clockCode(startHour)}-${clockCode(endHour)}`
 }
 
 export function horarioCodigoFor(
@@ -397,7 +417,7 @@ export function horarioCodigoFor(
 
 /**
  * Meal window centered in the shift (1h) when span ≥6h and &lt;24h.
- * Used to split manhã / almoço / tarde jornadas.
+ * Used to split one jornada into two work periods (lunch = gap, not a jornada).
  */
 export function resolveMealWindow(
   startHour: number,
@@ -412,21 +432,29 @@ export function resolveMealWindow(
   }
 }
 
-/** Two-step block: entrada → saída (Passo 1 A/B and lunch). */
+/** Two-step punch preview for one work period: entrada → saída. */
 export function buildBlockJornadaSteps(
   startHour: number,
   endHour: number,
+  ordemOffset = 0,
 ): ApdataJornadaStep[] {
   return [
-    { ordem: 1, tipo: 'ENTRADA', hora: formatHourClock(startHour) },
-    { ordem: 2, tipo: 'SAIDA', hora: formatHourClock(endHour) },
+    {
+      ordem: ordemOffset + 1,
+      tipo: 'ENTRADA',
+      hora: formatHourClock(startHour),
+    },
+    {
+      ordem: ordemOffset + 2,
+      tipo: 'SAIDA',
+      hora: formatHourClock(endHour),
+    },
   ]
 }
 
 /**
- * Sequential Apdata Steps for one monolithic jornada from entrada/saída.
+ * Sequential punch preview for one jornada (legacy helper).
  * Spans ≥6h insert a 1h meal interval centered in the shift.
- * Kept for compatibility; preferred path uses split blocks + lunch jornada.
  */
 export function buildJornadaSteps(
   startHour: number,
@@ -466,41 +494,86 @@ export function buildJornadaSteps(
   return steps
 }
 
-function candidateFromBlock(
+function workPeriodFrom(
+  ordem: number,
   startHour: number,
   endHour: number,
-  kind: ApdataJornadaKind,
-): ApdataJornadaCandidate {
-  const horasDia = shiftHours(startHour, endHour)
+): ApdataWorkPeriod {
   return {
-    codigo: jornadaCodigoFor(startHour, endHour, kind),
-    descricao: formatJornadaLabel(startHour, endHour, kind),
-    kind,
+    ordem,
     startHour,
     endHour,
-    horasDia,
-    steps: buildBlockJornadaSteps(startHour, endHour),
+    inicio: formatHourClock(startHour),
+    fim: formatHourClock(endHour),
   }
 }
 
-/** Build Passo 1 jornada candidates for a shift (+ optional lunch). */
+/** Description = composition of work periods (PT en-dash + ` / `). */
+export function formatJornadaCompositionLabel(
+  periods: readonly Pick<ApdataWorkPeriod, 'inicio' | 'fim'>[],
+): string {
+  return periods.map((p) => `${p.inicio}–${p.fim}`).join(' / ')
+}
+
+function stepsFromWorkPeriods(
+  periods: readonly ApdataWorkPeriod[],
+): ApdataJornadaStep[] {
+  const steps: ApdataJornadaStep[] = []
+  for (const p of periods) {
+    steps.push(
+      ...buildBlockJornadaSteps(p.startHour, p.endHour, steps.length),
+    )
+  }
+  return steps
+}
+
+function candidateFromPeriods(
+  startHour: number,
+  endHour: number,
+  periods: ApdataWorkPeriod[],
+): ApdataJornadaCandidate {
+  const kind: ApdataJornadaKind =
+    periods.length >= 2 ? 'COMPOSTA' : 'INTEGRAL'
+  const horasDia = periods.reduce(
+    (sum, p) => sum + shiftHours(p.startHour, p.endHour),
+    0,
+  )
+  return {
+    codigo: jornadaCodigoFor(startHour, endHour, kind),
+    descricao: formatJornadaCompositionLabel(periods),
+    kind,
+    startHour,
+    endHour,
+    horasDia: Math.round(horasDia * 100) / 100,
+    workPeriods: periods,
+    steps: stepsFromWorkPeriods(periods),
+  }
+}
+
+/**
+ * Build Passo 1 jornada candidates for a shift.
+ * Always **one** jornada per outer clock. Optional lunch split → two work
+ * periods under that jornada (not MANHA/TARDE/ALMOCO as separate jornadas).
+ */
 export function buildJornadaCandidates(
   startHour: number,
   endHour: number,
-  includeLunchJornada: boolean,
+  splitLunch: boolean,
 ): ApdataJornadaCandidate[] {
   const meal = resolveMealWindow(startHour, endHour)
-  if (!meal) {
-    return [candidateFromBlock(startHour, endHour, 'INTEGRAL')]
+  if (!meal || !splitLunch) {
+    return [
+      candidateFromPeriods(startHour, endHour, [
+        workPeriodFrom(1, startHour, endHour),
+      ]),
+    ]
   }
-  const out: ApdataJornadaCandidate[] = [
-    candidateFromBlock(startHour, meal.breakStart, 'MANHA'),
+  return [
+    candidateFromPeriods(startHour, endHour, [
+      workPeriodFrom(1, startHour, meal.breakStart),
+      workPeriodFrom(2, meal.breakEnd, endHour),
+    ]),
   ]
-  if (includeLunchJornada) {
-    out.push(candidateFromBlock(meal.breakStart, meal.breakEnd, 'ALMOCO'))
-  }
-  out.push(candidateFromBlock(meal.breakEnd, endHour, 'TARDE'))
-  return out
 }
 
 /**
@@ -757,6 +830,7 @@ export function buildApdataHierarchy(
       codigo: jc.codigo,
       descricao: jc.descricao,
       horasDia: jc.horasDia,
+      workPeriods: jc.workPeriods.map((p) => ({ ...p })),
       steps: jc.steps,
       kind: jc.kind,
     })

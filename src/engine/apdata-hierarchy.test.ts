@@ -47,10 +47,9 @@ describe('apdata-hierarchy naming', () => {
     )
   })
 
-  it('formatJornadaLabel names blocks; lunch prefixes Almoço', () => {
-    assert.equal(formatJornadaLabel(9, 12, 'MANHA'), '09:00–12:00')
-    assert.equal(formatJornadaLabel(12, 13, 'ALMOCO'), 'Almoço 12:00–13:00')
-    assert.equal(formatJornadaLabel(13, 17, 'TARDE'), '13:00–17:00')
+  it('formatJornadaLabel names a single period', () => {
+    assert.equal(formatJornadaLabel(9, 12), '09:00–12:00')
+    assert.equal(formatJornadaLabel(13, 17), '13:00–17:00')
   })
 
   it('formatTurmaLabel prefixes entrada–saída before T# and CC', () => {
@@ -82,9 +81,10 @@ describe('apdata-hierarchy naming', () => {
     assert.equal(labeled[0]?.label, '09:00–17:00 · T1 · Geral')
   })
 
-  it('jornada/horario códigos follow clock + day keys', () => {
-    assert.equal(jornadaCodigoFor(9, 12, 'MANHA'), 'JOR-0900-1200')
-    assert.equal(jornadaCodigoFor(12, 13, 'ALMOCO'), 'JOR-ALM-1200-1300')
+  it('jornada/horario códigos follow clock + day keys (no JOR-ALM)', () => {
+    assert.equal(jornadaCodigoFor(9, 17), 'JOR-0900-1700')
+    assert.equal(jornadaCodigoFor(9, 12, 'INTEGRAL'), 'JOR-0900-1200')
+    assert.ok(!jornadaCodigoFor(12, 13).includes('ALM'))
     assert.equal(workdayKey(['seg', 'ter', 'qua', 'qui', 'sex']), 'SEGSEX')
     assert.equal(workdayKey(['ter', 'qua', 'qui', 'sex', 'sab']), 'TERSAB')
     assert.equal(workdayKey(['seg', 'qua', 'sex']), 'SEGQUASEX')
@@ -214,27 +214,29 @@ describe('apdata-hierarchy jornadas/steps', () => {
     assert.equal(steps.at(-1)?.hora, '17:00')
   })
 
-  it('resolveMealWindow + split candidates: A manhã, optional lunch, B tarde', () => {
+  it('resolveMealWindow + split: one composta jornada with two work periods', () => {
     const meal = resolveMealWindow(9, 17)
     assert.ok(meal)
     assert.equal(meal!.breakStart, 12.5)
     assert.equal(meal!.breakEnd, 13.5)
     const withLunch = buildJornadaCandidates(9, 17, true)
-    assert.equal(withLunch.length, 3)
-    assert.equal(withLunch[0]?.kind, 'MANHA')
-    assert.equal(withLunch[0]?.steps[0]?.tipo, 'ENTRADA')
-    assert.equal(withLunch[0]?.steps[0]?.hora, '09:00')
-    assert.equal(withLunch[0]?.steps[1]?.tipo, 'SAIDA')
-    assert.equal(withLunch[0]?.steps[1]?.hora, '12:30')
-    assert.equal(withLunch[1]?.kind, 'ALMOCO')
-    assert.equal(withLunch[1]?.descricao, 'Almoço 12:30–13:30')
-    assert.equal(withLunch[2]?.kind, 'TARDE')
-    assert.equal(withLunch[2]?.steps[0]?.hora, '13:30')
-    assert.equal(withLunch[2]?.steps[1]?.hora, '17:00')
+    assert.equal(withLunch.length, 1)
+    assert.equal(withLunch[0]?.kind, 'COMPOSTA')
+    assert.equal(withLunch[0]?.codigo, 'JOR-0900-1700')
+    assert.equal(withLunch[0]?.descricao, '09:00–12:30 / 13:30–17:00')
+    assert.equal(withLunch[0]?.horasDia, 7)
+    assert.equal(withLunch[0]?.workPeriods.length, 2)
+    assert.equal(withLunch[0]?.workPeriods[0]?.inicio, '09:00')
+    assert.equal(withLunch[0]?.workPeriods[0]?.fim, '12:30')
+    assert.equal(withLunch[0]?.workPeriods[1]?.inicio, '13:30')
+    assert.equal(withLunch[0]?.workPeriods[1]?.fim, '17:00')
+    assert.ok(!withLunch[0]?.codigo.includes('ALM'))
 
     const noLunch = buildJornadaCandidates(9, 17, false)
-    assert.equal(noLunch.length, 2)
-    assert.ok(noLunch.every((j) => j.kind !== 'ALMOCO'))
+    assert.equal(noLunch.length, 1)
+    assert.equal(noLunch[0]?.kind, 'INTEGRAL')
+    assert.equal(noLunch[0]?.descricao, '09:00–17:00')
+    assert.equal(noLunch[0]?.workPeriods.length, 1)
   })
 
   it('buildBlockJornadaSteps is entrada→saída only', () => {
@@ -249,6 +251,7 @@ describe('apdata-hierarchy jornadas/steps', () => {
     const cands = buildJornadaCandidates(9, 14, true)
     assert.equal(cands.length, 1)
     assert.equal(cands[0]?.kind, 'INTEGRAL')
+    assert.equal(cands[0]?.workPeriods.length, 1)
   })
 
   it('defaultApdataDataInicio uses scenario reference month day 1', () => {
@@ -273,11 +276,13 @@ describe('apdata-hierarchy selection + tree', () => {
     const tree = buildApdataHierarchy(result, { dataInicio: '2026-12-01' })
     assert.equal(tree.schemaVersion, APDATA_HIERARCHY_SCHEMA_VERSION)
     assert.equal(tree.dataInicio, '2026-12-01')
-    assert.ok(tree.jornadas.length >= 2)
-    assert.ok(tree.jornadas.some((j) => j.kind === 'MANHA'))
-    assert.ok(tree.jornadas.some((j) => j.kind === 'TARDE'))
+    // DEFAULT OH 09–21 → 2 tiles → 2 composite jornadas (not MANHA/TARDE/ALMOCO)
+    assert.equal(tree.jornadas.length, 2)
+    assert.ok(tree.jornadas.every((j) => j.kind === 'COMPOSTA'))
     assert.ok(tree.includeLunchJornada)
-    assert.ok(tree.jornadas.some((j) => j.kind === 'ALMOCO'))
+    assert.ok(tree.jornadas.every((j) => j.workPeriods.length === 2))
+    assert.ok(tree.jornadas.some((j) => j.descricao.includes(' / ')))
+    assert.ok(!tree.jornadas.some((j) => j.codigo.includes('ALM')))
     assert.ok(tree.horarios.length >= 2)
     // DEFAULT OH 09–21 → 2 tiles × 7 turmas
     assert.equal(tree.grades.length, 14)
@@ -298,7 +303,7 @@ describe('apdata-hierarchy selection + tree', () => {
     assert.ok(tree.centers[0]?.nodes.length === 14)
     assert.equal(tree.centers[0]?.nodes[0]?.jornadas[0]?.steps[0]?.tipo, 'ENTRADA')
     assert.ok(tree.horarios[0]?.descricao.includes('–'))
-    assert.ok(tree.horarios[0]?.jornadaCodigos.length >= 2)
+    assert.equal(tree.horarios[0]?.jornadaCodigos.length, 1)
   })
 
   it('deriveApdataCandidates exposes selectable horários with preview names', () => {
@@ -316,7 +321,8 @@ describe('apdata-hierarchy selection + tree', () => {
     const cands = deriveApdataCandidates(result)
     assert.ok(cands.horarios.length >= 1)
     assert.ok(cands.horarios.every((h) => h.id && h.descricao && h.codigo))
-    assert.ok(cands.jornadas.some((j) => j.kind === 'MANHA'))
+    assert.ok(cands.jornadas.some((j) => j.kind === 'COMPOSTA'))
+    assert.ok(cands.horarios.every((h) => h.jornadaCodigos.length === 1))
   })
 
   it('selectedHorarioIds filters which horários/grades are materialized', () => {
@@ -349,7 +355,7 @@ describe('apdata-hierarchy selection + tree', () => {
     )
   })
 
-  it('includeLunchJornada false omits almoço jornada', () => {
+  it('includeLunchJornada false keeps one continuous period per tile', () => {
     const result = simulate({
       sector: 'varejo',
       headcount: 10,
@@ -363,9 +369,10 @@ describe('apdata-hierarchy selection + tree', () => {
     })
     const tree = buildApdataHierarchy(result, { includeLunchJornada: false })
     assert.equal(tree.includeLunchJornada, false)
-    assert.ok(!tree.jornadas.some((j) => j.kind === 'ALMOCO'))
-    // OH 09–21 → 2 tiles × (manhã+tarde) without lunch
-    assert.equal(tree.jornadas.length, 4)
+    // OH 09–21 → 2 tiles → 2 integral jornadas (one period each)
+    assert.equal(tree.jornadas.length, 2)
+    assert.ok(tree.jornadas.every((j) => j.kind === 'INTEGRAL'))
+    assert.ok(tree.jornadas.every((j) => j.workPeriods.length === 1))
   })
 
   it('SEG_SEX with OH 09–21 yields T1 on both tiles (09–17 and 13–21)', () => {
