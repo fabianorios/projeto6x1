@@ -455,6 +455,7 @@ export const LIVE_SELECT_STEPS: {
       'CON_CdiCargo',
       'CON_CdiCentroCusto',
       'CON_CdiQuantidadeHoraMes',
+      'CON_CdiSindicato',
       'CON_CdiHorario',
       'CON_CdiVinculo',
       'CON_VlnSalario',
@@ -480,14 +481,21 @@ export const LIVE_SELECT_STEPS: {
   },
   {
     id: 'hmv',
-    label: 'QuantidadesHorasMes (HMV)',
+    label: 'QuantidadesHorasMes (HMV / Horas Base)',
     table: 'QuantidadesHorasMes',
     columns: [
       'HMV_CdiQuantidadeHoraMes',
       'HMV_QtnQuantidadeHoraMes',
       'HMV_QtnHorasSemanal',
     ],
-    note: 'Carga mensal/semanal do contratado.',
+    note: 'Carga mensal/semanal do contratado (Horas Base).',
+  },
+  {
+    id: 'sindicatos',
+    label: 'Sindicatos (SIN)',
+    table: 'Sindicatos',
+    columns: ['SIN_CdiSindicato', 'SIN_D1sNome', 'SIN_NusCNPJ'],
+    note: 'Via CON_CdiSindicato — nome de entidade coletiva (não PII de pessoa).',
   },
   {
     id: 'con-at',

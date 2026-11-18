@@ -172,6 +172,9 @@ export function normalizePayrollRow(
       asNullableString(raw.codHorarioAtual) ?? extras.codHorarioAtual,
     horarioTrabalhoAtual:
       asNullableString(raw.horarioTrabalhoAtual) ?? extras.horarioTrabalhoAtual,
+    codSindicato: asNullableString(raw.codSindicato) ?? extras.codSindicato,
+    nomeSindicato: asNullableString(raw.nomeSindicato) ?? extras.nomeSindicato,
+    cnpjSindicato: asNullableString(raw.cnpjSindicato) ?? extras.cnpjSindicato,
     heMediaMensalHoras: asNumber(raw.heMediaMensalHoras, 0),
     regimeFuncionamento:
       typeof raw.regimeFuncionamento === "string" &&

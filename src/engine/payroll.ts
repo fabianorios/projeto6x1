@@ -35,6 +35,9 @@ export const PAYROLL_CSV_HEADERS = [
   'cod_horario_atual',
   'horario_trabalho_atual',
   'carga_semanal_atual',
+  'cod_sindicato',
+  'nome_sindicato',
+  'cnpj_sindicato',
   'qtd_colaboradores',
   'massa_salarial_base',
   'vr_dia_medio',
@@ -97,6 +100,12 @@ export interface PayrollRow {
   codHorarioAtual: string | null
   /** Current work window HH:MM-HH:MM from JornadasItens (optional). */
   horarioTrabalhoAtual: string | null
+  /** Sindicatos.SIN_CdiSindicato via CON_CdiSindicato (aggregate OK). */
+  codSindicato: string | null
+  /** Sindicatos.SIN_D1sNome — org name, not person PII. */
+  nomeSindicato: string | null
+  /** Sindicatos.SIN_NusCNPJ (optional). */
+  cnpjSindicato: string | null
   /** Existing overtime hours/month (cascade input). */
   heMediaMensalHoras: number
   regimeFuncionamento: RegimeFuncionamento | null
@@ -143,6 +152,9 @@ export function emptyPayrollExtras(): Pick<
   | 'codVinculo'
   | 'codHorarioAtual'
   | 'horarioTrabalhoAtual'
+  | 'codSindicato'
+  | 'nomeSindicato'
+  | 'cnpjSindicato'
   | 'heMediaMensalHoras'
   | 'regimeFuncionamento'
   | 'massaSalarialBase'
@@ -168,6 +180,9 @@ export function emptyPayrollExtras(): Pick<
     codVinculo: null,
     codHorarioAtual: null,
     horarioTrabalhoAtual: null,
+    codSindicato: null,
+    nomeSindicato: null,
+    cnpjSindicato: null,
     heMediaMensalHoras: 0,
     regimeFuncionamento: null,
     massaSalarialBase: null,
@@ -605,6 +620,9 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       codVinculo: cell(cols, 'cod_vinculo') || null,
       codHorarioAtual: cell(cols, 'cod_horario_atual') || null,
       horarioTrabalhoAtual: cell(cols, 'horario_trabalho_atual') || null,
+      codSindicato: cell(cols, 'cod_sindicato') || null,
+      nomeSindicato: cell(cols, 'nome_sindicato') || null,
+      cnpjSindicato: cell(cols, 'cnpj_sindicato') || null,
       heMediaMensalHoras,
       regimeFuncionamento,
       massaSalarialBase,

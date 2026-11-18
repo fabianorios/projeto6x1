@@ -57,6 +57,10 @@ import {
   type DossierSectionId,
   type OperacionalFilialGroup,
 } from '../utils/resultsDossier'
+import {
+  LgpdNameMaskToggle,
+  initialLgpdNameMask,
+} from './LgpdNameMaskToggle'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
 import { HcIncreaseSummary } from './HcIncreaseSummary'
@@ -318,6 +322,11 @@ export function ResultsView({
   const [printMounted, setPrintMounted] = useState(false)
   const printPendingRef = useRef(false)
   const passo5MountLoggedRef = useRef(false)
+  /** LGPD: collaborator names masked by default (managerial may unmask UI). */
+  const [lgpdMaskNames, setLgpdMaskNames] = useState(initialLgpdNameMask)
+  const payrollNameSamples = (input.payrollRows ?? [])
+    .map((r) => r.nome)
+    .filter((n): n is string => Boolean(n && n.trim()))
 
   function toggleSection(id: DossierSectionId) {
     setDossier((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -634,6 +643,7 @@ export function ResultsView({
                     onClick={() =>
                       downloadAhrHandoff(result, {
                         dataInicio: apdataDataInicio,
+                        maskCollaboratorNames: lgpdMaskNames,
                       })
                     }
                     className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
@@ -675,6 +685,12 @@ export function ResultsView({
               ? ` · buffer ${input.sectorBufferPct}%`
               : ''}
           </p>
+          <LgpdNameMaskToggle
+            className="mt-3 max-w-lg"
+            maskOn={lgpdMaskNames}
+            onChange={setLgpdMaskNames}
+            sampleNames={payrollNameSamples}
+          />
         </div>
 
         <DossierSection

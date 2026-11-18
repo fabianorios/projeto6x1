@@ -16,6 +16,12 @@ export type ExtractorAggregateRow = {
   horario_trabalho_atual: string;
   escala_atual: string;
   carga_semanal_atual: number;
+  /** QuantidadesHorasMes.HMV_QtnQuantidadeHoraMes (Horas Base). */
+  carga_horaria_mensal: number;
+  /** Sindicatos via CON_CdiSindicato. */
+  cod_sindicato: string;
+  nome_sindicato: string;
+  cnpj_sindicato: string;
   qtd_colaboradores: number;
   massa_salarial_base: number;
   /** Legacy scalar; extractor emits 0 — prefer beneficios_agg. */
@@ -58,30 +64,41 @@ function pick(row: Record<string, unknown>, key: string): unknown {
 export function mapExtractorRows(
   rows: Record<string, unknown>[],
 ): ExtractorAggregateRow[] {
-  return rows.map((row) => ({
-    cod_empresa: str(pick(row, "cod_empresa")),
-    cod_filial: str(pick(row, "cod_filial")),
-    cnpj_completo: str(pick(row, "cnpj_completo")),
-    cod_cc: str(pick(row, "cod_cc"), "SEM_CC"),
-    desc_cc: str(pick(row, "desc_cc")),
-    cod_cargo: str(pick(row, "cod_cargo")),
-    desc_cargo: str(pick(row, "desc_cargo"), "NAO_INFORMADO"),
-    cod_vinculo: str(pick(row, "cod_vinculo")),
-    cod_horario_atual: str(pick(row, "cod_horario_atual")),
-    horario_trabalho_atual: str(pick(row, "horario_trabalho_atual")),
-    escala_atual: str(pick(row, "escala_atual"), "other"),
-    carga_semanal_atual: num(pick(row, "carga_semanal_atual"), 44),
-    qtd_colaboradores: num(pick(row, "qtd_colaboradores"), 0),
-    massa_salarial_base: num(pick(row, "massa_salarial_base"), 0),
-    vr_dia_medio: num(pick(row, "vr_dia_medio"), 0),
-    vt_dia_medio: num(pick(row, "vt_dia_medio"), 0),
-    qtd_passes_dia_medio: num(pick(row, "qtd_passes_dia_medio"), 0),
-    va_valor_medio: num(pick(row, "va_valor_medio"), 0),
-    assist_medica_mes: num(pick(row, "assist_medica_mes"), 0),
-    assist_odonto_mes: num(pick(row, "assist_odonto_mes"), 0),
-    dias_trabalho_mes_atual: num(pick(row, "dias_trabalho_mes_atual"), 22),
-    beneficios_agg: str(pick(row, "beneficios_agg")),
-  }));
+  return rows.map((row) => {
+    const cargaSemanal = num(pick(row, "carga_semanal_atual"), 44);
+    const cargaMensalRaw = num(pick(row, "carga_horaria_mensal"), 0);
+    return {
+      cod_empresa: str(pick(row, "cod_empresa")),
+      cod_filial: str(pick(row, "cod_filial")),
+      cnpj_completo: str(pick(row, "cnpj_completo")),
+      cod_cc: str(pick(row, "cod_cc"), "SEM_CC"),
+      desc_cc: str(pick(row, "desc_cc")),
+      cod_cargo: str(pick(row, "cod_cargo")),
+      desc_cargo: str(pick(row, "desc_cargo"), "NAO_INFORMADO"),
+      cod_vinculo: str(pick(row, "cod_vinculo")),
+      cod_horario_atual: str(pick(row, "cod_horario_atual")),
+      horario_trabalho_atual: str(pick(row, "horario_trabalho_atual")),
+      escala_atual: str(pick(row, "escala_atual"), "other"),
+      carga_semanal_atual: cargaSemanal,
+      carga_horaria_mensal:
+        cargaMensalRaw > 0
+          ? cargaMensalRaw
+          : Math.round(cargaSemanal * 5 * 100) / 100,
+      cod_sindicato: str(pick(row, "cod_sindicato")),
+      nome_sindicato: str(pick(row, "nome_sindicato")),
+      cnpj_sindicato: str(pick(row, "cnpj_sindicato")),
+      qtd_colaboradores: num(pick(row, "qtd_colaboradores"), 0),
+      massa_salarial_base: num(pick(row, "massa_salarial_base"), 0),
+      vr_dia_medio: num(pick(row, "vr_dia_medio"), 0),
+      vt_dia_medio: num(pick(row, "vt_dia_medio"), 0),
+      qtd_passes_dia_medio: num(pick(row, "qtd_passes_dia_medio"), 0),
+      va_valor_medio: num(pick(row, "va_valor_medio"), 0),
+      assist_medica_mes: num(pick(row, "assist_medica_mes"), 0),
+      assist_odonto_mes: num(pick(row, "assist_odonto_mes"), 0),
+      dias_trabalho_mes_atual: num(pick(row, "dias_trabalho_mes_atual"), 22),
+      beneficios_agg: str(pick(row, "beneficios_agg")),
+    };
+  });
 }
 
 /** Forbidden PII column names — reject if present in result set. */

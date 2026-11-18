@@ -25,6 +25,11 @@
       Estabelecimento: CON_CdiFolha → Folhas → Locais(LOC) → Empresas(EMP).
    8. Centro de custo: cod_cc = CCU_CosEstrutura (SEM_CC); desc_cc =
       CCU_D1sCentroCusto (estrutura org.; OK LGPD — sem nome de pessoa).
+   8b. Sindicato: LEFT JOIN Sindicatos (SIN_*) via CON_CdiSindicato —
+      cod_sindicato / nome_sindicato / cnpj_sindicato (entidade coletiva).
+   8c. Horas Base: LEFT JOIN QuantidadesHorasMes (HMV_*) via
+      CON_CdiQuantidadeHoraMes — carga_horaria_mensal preferindo HMV;
+      carga_semanal_atual = HMV_QtnHorasSemanal com fallback HOR.
    9. Horário trabalho atual: HorariosJornadas → Jornadas → JornadasItens (JOI_*)
       × TiposJornadas.TJO_OplTrabalhada (user: OplConsiderarTrabalho; fallback
       tipo 1=Trabalho). Períodos de trabalho ordenados (HH:MM-HH:MM), unidos
@@ -186,7 +191,9 @@ CTE_BEN_COM_CHAVES AS (
         cic.cycle_len,
         cic.work_days,
         cic.off_days,
-        ISNULL(h.HOR_QtnHorasSemanal, 44.0) AS carga_semanal,
+        ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)) AS carga_semanal,
+        ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS carga_mensal,
+        CAST(ISNULL(c.CON_CdiSindicato, 0) AS VARCHAR(20)) AS cod_sindicato,
         b.cod_tipo,
         b.desc_tipo,
         b.valor_medio
@@ -200,6 +207,8 @@ INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabe
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
+    LEFT JOIN QuantidadesHorasMes hmv ON hmv.HMV_CdiQuantidadeHoraMes = c.CON_CdiQuantidadeHoraMes
+    LEFT JOIN Sindicatos sin ON sin.SIN_CdiSindicato = c.CON_CdiSindicato
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
     WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
@@ -208,20 +217,20 @@ CTE_BEN_GRUPO AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal, cod_tipo, desc_tipo
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato,
         STRING_AGG(
             CAST(cod_tipo AS VARCHAR(20)) + '|' + desc_tipo + '|' +
             CAST(CAST(valor_medio AS DECIMAL(18,2)) AS VARCHAR(40)),
@@ -231,7 +240,7 @@ CTE_BENEFICIOS_AGG AS (
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato
 )
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
@@ -248,7 +257,11 @@ SELECT
         CAST(cic.work_days AS VARCHAR(10)) + 'x' + CAST(cic.off_days AS VARCHAR(10)),
         'other'
     ) AS escala_atual,
-    CAST(ISNULL(h.HOR_QtnHorasSemanal, 44.0) AS DECIMAL(10,2)) AS carga_semanal_atual,
+    CAST(ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)) AS DECIMAL(10,2)) AS carga_semanal_atual,
+    CAST(ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS DECIMAL(10,2)) AS carga_horaria_mensal,
+    CAST(ISNULL(c.CON_CdiSindicato, 0) AS VARCHAR(20)) AS cod_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS nome_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_NusCNPJ, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(ISNULL(c.CON_VlnSalario, 0)) AS DECIMAL(18,2)) AS massa_salarial_base,
     CAST(0 AS DECIMAL(18,2)) AS vr_dia_medio,
@@ -270,6 +283,8 @@ INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
+LEFT JOIN QuantidadesHorasMes hmv ON hmv.HMV_CdiQuantidadeHoraMes = c.CON_CdiQuantidadeHoraMes
+LEFT JOIN Sindicatos sin ON sin.SIN_CdiSindicato = c.CON_CdiSindicato
 LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_HORARIO_TRABALHO ht ON ht.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
@@ -285,7 +300,9 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND ISNULL(ben.cycle_len, -1) = ISNULL(cic.cycle_len, -1)
    AND ISNULL(ben.work_days, -1) = ISNULL(cic.work_days, -1)
    AND ISNULL(ben.off_days, -1) = ISNULL(cic.off_days, -1)
-   AND ben.carga_semanal = ISNULL(h.HOR_QtnHorasSemanal, 44.0)
+   AND ben.carga_semanal = ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0))
+   AND ISNULL(ben.carga_mensal, -1) = ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5)
+   AND ISNULL(ben.cod_sindicato, '0') = CAST(ISNULL(c.CON_CdiSindicato, 0) AS VARCHAR(20))
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
@@ -295,7 +312,11 @@ GROUP BY
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_D1sCentroCusto, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     c.CON_CdiCargo, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
-    ISNULL(h.HOR_QtnHorasSemanal, 44.0),
+    ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)),
+    ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5),
+    c.CON_CdiSindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_NusCNPJ, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo;;
 
@@ -444,7 +465,9 @@ CTE_BEN_COM_CHAVES AS (
         cic.cycle_len,
         cic.work_days,
         cic.off_days,
-        NVL(h.HOR_QtnHorasSemanal, 44.0) AS carga_semanal,
+        NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)) AS carga_semanal,
+        NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS carga_mensal,
+        TO_CHAR(NVL(c.CON_CdiSindicato, 0)) AS cod_sindicato,
         b.cod_tipo,
         b.desc_tipo,
         b.valor_medio
@@ -458,6 +481,8 @@ INNER JOIN CategsTrabseSoc cts ON cts.SDK_CdiCategTrabeSoc = v.VIN_CdiCategTrabe
     LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
     LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
     LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
+    LEFT JOIN QuantidadesHorasMes hmv ON hmv.HMV_CdiQuantidadeHoraMes = c.CON_CdiQuantidadeHoraMes
+    LEFT JOIN Sindicatos sin ON sin.SIN_CdiSindicato = c.CON_CdiSindicato
     LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
     WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
@@ -466,20 +491,20 @@ CTE_BEN_GRUPO AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato,
         cod_tipo, desc_tipo,
         AVG(valor_medio) AS valor_medio
     FROM CTE_BEN_COM_CHAVES
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal, cod_tipo, desc_tipo
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato, cod_tipo, desc_tipo
 ),
 CTE_BENEFICIOS_AGG AS (
     SELECT
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal,
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato,
         LISTAGG(
             TO_CHAR(cod_tipo) || '|' || desc_tipo || '|' ||
             TO_CHAR(CAST(valor_medio AS NUMBER(18,2))),
@@ -489,7 +514,7 @@ CTE_BENEFICIOS_AGG AS (
     GROUP BY
         EMP_CdiEmpresa, LOC_CdiLocal, cnpj_completo, cod_cc,
         CON_CdiCargo, desc_cargo, CON_CdiVinculo, CON_CdiHorario,
-        cycle_len, work_days, off_days, carga_semanal
+        cycle_len, work_days, off_days, carga_semanal, carga_mensal, cod_sindicato
 )
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
@@ -506,7 +531,11 @@ SELECT
         TO_CHAR(cic.work_days) || 'x' || TO_CHAR(cic.off_days),
         'other'
     ) AS escala_atual,
-    CAST(NVL(h.HOR_QtnHorasSemanal, 44.0) AS NUMBER(10,2)) AS carga_semanal_atual,
+    CAST(NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)) AS NUMBER(10,2)) AS carga_semanal_atual,
+    CAST(NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS NUMBER(10,2)) AS carga_horaria_mensal,
+    TO_CHAR(NVL(c.CON_CdiSindicato, 0)) AS cod_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS nome_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_NusCNPJ, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(NVL(c.CON_VlnSalario, 0)) AS NUMBER(18,2)) AS massa_salarial_base,
     CAST(0 AS NUMBER(18,2)) AS vr_dia_medio,
@@ -528,6 +557,8 @@ INNER JOIN Empresas e ON e.EMP_CdiEmpresa = l.LOC_CdiEmpresa
 LEFT JOIN CentrosCustos cc ON cc.CCU_CdiCentroCusto = c.CON_CdiCentroCusto
 LEFT JOIN Cargos cg ON cg.CAR_CdiCargo = c.CON_CdiCargo
 LEFT JOIN Horarios h ON h.HOR_CdiHorario = c.CON_CdiHorario
+LEFT JOIN QuantidadesHorasMes hmv ON hmv.HMV_CdiQuantidadeHoraMes = c.CON_CdiQuantidadeHoraMes
+LEFT JOIN Sindicatos sin ON sin.SIN_CdiSindicato = c.CON_CdiSindicato
 LEFT JOIN CTE_CICLO_HORARIO cic ON cic.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_HORARIO_TRABALHO ht ON ht.HRI_CdiHorario = c.CON_CdiHorario
 LEFT JOIN CTE_VT_DIARIO vt ON vt.CAS_CdiContratado = c.CON_CdiContratado
@@ -543,7 +574,9 @@ LEFT JOIN CTE_BENEFICIOS_AGG ben
    AND NVL(ben.cycle_len, -1) = NVL(cic.cycle_len, -1)
    AND NVL(ben.work_days, -1) = NVL(cic.work_days, -1)
    AND NVL(ben.off_days, -1) = NVL(cic.off_days, -1)
-   AND ben.carga_semanal = NVL(h.HOR_QtnHorasSemanal, 44.0)
+   AND ben.carga_semanal = NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0))
+   AND NVL(ben.carga_mensal, -1) = NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5)
+   AND NVL(ben.cod_sindicato, '0') = TO_CHAR(NVL(c.CON_CdiSindicato, 0))
 WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
@@ -553,6 +586,10 @@ GROUP BY
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_D1sCentroCusto, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     c.CON_CdiCargo, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cg.CAR_D1sCargo, 'NAO_INFORMADO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     c.CON_CdiVinculo, c.CON_CdiHorario, cic.cycle_len, cic.work_days, cic.off_days,
-    NVL(h.HOR_QtnHorasSemanal, 44.0),
+    NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)),
+    NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5),
+    c.CON_CdiSindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_NusCNPJ, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo

@@ -49,6 +49,8 @@ export const DEFAULT_TABLE_ALLOWLIST = [
   "CentrosCustos",
   "Cargos",
   "QuantidadesHorasMes",
+  /** Sindicato do contratado (CON_CdiSindicato → SIN_*) */
+  "Sindicatos",
   "Folhas",
   "Locais",
   "Empresas",
