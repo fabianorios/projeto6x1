@@ -9,7 +9,10 @@ import {
   type OperatingHours,
   type PayrollRow,
 } from '../engine'
-import { OH_SCOPE_TYPE_LABELS } from '../utils/ohScopeBadge'
+import {
+  formatOhScopeTargetDisplay,
+  OH_SCOPE_TYPE_LABELS,
+} from '../utils/ohScopeBadge'
 import { OperatingHoursFields } from './OperatingHoursFields'
 import { OhScopeExceptionsModal } from './OhScopeExceptionsModal'
 
@@ -57,8 +60,8 @@ export function OhScopeExceptionsSection({
           </p>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
             Global para o estabelecimento. Exceções por público / centro de
-            custo / cargo alimentam a cascata do motor e os badges nos
-            Resultados.
+            custo / sindicato / cargo alimentam a cascata do motor e os badges
+            nos Resultados.
           </p>
         </div>
         <button
@@ -83,7 +86,7 @@ export function OhScopeExceptionsSection({
               <span className="text-[var(--color-muted)]">
                 {OH_SCOPE_TYPE_LABELS[r.scope_type] ?? r.scope_type}:
               </span>{' '}
-              {r.target_value}{' '}
+              {formatOhScopeTargetDisplay(r.target_value, r.target_label)}{' '}
               <span className="text-[var(--color-muted)]">
                 ({r.operating_hours.abertura}–{r.operating_hours.fechamento})
               </span>

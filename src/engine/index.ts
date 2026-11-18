@@ -29,6 +29,7 @@ export {
   PAYROLL_CSV_HEADERS,
   aggregateByCostCenter,
   centroCustoDisplayLabel,
+  formatCentroCustoCodeDesc,
   detectPayrollDelimiter,
   emptyPayrollExtras,
   estimateWorkDaysPerMonth,

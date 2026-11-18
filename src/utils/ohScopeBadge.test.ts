@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
   formatOhScopeBadge,
   formatOhScopeBadgeShort,
+  formatOhScopeTargetDisplay,
   isSegmentedOhScope,
 } from './ohScopeBadge'
 
@@ -35,6 +36,22 @@ describe('ohScopeBadge (Etapa 4)', () => {
       'OH segmentada · Centro de custo: CC-102',
     )
     assert.equal(
+      formatOhScopeBadge({
+        scopeType: 'centro_custo',
+        targetValue: '01.02',
+        targetLabel: 'Loja Centro',
+      }),
+      'OH segmentada · Centro de custo: 01.02 — Loja Centro',
+    )
+    assert.equal(
+      formatOhScopeBadge({
+        scopeType: 'sindicato',
+        targetValue: '12',
+        targetLabel: 'Sindicato Metalúrgicos',
+      }),
+      'OH segmentada · Sindicato: 12 — Sindicato Metalúrgicos',
+    )
+    assert.equal(
       formatOhScopeBadge({ scopeType: 'publico', targetValue: '' }),
       'OH segmentada · Público',
     )
@@ -42,5 +59,14 @@ describe('ohScopeBadge (Etapa 4)', () => {
       formatOhScopeBadgeShort({ scopeType: 'cargo', targetValue: 'X' }),
       'segmentada',
     )
+  })
+
+  it('formatOhScopeTargetDisplay joins code — label', () => {
+    assert.equal(
+      formatOhScopeTargetDisplay('01.02', 'Loja Centro'),
+      '01.02 — Loja Centro',
+    )
+    assert.equal(formatOhScopeTargetDisplay('01.02', ''), '01.02')
+    assert.equal(formatOhScopeTargetDisplay('', 'Loja'), 'Loja')
   })
 })

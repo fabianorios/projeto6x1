@@ -381,25 +381,32 @@ export function summarizeOperatingHours(hours: OperatingHours): string {
 
 /**
  * Scope granularity for establishment operating hours.
- * Etapa 2 cascade priority (most specific first): cargo → centro_custo →
- * publico → global.
+ * Cascade priority (most specific first): cargo → centro_custo →
+ * sindicato → publico → global.
  */
-export type OHScopeType = 'global' | 'publico' | 'centro_custo' | 'cargo'
+export type OHScopeType =
+  | 'global'
+  | 'publico'
+  | 'centro_custo'
+  | 'sindicato'
+  | 'cargo'
 
 export const OH_SCOPE_TYPES: readonly OHScopeType[] = [
   'global',
   'publico',
   'centro_custo',
+  'sindicato',
   'cargo',
 ] as const
 
 /**
- * Documented cascade order for Etapa 2 motor (not applied in Etapa 1).
- * First match wins when resolving OH for a Folha row.
+ * Cascade order for the motor. First match wins when resolving OH for a
+ * Folha row / CC aggregate.
  */
 export const OH_SCOPE_CASCADE_PRIORITY: readonly OHScopeType[] = [
   'cargo',
   'centro_custo',
+  'sindicato',
   'publico',
   'global',
 ] as const
@@ -419,11 +426,14 @@ export interface OHScopeWindow {
 /**
  * One OH exception / override keyed by scope.
  * `target_value` examples: `''` or `'*'` for global; `Administrativo` (público);
- * `CC-102` (centro); cargo label/code.
+ * `CC-102` (centro code); sindicato code; cargo label/code.
+ * `target_label` optional human companion (CC description / sindicato name).
  */
 export interface OHScopeRule {
   scope_type: OHScopeType
   target_value: string
+  /** Optional display companion (e.g. desc_cc / nome_sindicato). */
+  target_label?: string
   operating_hours: OHScopeWindow
 }
 
@@ -560,9 +570,12 @@ export function parseOHScopeRule(raw: unknown): OHScopeRule | null {
   const dias_semana = normalizeDiasSemana(diasRaw)
   const target_value =
     typeof obj.target_value === 'string' ? obj.target_value.trim() : ''
+  const target_label =
+    typeof obj.target_label === 'string' ? obj.target_label.trim() : ''
   return {
     scope_type: obj.scope_type,
     target_value,
+    ...(target_label ? { target_label } : {}),
     operating_hours: {
       abertura: formatScopeClock(parseScopeClock(win.abertura)!),
       fechamento: formatScopeClock(parseScopeClock(win.fechamento)!),
@@ -624,7 +637,7 @@ export function syncOhScopeRulesWithGlobalHours(
 /**
  * Prefer an explicit `global` scope rule when present; otherwise the legacy
  * `operatingHours` field. Prefer {@link resolveOperatingHoursForEntity} when
- * segmented cascade (cargo→CC→público→global) is needed.
+ * segmented cascade (cargo→CC→sindicato→público→global) is needed.
  */
 export function effectiveGlobalOperatingHours(
   rules: OHScopeRule[] | undefined,
@@ -637,7 +650,7 @@ export function effectiveGlobalOperatingHours(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Etapa 2 — cascade resolution (cargo → centro_custo → publico → global)     */
+/* Cascade resolution (cargo → CC → sindicato → publico → global)             */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -653,6 +666,10 @@ export interface OHScopeMatchContext {
   /** Cost-center key / description as stored on the row (`centro_custo`). */
   centroCusto?: string | null
   descCc?: string | null
+  /** Sindicato code (`cod_sindicato`). */
+  codSindicato?: string | null
+  /** Sindicato name (`nome_sindicato`). */
+  nomeSindicato?: string | null
   /** Audience / population label (trim/case match). */
   publico?: string | null
 }
@@ -662,6 +679,8 @@ export interface OHScopeMatchMeta {
   scopeType: OHScopeType
   /** Matched `target_value`; empty string for global / legacy fallback. */
   targetValue: string
+  /** Optional companion label from the matched rule (CC desc / sindicato nome). */
+  targetLabel?: string
 }
 
 export interface OHScopeResolution extends OHScopeMatchMeta {
@@ -716,6 +735,22 @@ function publicoMatches(target: string, ctx: OHScopeMatchContext): boolean {
   return textKeysMatch(target, ctx.publico)
 }
 
+/**
+ * Sindicato: match `cod_sindicato` and/or `nome_sindicato` (trim/case).
+ */
+function sindicatoMatches(
+  target: string,
+  ctx: OHScopeMatchContext,
+): boolean {
+  const raw = target.trim()
+  if (!raw) return false
+  const codeTarget = raw.toLocaleLowerCase('pt-BR')
+  const cod = (ctx.codSindicato ?? '').trim()
+  if (cod && cod.toLocaleLowerCase('pt-BR') === codeTarget) return true
+  if (textKeysMatch(raw, ctx.nomeSindicato)) return true
+  return false
+}
+
 function ruleMatchesEntity(
   rule: OHScopeRule,
   ctx: OHScopeMatchContext,
@@ -725,6 +760,8 @@ function ruleMatchesEntity(
       return cargoMatches(rule.target_value, ctx)
     case 'centro_custo':
       return centroCustoMatches(rule.target_value, ctx)
+    case 'sindicato':
+      return sindicatoMatches(rule.target_value, ctx)
     case 'publico':
       return publicoMatches(rule.target_value, ctx)
     case 'global':
@@ -746,6 +783,8 @@ export function ohScopeMatchContextFromPayrollRow(
     codCc?: string | null
     centroCusto?: string | null
     descCc?: string | null
+    codSindicato?: string | null
+    nomeSindicato?: string | null
     publico?: string | null
   },
   overrides?: Partial<OHScopeMatchContext>,
@@ -757,6 +796,8 @@ export function ohScopeMatchContextFromPayrollRow(
     codCc: row.codCc ?? null,
     centroCusto: row.centroCusto ?? null,
     descCc: row.descCc ?? null,
+    codSindicato: row.codSindicato ?? null,
+    nomeSindicato: row.nomeSindicato ?? null,
     publico: row.publico ?? null,
     ...overrides,
   }
@@ -772,6 +813,8 @@ export function ohScopeMatchContextFromCostCenter(
     cargo?: string | null
     codCargo?: string | null
     descCargo?: string | null
+    codSindicato?: string | null
+    nomeSindicato?: string | null
     publico?: string | null
   },
   overrides?: Partial<OHScopeMatchContext>,
@@ -781,7 +824,8 @@ export function ohScopeMatchContextFromCostCenter(
 
 /**
  * Resolve establishment OH for one entity via cascade priority:
- * cargo → centro_custo → publico → global (then legacy `operatingHours`).
+ * cargo → centro_custo → sindicato → publico → global (then legacy
+ * `operatingHours`).
  *
  * First matching rule in priority order wins. When `ohScopeRules` is omitted,
  * returns the legacy global `operatingHours` with `scopeType: 'global'`.
@@ -807,10 +851,12 @@ export function resolveOperatingHoursForEntity(
       (r) => r.scope_type === scopeType && ruleMatchesEntity(r, entity),
     )
     if (!match) continue
+    const label = (match.target_label ?? '').trim()
     return {
       hours: ohWindowToOperatingHours(match.operating_hours),
       scopeType: match.scope_type,
       targetValue: match.target_value,
+      ...(label ? { targetLabel: label } : {}),
     }
   }
 

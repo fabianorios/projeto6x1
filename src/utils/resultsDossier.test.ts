@@ -4,6 +4,8 @@ import { emptyPayrollExtras, type PayrollRow } from '../engine/payroll'
 import {
   collapseAllDossier,
   DEFAULT_DOSSIER_OPEN,
+  centroCustoMatchesSearch,
+  dossierCentroCustoKeys,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
   dossierSindicatoOptions,
@@ -93,7 +95,7 @@ describe('resultsDossier helpers', () => {
     const est = dossierEstablishmentOptions(rows)
     assert.equal(est.length, 2)
     assert.match(est[0]!.label, /12\.345\.678\/0001-90|Filial 01/)
-    const ccs = dossierCentroCustoOptions(
+    const ccOpts = dossierCentroCustoOptions(
       [
         {
           centroCusto: 'CC-A',
@@ -131,6 +133,7 @@ describe('resultsDossier helpers', () => {
       ],
       rows,
     )
+    const ccs = dossierCentroCustoKeys(ccOpts)
     assert.deepEqual(ccs, ['CC-A', 'CC-B', 'CC-C'])
 
     const key01 = est.find((e) => e.centroCustos.includes('CC-A'))!.key
@@ -139,6 +142,7 @@ describe('resultsDossier helpers', () => {
       establishments: est,
       filterCnpjKey: key01,
       filterCc: '',
+      ccOptions: ccOpts,
     })
     assert.deepEqual(visible?.sort(), ['CC-A', 'CC-B'])
 
@@ -147,6 +151,7 @@ describe('resultsDossier helpers', () => {
       establishments: est,
       filterCnpjKey: key01,
       filterCc: 'CC-B',
+      ccOptions: ccOpts,
     })
     assert.deepEqual(onlyB, ['CC-B'])
 
@@ -156,8 +161,134 @@ describe('resultsDossier helpers', () => {
         establishments: est,
         filterCnpjKey: '',
         filterCc: '',
+        ccOptions: ccOpts,
       }),
       null,
+    )
+  })
+
+  it('CC options carry código + descrição dual labels; search matches both', () => {
+    const rows = [
+      row({
+        centroCusto: '01.02',
+        codCc: '01.02',
+        descCc: 'Loja Centro',
+      }),
+      row({
+        centroCusto: '99.01',
+        codCc: '99.01',
+        descCc: 'Backoffice',
+      }),
+    ]
+    const opts = dossierCentroCustoOptions([], rows)
+    assert.equal(opts.length, 2)
+    const loja = opts.find((o) => o.key === '01.02')
+    assert.ok(loja)
+    assert.equal(loja!.code, '01.02')
+    assert.equal(loja!.desc, 'Loja Centro')
+    assert.match(loja!.label, /01\.02/)
+    assert.match(loja!.label, /Loja Centro/)
+
+    assert.equal(
+      centroCustoMatchesSearch(
+        { centroCusto: '01.02', codCc: '01.02', descCc: 'Loja Centro' },
+        'loja',
+      ),
+      true,
+    )
+    assert.equal(
+      centroCustoMatchesSearch(
+        { centroCusto: '01.02', codCc: '01.02', descCc: 'Loja Centro' },
+        '01.02',
+      ),
+      true,
+    )
+    assert.equal(
+      centroCustoMatchesSearch(
+        { centroCusto: '01.02', codCc: '01.02', descCc: 'Loja Centro' },
+        'back',
+      ),
+      false,
+    )
+
+    const filtered = filterCostCentersByDossier({
+      centers: [
+        {
+          centroCusto: '01.02',
+          codCc: '01.02',
+          descCc: 'Loja Centro',
+          currentHeadcount: 1,
+          requiredHeadcount: 1,
+          additionalHeadcount: 0,
+          baselineSalaryMass: 0,
+          baselinePayroll: 0,
+          projectedPayroll: 0,
+          payrollMonthlyDelta: 0,
+          vr: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          vt: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          va: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          assistMedicaMonthly: 0,
+          assistOdontoMonthly: 0,
+        },
+        {
+          centroCusto: '99.01',
+          codCc: '99.01',
+          descCc: 'Backoffice',
+          currentHeadcount: 1,
+          requiredHeadcount: 1,
+          additionalHeadcount: 0,
+          baselineSalaryMass: 0,
+          baselinePayroll: 0,
+          projectedPayroll: 0,
+          payrollMonthlyDelta: 0,
+          vr: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          vt: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          va: {
+            currentMonthly: 0,
+            proposedMonthly: 0,
+            monthlyDelta: 0,
+            annualDelta: 0,
+            proposedDaysPerMonth: 0,
+          },
+          assistMedicaMonthly: 0,
+          assistOdontoMonthly: 0,
+        },
+      ],
+      filterCc: 'centro',
+    })
+    assert.deepEqual(
+      filtered.map((c) => c.centroCusto),
+      ['01.02'],
     )
   })
 

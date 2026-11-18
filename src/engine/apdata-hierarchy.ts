@@ -693,6 +693,8 @@ function operatingHoursForCenter(
       cargo: cc.cargo,
       codCargo: cc.codCargo,
       descCargo: cc.descCargo,
+      codSindicato: cc.codSindicato,
+      nomeSindicato: cc.nomeSindicato,
     }),
   ).hours
 }

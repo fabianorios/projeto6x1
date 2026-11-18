@@ -1,5 +1,6 @@
 /**
- * Modal CRUD for segmented OHScopeRule (publico / centro_custo / cargo).
+ * Modal CRUD for segmented OHScopeRule
+ * (publico / centro_custo / sindicato / cargo).
  * Global OH stays on Premissas; this only edits exceptions.
  */
 
@@ -7,6 +8,7 @@ import { useMemo, useState } from 'react'
 import {
   OH_SCOPE_TYPES,
   DEFAULT_OPERATING_HOURS,
+  formatCentroCustoCodeDesc,
   ohWindowToOperatingHours,
   operatingHoursToOhWindow,
   type OHScopeRule,
@@ -14,10 +16,18 @@ import {
   type OperatingHours,
   type PayrollRow,
 } from '../engine'
-import { OH_SCOPE_TYPE_LABELS } from '../utils/ohScopeBadge'
+import {
+  formatOhScopeTargetDisplay,
+  OH_SCOPE_TYPE_LABELS,
+} from '../utils/ohScopeBadge'
 import { OperatingHoursFields } from './OperatingHoursFields'
 
-const EXCEPTION_TYPES: OHScopeType[] = ['publico', 'centro_custo', 'cargo']
+const EXCEPTION_TYPES: OHScopeType[] = [
+  'publico',
+  'centro_custo',
+  'sindicato',
+  'cargo',
+]
 
 export type OhScopeExceptionsModalProps = {
   open: boolean
@@ -29,21 +39,75 @@ export type OhScopeExceptionsModalProps = {
   payrollRows?: PayrollRow[]
 }
 
-function newBlankRule(): {
+type DraftRule = {
   scope_type: OHScopeType
   target_value: string
+  target_label: string
   hours: OperatingHours
-} {
+}
+
+type CcSuggestion = { value: string; label: string; desc: string }
+type SindicatoSuggestion = { value: string; label: string; nome: string }
+
+function newBlankRule(): DraftRule {
   return {
     scope_type: 'centro_custo',
     target_value: '',
-    hours: { ...DEFAULT_OPERATING_HOURS, default: { ...DEFAULT_OPERATING_HOURS.default } },
+    target_label: '',
+    hours: {
+      ...DEFAULT_OPERATING_HOURS,
+      default: { ...DEFAULT_OPERATING_HOURS.default },
+    },
   }
 }
 
 function uniqueSorted(values: Iterable<string>): string[] {
   return [...new Set([...values].map((v) => v.trim()).filter(Boolean))].sort(
     (a, b) => a.localeCompare(b, 'pt-BR'),
+  )
+}
+
+function buildCcSuggestions(rows: PayrollRow[]): CcSuggestion[] {
+  const map = new Map<string, CcSuggestion>()
+  for (const r of rows) {
+    const code = (r.codCc ?? r.centroCusto ?? '').trim()
+    if (!code) continue
+    const desc = (r.descCc ?? '').trim()
+    const prev = map.get(code)
+    if (!prev || (desc && !prev.desc)) {
+      map.set(code, {
+        value: code,
+        desc,
+        label: formatCentroCustoCodeDesc({
+          codCc: code,
+          centroCusto: r.centroCusto,
+          descCc: desc || prev?.desc,
+        }),
+      })
+    }
+  }
+  return [...map.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, 'pt-BR'),
+  )
+}
+
+function buildSindicatoSuggestions(rows: PayrollRow[]): SindicatoSuggestion[] {
+  const map = new Map<string, SindicatoSuggestion>()
+  for (const r of rows) {
+    const code = (r.codSindicato ?? '').trim()
+    if (!code || code === '0') continue
+    const nome = (r.nomeSindicato ?? '').trim()
+    const prev = map.get(code)
+    if (!prev || (nome && !prev.nome)) {
+      map.set(code, {
+        value: code,
+        nome,
+        label: formatOhScopeTargetDisplay(code, nome || prev?.nome),
+      })
+    }
+  }
+  return [...map.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, 'pt-BR'),
   )
 }
 
@@ -73,14 +137,11 @@ export function OhScopeExceptionsModal({
     [payrollRows],
   )
   const ccSuggestions = useMemo(
-    () =>
-      uniqueSorted(
-        payrollRows.flatMap((r) => [
-          r.codCc ?? '',
-          r.centroCusto ?? '',
-          r.descCc ?? '',
-        ]),
-      ),
+    () => buildCcSuggestions(payrollRows),
+    [payrollRows],
+  )
+  const sindicatoSuggestions = useMemo(
+    () => buildSindicatoSuggestions(payrollRows),
     [payrollRows],
   )
 
@@ -98,6 +159,7 @@ export function OhScopeExceptionsModal({
     setDraft({
       scope_type: rule.scope_type,
       target_value: rule.target_value,
+      target_label: rule.target_label ?? '',
       hours: ohWindowToOperatingHours(rule.operating_hours),
     })
   }
@@ -111,9 +173,11 @@ export function OhScopeExceptionsModal({
     const target = draft.target_value.trim()
     if (!target) return
     if (!EXCEPTION_TYPES.includes(draft.scope_type)) return
+    const label = draft.target_label.trim()
     const rule: OHScopeRule = {
       scope_type: draft.scope_type,
       target_value: target,
+      ...(label ? { target_label: label } : {}),
       operating_hours: operatingHoursToOhWindow(draft.hours),
     }
     const next = [...exceptions]
@@ -132,12 +196,46 @@ export function OhScopeExceptionsModal({
     else if (editIndex != null && editIndex > i) setEditIndex(editIndex - 1)
   }
 
-  const suggestions =
-    draft.scope_type === 'cargo'
-      ? cargoSuggestions
+  function applyCcPick(raw: string) {
+    const text = raw.trim()
+    const hit = ccSuggestions.find(
+      (s) => s.value === text || s.label === text,
+    )
+    if (hit) {
+      setDraft((d) => ({
+        ...d,
+        target_value: hit.value,
+        target_label: hit.desc,
+      }))
+      return
+    }
+    setDraft((d) => ({ ...d, target_value: text, target_label: '' }))
+  }
+
+  function applySindicatoPick(raw: string) {
+    const text = raw.trim()
+    const hit = sindicatoSuggestions.find(
+      (s) => s.value === text || s.label === text,
+    )
+    if (hit) {
+      setDraft((d) => ({
+        ...d,
+        target_value: hit.value,
+        target_label: hit.nome,
+      }))
+      return
+    }
+    setDraft((d) => ({ ...d, target_value: text, target_label: '' }))
+  }
+
+  const targetPlaceholder =
+    draft.scope_type === 'publico'
+      ? 'Ex.: Administrativo'
       : draft.scope_type === 'centro_custo'
-        ? ccSuggestions
-        : []
+        ? 'Código do CC (descrição preenchida da Folha)'
+        : draft.scope_type === 'sindicato'
+          ? 'Código do sindicato (nome da Folha)'
+          : 'Cargo / descrição'
 
   return (
     <div
@@ -159,9 +257,9 @@ export function OhScopeExceptionsModal({
               Exceções de horário (OH)
             </h2>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Override por público, centro de custo ou cargo. Cascata no motor:
-              cargo → CC → público → global. O horário global permanece nas
-              Premissas.
+              Override por público, centro de custo, sindicato ou cargo.
+              Cascata no motor: cargo → CC → sindicato → público → global. O
+              horário global permanece nas Premissas.
             </p>
           </div>
           <button
@@ -190,9 +288,15 @@ export function OhScopeExceptionsModal({
                       {OH_SCOPE_TYPE_LABELS[r.scope_type] ?? r.scope_type}
                     </span>
                     {': '}
-                    <span>{r.target_value}</span>
+                    <span>
+                      {formatOhScopeTargetDisplay(
+                        r.target_value,
+                        r.target_label,
+                      )}
+                    </span>
                     <span className="ml-2 text-xs text-[var(--color-muted)]">
-                      {r.operating_hours.abertura}–{r.operating_hours.fechamento}
+                      {r.operating_hours.abertura}–
+                      {r.operating_hours.fechamento}
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -231,6 +335,8 @@ export function OhScopeExceptionsModal({
                   setDraft((d) => ({
                     ...d,
                     scope_type: e.target.value as OHScopeType,
+                    target_value: '',
+                    target_label: '',
                   }))
                 }
               >
@@ -243,28 +349,107 @@ export function OhScopeExceptionsModal({
             </label>
             <label className="block text-sm">
               <span className="text-[var(--color-muted)]">Alvo</span>
-              <input
-                className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                list="oh-exception-target-suggestions"
-                value={draft.target_value}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, target_value: e.target.value }))
-                }
-                placeholder={
-                  draft.scope_type === 'publico'
-                    ? 'Ex.: Administrativo'
-                    : draft.scope_type === 'centro_custo'
-                      ? 'Código ou descrição do CC'
-                      : 'Cargo / descrição'
-                }
-              />
-              {suggestions.length > 0 ? (
-                <datalist id="oh-exception-target-suggestions">
-                  {suggestions.slice(0, 80).map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
-              ) : null}
+              {draft.scope_type === 'centro_custo' &&
+              ccSuggestions.length > 0 ? (
+                <>
+                  <select
+                    className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                    value={
+                      ccSuggestions.some((s) => s.value === draft.target_value)
+                        ? draft.target_value
+                        : ''
+                    }
+                    onChange={(e) => applyCcPick(e.target.value)}
+                  >
+                    <option value="">Selecione o centro de custo…</option>
+                    {ccSuggestions.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-xs"
+                    value={draft.target_value}
+                    onChange={(e) => applyCcPick(e.target.value)}
+                    placeholder="Ou digite o código do CC"
+                  />
+                  {draft.target_value ? (
+                    <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+                      Código: <code>{draft.target_value}</code>
+                      {draft.target_label
+                        ? ` · Descrição: ${draft.target_label}`
+                        : ''}
+                    </p>
+                  ) : null}
+                </>
+              ) : draft.scope_type === 'sindicato' &&
+                sindicatoSuggestions.length > 0 ? (
+                <>
+                  <select
+                    className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                    value={
+                      sindicatoSuggestions.some(
+                        (s) => s.value === draft.target_value,
+                      )
+                        ? draft.target_value
+                        : ''
+                    }
+                    onChange={(e) => applySindicatoPick(e.target.value)}
+                  >
+                    <option value="">Selecione o sindicato…</option>
+                    {sindicatoSuggestions.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-xs"
+                    value={draft.target_value}
+                    onChange={(e) => applySindicatoPick(e.target.value)}
+                    placeholder="Ou digite o código do sindicato"
+                  />
+                  {draft.target_value ? (
+                    <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+                      Código: <code>{draft.target_value}</code>
+                      {draft.target_label
+                        ? ` · Nome: ${draft.target_label}`
+                        : ''}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <input
+                    className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                    list="oh-exception-target-suggestions"
+                    value={draft.target_value}
+                    onChange={(e) => {
+                      if (draft.scope_type === 'centro_custo') {
+                        applyCcPick(e.target.value)
+                      } else if (draft.scope_type === 'sindicato') {
+                        applySindicatoPick(e.target.value)
+                      } else {
+                        setDraft((d) => ({
+                          ...d,
+                          target_value: e.target.value,
+                          target_label: '',
+                        }))
+                      }
+                    }}
+                    placeholder={targetPlaceholder}
+                  />
+                  {draft.scope_type === 'cargo' &&
+                  cargoSuggestions.length > 0 ? (
+                    <datalist id="oh-exception-target-suggestions">
+                      {cargoSuggestions.slice(0, 80).map((s) => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                  ) : null}
+                </>
+              )}
             </label>
           </div>
           <OperatingHoursFields
@@ -295,7 +480,9 @@ export function OhScopeExceptionsModal({
         <p className="mt-3 text-[10px] text-[var(--color-muted)]">
           Escopos válidos no DTO:{' '}
           {OH_SCOPE_TYPES.filter((t) => t !== 'global').join(', ')}. Persistidos
-          em <code>ohScopeRules</code> na simulação.
+          em <code>ohScopeRules</code> na simulação. CC/sindicato: código em{' '}
+          <code>target_value</code>, descrição/nome em{' '}
+          <code>target_label</code>.
         </p>
       </div>
     </div>

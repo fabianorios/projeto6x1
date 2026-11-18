@@ -21,6 +21,7 @@ import { downloadRotina1215Jornadas } from '../utils/exportRotina1215Jornadas'
 import { cnpjDigits } from '../apdata/cnpj'
 import {
   OPERACIONAL_SEM_CNPJ_KEY,
+  dossierCentroCustoKeys,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
   dossierSindicatoOptions,
@@ -432,18 +433,25 @@ export function ApdataHierarchyView({
     return new Set(centers.map((c) => c.centroCusto.trim()).filter(Boolean))
   }, [filterSindicato, result.byCostCenter, result.input.payrollRows])
 
-  const visibleCcs = useMemo(() => {
-    let list = resolveVisibleCentroCustos({
-      allCentroCustos: ccOptions.length
-        ? ccOptions
+  const ccKeys = useMemo(
+    () =>
+      ccOptions.length
+        ? dossierCentroCustoKeys(ccOptions)
         : [
             ...new Set(
               candidates.horarios.map((h) => h.centroCustoCodigo),
             ),
           ],
+    [ccOptions, candidates.horarios],
+  )
+
+  const visibleCcs = useMemo(() => {
+    let list = resolveVisibleCentroCustos({
+      allCentroCustos: ccKeys,
       establishments,
       filterCnpjKey: filterCnpj,
       filterCc,
+      ccOptions,
     })
     if (sindicatoCcAllow) {
       if (list == null) {
@@ -454,8 +462,8 @@ export function ApdataHierarchyView({
     }
     return list
   }, [
+    ccKeys,
     ccOptions,
-    candidates.horarios,
     establishments,
     filterCnpj,
     filterCc,
@@ -637,7 +645,9 @@ export function ApdataHierarchyView({
             Centro de custo (CC)
           </span>
           <select
-            value={filterCc}
+            value={
+              ccOptions.some((o) => o.key === filterCc) ? filterCc : ''
+            }
             onChange={(e) => {
               setFilterCc(e.target.value)
               setGenerated(false)
@@ -645,12 +655,26 @@ export function ApdataHierarchyView({
             className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
           >
             <option value="">Todos os centros de custo</option>
-            {(visibleCcs ?? ccOptions).map((cc) => (
-              <option key={cc} value={cc}>
-                {cc}
+            {(visibleCcs
+              ? ccOptions.filter((o) => visibleCcs.includes(o.key))
+              : ccOptions
+            ).map((cc) => (
+              <option key={cc.key} value={cc.key}>
+                {cc.label}
               </option>
             ))}
           </select>
+          <input
+            type="search"
+            value={filterCc}
+            onChange={(e) => {
+              setFilterCc(e.target.value)
+              setGenerated(false)
+            }}
+            placeholder="Buscar código ou descrição…"
+            className="mt-1 block min-h-9 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
+            aria-label="Buscar centro de custo por código ou descrição"
+          />
         </label>
         <label className="block w-full text-xs text-[var(--color-ink)] md:w-[calc(33.333%-0.75rem)]">
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
