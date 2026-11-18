@@ -35,6 +35,11 @@ import {
   type RamoAtividade,
 } from './ramos'
 import { LIVE_SELECT_STEPS } from './selects'
+import {
+  indexHmvRows,
+  indexSindicatoRows,
+  resolveSindicatoHmvForContratado,
+} from './sindicatoHmvMap'
 
 export type ExportProgressStep = {
   id: string
@@ -453,31 +458,8 @@ export async function exportPayrollFromApdata(
       ccById.set(id, code)
     }
 
-    const hmvById = new Map<
-      number,
-      { mensal: number | null; semanal: number | null }
-    >()
-    for (const r of hmvRes.rows) {
-      const id = num(r.HMV_CdiQuantidadeHoraMes)
-      if (id === null) continue
-      hmvById.set(id, {
-        mensal: num(r.HMV_QtnQuantidadeHoraMes),
-        semanal: num(r.HMV_QtnHorasSemanal),
-      })
-    }
-
-    const sindicatoById = new Map<
-      number,
-      { nome: string; cnpj: string }
-    >()
-    for (const r of sindicatosRes.rows) {
-      const id = num(r.SIN_CdiSindicato)
-      if (id === null) continue
-      sindicatoById.set(id, {
-        nome: str(r.SIN_D1sNome) || 'SEM_SINDICATO',
-        cnpj: str(r.SIN_NusCNPJ),
-      })
-    }
+    const hmvById = indexHmvRows(hmvRes.rows)
+    const sindicatoById = indexSindicatoRows(sindicatosRes.rows)
 
     type AggKey = string
     type Agg = {
@@ -598,15 +580,20 @@ export async function exportPayrollFromApdata(
       const centroCusto =
         ccId !== null ? (ccById.get(ccId) ?? `cc#${ccId}`) : 'sem-cc'
 
-      const hmv = hmvId !== null ? hmvById.get(hmvId) : undefined
-      const cargaMensal = hmv?.mensal ?? 220
-      const cargaSemanal = hmv?.semanal ?? 44
-      const sin =
-        sindicatoId !== null ? sindicatoById.get(sindicatoId) : undefined
-      const codSindicato =
-        sindicatoId != null && sindicatoId > 0 ? String(sindicatoId) : null
-      const nomeSindicato = sin?.nome ?? (codSindicato ? 'SEM_SINDICATO' : null)
-      const cnpjSindicato = sin?.cnpj || null
+      const {
+        cargaMensal,
+        cargaSemanal,
+        codSindicato,
+        nomeSindicato,
+        cnpjSindicato,
+      } = resolveSindicatoHmvForContratado(
+        {
+          conCdiSindicato: sindicatoId,
+          conCdiQuantidadeHoraMes: hmvId,
+        },
+        sindicatoById,
+        hmvById,
+      )
 
       const cycle: (CycleStats & { escala: Exclude<EscalaCode, '12x36'> }) | undefined =
         horarioId !== null ? cycleMap.get(horarioId) : undefined

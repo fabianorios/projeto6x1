@@ -52,6 +52,26 @@ describe('lgpdNameMask', () => {
     assert.equal(scrubNomeForHandoffExport(null, true), null)
   })
 
+  it('toggle: mask on hides name; mask off shows raw (display only)', () => {
+    const raw = 'Maria Clara'
+    assert.equal(maskCollaboratorName(raw), 'M**** C****')
+    assert.equal(
+      resolveCollaboratorDisplayName(raw, { mask: true }),
+      'M**** C****',
+    )
+    assert.equal(
+      resolveCollaboratorDisplayName(raw, { mask: false }),
+      'Maria Clara',
+    )
+    // Handoff path still refuses unmasked export even if UI toggle is off.
+    assert.equal(scrubNomeForHandoffExport(raw, true), null)
+    assert.notEqual(
+      scrubNomeForHandoffExport(raw, true),
+      resolveCollaboratorDisplayName(raw, { mask: false }),
+    )
+  })
+
+
   it('mapPayrollNomesForDisplay applies policy to rows', () => {
     const rows = [
       { nome: 'João Silva' as string | null, cargo: 'Op' },

@@ -180,11 +180,14 @@ describe("extractor SQL", () => {
       assert.match(sql, /HMV_QtnQuantidadeHoraMes/);
       assert.match(sql, /CON_CdiQuantidadeHoraMes/);
       assert.match(sql, /Sindicatos/);
+      assert.match(sql, /SIN_CdiSindicato/);
       assert.match(sql, /SIN_D1sNome/);
       assert.match(sql, /SIN_NusCNPJ/);
       assert.match(sql, /CON_CdiSindicato/);
       assert.match(sql, /AS carga_horaria_mensal/);
       assert.match(sql, /AS nome_sindicato/);
+      assert.match(sql, /AS cnpj_sindicato/);
+      assert.match(sql, /AS cod_sindicato/);
       assert.ok(!/CON_DssNome/i.test(sql));
     }
   });
@@ -220,6 +223,33 @@ describe("extractor SQL", () => {
     assert.equal(mapped[0]!.nome_sindicato, "Sindicato Demo");
     assert.equal(mapped[0]!.cnpj_sindicato, "11222333000144");
   });
+
+  it("mapExtractorRows reads Oracle-uppercased sindicato + HMV aliases", () => {
+    const mapped = mapExtractorRows([
+      {
+        COD_EMPRESA: "1",
+        COD_FILIAL: "1",
+        CNPJ_COMPLETO: "12345678000190",
+        COD_CC: "CC-99",
+        DESC_CARGO: "Auxiliar",
+        CARGA_SEMANAL_ATUAL: 36,
+        CARGA_HORARIA_MENSAL: 180,
+        COD_SINDICATO: "7",
+        NOME_SINDICATO: "Sindicato Upper",
+        CNPJ_SINDICATO: "99888777000166",
+        QTD_COLABORADORES: 1,
+        MASSA_SALARIAL_BASE: 2000,
+        ESCALA_ATUAL: "5x2",
+        DIAS_TRABALHO_MES_ATUAL: 22,
+        BENEFICIOS_AGG: "",
+      },
+    ]);
+    assert.equal(mapped[0]!.carga_horaria_mensal, 180);
+    assert.equal(mapped[0]!.cod_sindicato, "7");
+    assert.equal(mapped[0]!.nome_sindicato, "Sindicato Upper");
+    assert.equal(mapped[0]!.cnpj_sindicato, "99888777000166");
+  });
+
 
   it("applies incluirAfastados=false and custom regime/categoria", () => {
     const { sql } = buildExtractorQuery("mssql", {

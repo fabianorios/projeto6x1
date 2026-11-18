@@ -380,4 +380,61 @@ describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
     )
     assert.equal(r.scopeType, 'cargo')
   })
+
+  it('conflict: CC wins over publico when both match (cargo misses)', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'Gerente',
+      centroCusto: 'CC-102',
+      publico: 'Administrativo',
+    })
+    assert.equal(r.scopeType, 'centro_custo')
+    assert.deepEqual(r.hours.default, { openHour: 7, closeHour: 15 })
+  })
+
+  it('conflict: publico wins over global when cargo and CC miss', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      publico: 'Administrativo',
+    })
+    assert.equal(r.scopeType, 'publico')
+    assert.equal(r.hours.default.openHour, 8)
+  })
+
+  it('empty rules array uses wizard OH (global fallback)', () => {
+    const r = resolveOperatingHoursForEntity([], DEFAULT_OPERATING_HOURS, {
+      cargo: 'Operador',
+      centroCusto: 'CC-102',
+    })
+    assert.equal(r.scopeType, 'global')
+    assert.deepEqual(r.hours.default, DEFAULT_OPERATING_HOURS.default)
+  })
+
+  it('first matching rule at same scope wins (duplicate cargo targets)', () => {
+    const rules: OHScopeRule[] = [
+      globalRule,
+      {
+        scope_type: 'cargo',
+        target_value: 'Operador',
+        operating_hours: {
+          abertura: '05:00',
+          fechamento: '13:00',
+          dias_semana: [],
+        },
+      },
+      {
+        scope_type: 'cargo',
+        target_value: 'Operador',
+        operating_hours: {
+          abertura: '11:00',
+          fechamento: '19:00',
+          dias_semana: [],
+        },
+      },
+    ]
+    const r = resolveOperatingHoursForEntity(rules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'Operador',
+    })
+    assert.equal(r.scopeType, 'cargo')
+    assert.deepEqual(r.hours.default, { openHour: 5, closeHour: 13 })
+  })
 })
+

@@ -197,6 +197,29 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0]!.nome, null)
   })
 
+  it('prefers HMV carga_horaria_mensal over semanal×5 when both present', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+        // HMV_QtnQuantidadeHoraMes alias — not 44×5=220
+        carga_horaria_mensal: 180,
+        cod_sindicato: '3',
+        nome_sindicato: 'Sindicato HMV',
+        cnpj_sindicato: '',
+        escala_atual: '6x1',
+      },
+    ])
+    assert.equal(rows[0]!.cargaHorariaMensal, 180)
+    assert.equal(rows[0]!.cargaHorariaSemanal, 44)
+    assert.equal(rows[0]!.codSindicato, '3')
+    assert.equal(rows[0]!.nomeSindicato, 'Sindicato HMV')
+  })
+
+
   it('falls back carga mensal from semanal when HMV absent', () => {
     const rows = mapExtractorAggregatesToPayroll([
       {
@@ -218,14 +241,18 @@ describe('mapExtractorAggregatesToPayroll', () => {
       assert.match(sql, /HMV_QtnQuantidadeHoraMes/)
       assert.match(sql, /CON_CdiQuantidadeHoraMes/)
       assert.match(sql, /Sindicatos/)
+      assert.match(sql, /SIN_CdiSindicato/)
       assert.match(sql, /SIN_D1sNome/)
       assert.match(sql, /SIN_NusCNPJ/)
       assert.match(sql, /CON_CdiSindicato/)
       assert.match(sql, /AS carga_horaria_mensal/)
       assert.match(sql, /AS nome_sindicato/)
+      assert.match(sql, /AS cnpj_sindicato/)
+      assert.match(sql, /AS cod_sindicato/)
       assert.ok(!/CON_DssNome/i.test(sql))
     }
   })
+
 
   it('maps optional horario_trabalho_atual and keeps it optional', () => {
     const withWin = mapExtractorAggregatesToPayroll([

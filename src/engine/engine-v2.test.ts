@@ -264,6 +264,20 @@ describe('payroll CSV backward-compat + extractor columns', () => {
     assert.equal(rows[0].codCc, 'CC-01')
     assert.equal(rows[0].descCc, null)
   })
+
+  it('parses sindicato + HMV carga_horaria_mensal columns (Etapa 5)', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_sindicato;nome_sindicato;cnpj_sindicato',
+      'Operador;2200;210;42;CC-01;1;6x1;12;Sindicato Demo;11222333000144',
+    ].join('\n')
+    const { rows, issues } = parsePayrollCsv(csv)
+    assert.equal(issues.length, 0, JSON.stringify(issues))
+    assert.equal(rows[0]!.cargaHorariaMensal, 210)
+    assert.equal(rows[0]!.cargaHorariaSemanal, 42)
+    assert.equal(rows[0]!.codSindicato, '12')
+    assert.equal(rows[0]!.nomeSindicato, 'Sindicato Demo')
+    assert.equal(rows[0]!.cnpjSindicato, '11222333000144')
+  })
 })
 
 describe('simulate() v2 wiring', () => {
