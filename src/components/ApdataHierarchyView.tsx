@@ -1,6 +1,6 @@
 /**
  * Passo 5 — Guided Apdata structure: Jornadas→Steps, then selectable Horários.
- * Does not “send” to ERP; ComandosDML 1215 (só Jornadas) + optional JSON handoff.
+ * Does not “send” to ERP; rotina 1215 txt (só Jornadas / 29752) + optional JSON handoff.
  * LGPD: CC codes, schedule codes, turmas — no names/CPF.
  */
 
@@ -17,7 +17,7 @@ import {
   type SimulationResult,
 } from '../engine'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
-import { downloadComandosDmlJornadas } from '../utils/exportComandosDmlJornadas'
+import { downloadRotina1215Jornadas } from '../utils/exportRotina1215Jornadas'
 import { cnpjDigits } from '../apdata/cnpj'
 import {
   OPERACIONAL_SEM_CNPJ_KEY,
@@ -787,16 +787,16 @@ export function ApdataHierarchyView({
               <button
                 type="button"
                 onClick={() =>
-                  downloadComandosDmlJornadas(result, {
+                  downloadRotina1215Jornadas(result, {
                     dataInicio,
                     includeLunchJornada: includeLunch,
                     selectedHorarioIds: selectedIds,
                   })
                 }
                 className="min-h-11 bg-emerald-800 px-4 py-2.5 text-sm font-medium text-white"
-                title="Gera arquivo ComandosDML (rotina 1215) só com a tabela Jornadas — não envia ao ERP"
+                title="Gera arquivo-texto da rotina 1215 (transação 29752 · Jornadas) — não envia ao ERP"
               >
-                Baixar Jornadas (ComandosDML 1215)
+                Baixar Jornadas (rotina 1215)
               </button>
               <details className="relative">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
@@ -840,11 +840,12 @@ export function ApdataHierarchyView({
               </li>
             </ul>
             <p className="mt-2 text-[11px] text-[var(--color-muted)]">
-              Arquivo ComandosDML (rotina 1215):{' '}
+              Arquivo rotina 1215 (transação 29752):{' '}
               <strong className="font-medium text-[var(--color-ink)]">
                 {tree.jornadas.length} linha(s)
               </strong>{' '}
-              — uma por jornada única (`JOR-…`). Não inclui Steps/itens e não
+              — uma por jornada única (`JOR-…`). Formato
+              `IdTransacao;IdCampo;(valor)…`. Não inclui Steps/itens e não
               envia ao ERP.
             </p>
           </div>
