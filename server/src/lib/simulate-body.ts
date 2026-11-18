@@ -14,6 +14,7 @@ import {
   isRegimeFuncionamento,
   isTaxRegime,
   mapExtractorAggregatesToPayroll,
+  prepareOHScopeRulesForInput,
   type ExtractorAggregate,
   type OperatingHours,
   type PayrollRow,
@@ -47,6 +48,19 @@ const operatingHoursSchema = z.object({
   fri: dayHoursSchema.optional(),
   sat: dayHoursSchema.optional(),
   sun: dayHoursSchema.optional(),
+  byWeekday: z.record(z.string(), dayHoursSchema).optional(),
+});
+
+const ohScopeWindowSchema = z.object({
+  abertura: z.string().min(1),
+  fechamento: z.string().min(1),
+  dias_semana: z.array(z.number().int().min(0).max(6)),
+});
+
+const ohScopeRuleSchema = z.object({
+  scope_type: z.enum(["global", "publico", "centro_custo", "cargo"]),
+  target_value: z.string(),
+  operating_hours: ohScopeWindowSchema,
 });
 
 const prefsSchema = z
@@ -74,6 +88,8 @@ export const simulateBodySchema = z
     units: z.number().optional(),
     shiftsPerDay: z.number().optional(),
     operatingHours: operatingHoursSchema.optional(),
+    /** Segmented OH rules (Etapa 1 DTO). Omit → global operatingHours only. */
+    ohScopeRules: z.array(ohScopeRuleSchema).optional(),
     defaultRegimeFuncionamento: z.string().optional(),
     regimeFuncionamentoByCc: z.record(z.string(), z.string()).optional(),
     defaultTaxRegime: z.string().optional(),
@@ -264,6 +280,13 @@ export function prepareSimulateInput(body: SimulateBody): PreparedSimulate {
     }
   }
 
+  const operatingHours = (body.operatingHours ??
+    DEFAULT_OPERATING_HOURS) as OperatingHours;
+  const ohScopeRules = prepareOHScopeRulesForInput(
+    body.ohScopeRules,
+    operatingHours,
+  );
+
   const input: SimulationInput = {
     sector: body.sector,
     sectorLabel: body.sectorLabel?.trim() || undefined,
@@ -274,8 +297,8 @@ export function prepareSimulateInput(body: SimulateBody): PreparedSimulate {
     units: body.units ?? 1,
     shiftsPerDay: body.shiftsPerDay ?? 2,
     scenarioId: body.scenarioId as ScenarioId,
-    operatingHours: (body.operatingHours ??
-      DEFAULT_OPERATING_HOURS) as OperatingHours,
+    operatingHours,
+    ohScopeRules,
     payrollRows,
     defaultTaxRegime: resolveTax(body.defaultTaxRegime),
     taxRegimeByCnpj:

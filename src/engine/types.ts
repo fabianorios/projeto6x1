@@ -1,6 +1,6 @@
 /** Shared types for the PEC 6×1 impact simulation engine. */
 
-import type { OperatingHours } from './operating-hours'
+import type { OHScopeRule, OperatingHours } from './operating-hours'
 import type { PayrollRow } from './payroll'
 import type { ExclusionHit } from './schedule-policy'
 import type { ScheduleSuggestion } from './schedule-suggest'
@@ -118,8 +118,16 @@ export interface SimulationInput {
   /**
    * Establishment open/close (optional by weekday). Suggested shift
    * start/end are derived from this coverage window.
+   * Remains the global OH fallback when `ohScopeRules` is omitted or has
+   * no matching segmented rule (Etapa 2 cascade).
    */
   operatingHours: OperatingHours
+  /**
+   * Optional segmented OH rules (cargo → centro_custo → publico → global).
+   * Etapa 1: carried through the DTO only. Sims without this field keep
+   * using `operatingHours` alone. Cascade resolution is Etapa 2.
+   */
+  ohScopeRules?: OHScopeRule[]
   /**
    * Optional imported payroll lines (docs/import-layout.md).
    * When present, HC/salário médio/VR/VT vêm da folha; o wizard
