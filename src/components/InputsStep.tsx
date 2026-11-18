@@ -6,6 +6,7 @@ import {
   formatShiftRange,
   loadScenarioBasket,
   simulate,
+  syncOhScopeRulesWithGlobalHours,
   type EstrategiaAbsorcao,
   type PayrollParseIssue,
   type PayrollRow,
@@ -16,7 +17,7 @@ import {
 import { getTemplate } from '../templates'
 import type { WizardFormState } from './WizardShell'
 import { EphemeralConnectPanel } from './EphemeralConnectPanel'
-import { OperatingHoursFields } from './OperatingHoursFields'
+import { OhScopeExceptionsSection } from './OhScopeExceptionsSection'
 import { PayrollImport } from './PayrollImport'
 import {
   ScenarioComparePanel,
@@ -258,11 +259,27 @@ export function InputsStep({
             </label>
 
             <div className="sm:col-span-2">
-              <OperatingHoursFields
-                value={form.operatingHours}
-                onChange={(operatingHours) =>
-                  patch('operatingHours', operatingHours)
+              <OhScopeExceptionsSection
+                operatingHours={form.operatingHours}
+                onOperatingHoursChange={(operatingHours) => {
+                  if (form.ohScopeRules.length === 0) {
+                    patch('operatingHours', operatingHours)
+                    return
+                  }
+                  onChange({
+                    ...form,
+                    operatingHours,
+                    ohScopeRules: syncOhScopeRulesWithGlobalHours(
+                      form.ohScopeRules,
+                      operatingHours,
+                    ),
+                  })
+                }}
+                ohScopeRules={form.ohScopeRules}
+                onOhScopeRulesChange={(ohScopeRules) =>
+                  patch('ohScopeRules', ohScopeRules)
                 }
+                payrollRows={form.payrollRows}
               />
             </div>
           </div>

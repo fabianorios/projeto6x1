@@ -39,7 +39,7 @@ export interface WizardFormState {
   operatingHours: OperatingHours
   /**
    * Segmented OH rules (Etapa 1 DTO). Empty = use `operatingHours` only.
-   * UI for exceptions lands in Etapa 3.
+   * Premissas UI (Etapa 4) edits exceptions via OhScopeExceptionsSection.
    */
   ohScopeRules: OHScopeRule[]
   scenarioId: ScenarioId

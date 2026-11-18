@@ -23,6 +23,8 @@ import {
   OPERACIONAL_SEM_CNPJ_KEY,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
+  dossierSindicatoOptions,
+  filterCostCentersByDossier,
   resolveVisibleCentroCustos,
   type DossierEstablishmentOption,
 } from '../utils/resultsDossier'
@@ -32,6 +34,13 @@ interface ApdataHierarchyViewProps {
   /** Controlled Data Início (YYYY-MM-DD). */
   dataInicio?: string
   onDataInicioChange?: (isoDate: string) => void
+  /** Optional controlled scope filters (shared with Results header — Etapa 4). */
+  filterCnpj?: string
+  filterCc?: string
+  filterSindicato?: string
+  onFilterCnpj?: (next: string) => void
+  onFilterCc?: (next: string) => void
+  onFilterSindicato?: (next: string) => void
 }
 
 type WizardStep = 1 | 2 | 3
@@ -326,6 +335,12 @@ export function ApdataHierarchyView({
   result,
   dataInicio: dataInicioProp,
   onDataInicioChange,
+  filterCnpj: filterCnpjProp,
+  filterCc: filterCcProp,
+  filterSindicato: filterSindicatoProp,
+  onFilterCnpj,
+  onFilterCc,
+  onFilterSindicato,
 }: ApdataHierarchyViewProps) {
   const defaultInicio = defaultApdataDataInicio(
     result.ruleVersion.params.scenarioId,
@@ -346,8 +361,26 @@ export function ApdataHierarchyView({
     baseCandidates.horarios.map((h) => h.id),
   )
   const [generated, setGenerated] = useState(false)
-  const [filterCnpj, setFilterCnpj] = useState('')
-  const [filterCc, setFilterCc] = useState('')
+  const [localFilterCnpj, setLocalFilterCnpj] = useState('')
+  const [localFilterCc, setLocalFilterCc] = useState('')
+  const [localFilterSindicato, setLocalFilterSindicato] = useState('')
+
+  const filterCnpj = filterCnpjProp ?? localFilterCnpj
+  const filterCc = filterCcProp ?? localFilterCc
+  const filterSindicato = filterSindicatoProp ?? localFilterSindicato
+
+  function setFilterCnpj(next: string) {
+    if (onFilterCnpj) onFilterCnpj(next)
+    else setLocalFilterCnpj(next)
+  }
+  function setFilterCc(next: string) {
+    if (onFilterCc) onFilterCc(next)
+    else setLocalFilterCc(next)
+  }
+  function setFilterSindicato(next: string) {
+    if (onFilterSindicato) onFilterSindicato(next)
+    else setLocalFilterSindicato(next)
+  }
 
   const establishments = useMemo(
     () => dossierEstablishmentOptions(result.input.payrollRows),
@@ -361,6 +394,14 @@ export function ApdataHierarchyView({
       ),
     [result.byCostCenter, result.input.payrollRows],
   )
+  const sindicatoOptions = useMemo(
+    () =>
+      dossierSindicatoOptions(
+        result.byCostCenter,
+        result.input.payrollRows,
+      ),
+    [result.byCostCenter, result.input.payrollRows],
+  )
 
   // Reset selection when Quadro / scenario result identity changes.
   useEffect(() => {
@@ -369,9 +410,11 @@ export function ApdataHierarchyView({
     setSelectedIds(next.horarios.map((h) => h.id))
     setWizardStep(1)
     setGenerated(false)
-    setFilterCnpj('')
-    setFilterCc('')
-  }, [result])
+    // Only clear local (uncontrolled) filters; parent-owned filters stay.
+    if (filterCnpjProp === undefined) setLocalFilterCnpj('')
+    if (filterCcProp === undefined) setLocalFilterCc('')
+    if (filterSindicatoProp === undefined) setLocalFilterSindicato('')
+  }, [result, filterCnpjProp, filterCcProp, filterSindicatoProp])
 
   const candidates = useMemo(
     () =>
@@ -379,22 +422,45 @@ export function ApdataHierarchyView({
     [result, includeLunch],
   )
 
-  const visibleCcs = useMemo(
-    () =>
-      resolveVisibleCentroCustos({
-        allCentroCustos: ccOptions.length
-          ? ccOptions
-          : [
-              ...new Set(
-                candidates.horarios.map((h) => h.centroCustoCodigo),
-              ),
-            ],
-        establishments,
-        filterCnpjKey: filterCnpj,
-        filterCc,
-      }),
-    [ccOptions, candidates.horarios, establishments, filterCnpj, filterCc],
-  )
+  const sindicatoCcAllow = useMemo(() => {
+    if (!filterSindicato) return null
+    const centers = filterCostCentersByDossier({
+      centers: result.byCostCenter,
+      payrollRows: result.input.payrollRows,
+      filterSindicatoKey: filterSindicato,
+    })
+    return new Set(centers.map((c) => c.centroCusto.trim()).filter(Boolean))
+  }, [filterSindicato, result.byCostCenter, result.input.payrollRows])
+
+  const visibleCcs = useMemo(() => {
+    let list = resolveVisibleCentroCustos({
+      allCentroCustos: ccOptions.length
+        ? ccOptions
+        : [
+            ...new Set(
+              candidates.horarios.map((h) => h.centroCustoCodigo),
+            ),
+          ],
+      establishments,
+      filterCnpjKey: filterCnpj,
+      filterCc,
+    })
+    if (sindicatoCcAllow) {
+      if (list == null) {
+        list = [...sindicatoCcAllow]
+      } else {
+        list = list.filter((cc) => sindicatoCcAllow.has(cc))
+      }
+    }
+    return list
+  }, [
+    ccOptions,
+    candidates.horarios,
+    establishments,
+    filterCnpj,
+    filterCc,
+    sindicatoCcAllow,
+  ])
 
   const visibleHorarios = useMemo(() => {
     let list = candidates.horarios
@@ -533,8 +599,8 @@ export function ApdataHierarchyView({
         </label>
       </div>
 
-      <div className="mt-4 flex flex-col gap-4 rounded-xl border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-paper)_75%,white)] p-4 md:flex-row md:items-end">
-        <label className="block w-full text-xs text-[var(--color-ink)] md:w-1/2">
+      <div className="mt-4 flex flex-col gap-4 rounded-xl border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-paper)_75%,white)] p-4 md:flex-row md:flex-wrap md:items-end">
+        <label className="block w-full text-xs text-[var(--color-ink)] md:w-[calc(33.333%-0.75rem)]">
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
             Filial / CNPJ de escopo
           </span>
@@ -566,7 +632,7 @@ export function ApdataHierarchyView({
             ))}
           </select>
         </label>
-        <label className="block w-full text-xs text-[var(--color-ink)] md:w-1/2">
+        <label className="block w-full text-xs text-[var(--color-ink)] md:w-[calc(33.333%-0.75rem)]">
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
             Centro de custo (CC)
           </span>
@@ -582,6 +648,31 @@ export function ApdataHierarchyView({
             {(visibleCcs ?? ccOptions).map((cc) => (
               <option key={cc} value={cc}>
                 {cc}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block w-full text-xs text-[var(--color-ink)] md:w-[calc(33.333%-0.75rem)]">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Sindicato
+          </span>
+          <select
+            value={filterSindicato}
+            onChange={(e) => {
+              setFilterSindicato(e.target.value)
+              setGenerated(false)
+            }}
+            className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-teal)]"
+            disabled={sindicatoOptions.length === 0}
+          >
+            <option value="">
+              {sindicatoOptions.length === 0
+                ? 'Todos (sem sindicato na folha)'
+                : 'Todos os sindicatos'}
+            </option>
+            {sindicatoOptions.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
               </option>
             ))}
           </select>

@@ -594,7 +594,9 @@ export function prepareOHScopeRulesForInput(
 ): OHScopeRule[] | undefined {
   if (raw == null) return undefined
   const rules = normalizeOHScopeRules(raw)
-  return ensureGlobalOHScopeRule(rules, globalHours)
+  if (rules.length === 0) return undefined
+  // Prefer wizard OH as the live global window when any rules are sent.
+  return syncOhScopeRulesWithGlobalHours(rules, globalHours)
 }
 
 /** Prepend/replace missing global rule from wizard OH. */
@@ -605,6 +607,18 @@ export function ensureGlobalOHScopeRule(
   const hasGlobal = rules.some((r) => r.scope_type === 'global')
   if (hasGlobal) return rules
   return [globalRuleFromOperatingHours(globalHours), ...rules]
+}
+
+/**
+ * When exceptions exist, always refresh the `global` rule window from wizard
+ * `operatingHours` (Premissas edits). Segmented rules are preserved.
+ */
+export function syncOhScopeRulesWithGlobalHours(
+  rules: OHScopeRule[],
+  globalHours: OperatingHours,
+): OHScopeRule[] {
+  const exceptions = rules.filter((r) => r.scope_type !== 'global')
+  return [globalRuleFromOperatingHours(globalHours), ...exceptions]
 }
 
 /**
@@ -643,7 +657,7 @@ export interface OHScopeMatchContext {
   publico?: string | null
 }
 
-/** Compact match metadata for results (Etapa 3 badge — no re-resolve). */
+/** Compact match metadata for results (Etapa 4 badge — no re-resolve). */
 export interface OHScopeMatchMeta {
   scopeType: OHScopeType
   /** Matched `target_value`; empty string for global / legacy fallback. */

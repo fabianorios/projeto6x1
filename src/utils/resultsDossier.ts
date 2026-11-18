@@ -106,6 +106,105 @@ export function dossierCentroCustoOptions(
   return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
 }
 
+export interface DossierSindicatoOption {
+  /** Digits/code key from Folha `cod_sindicato`. */
+  key: string
+  label: string
+}
+
+/** Unique Sindicato options from Folha / CC aggregates (collective framing). */
+export function dossierSindicatoOptions(
+  byCostCenter: CostCenterResult[],
+  payrollRows?: PayrollRow[] | null,
+): DossierSindicatoOption[] {
+  const map = new Map<string, string>()
+  for (const c of byCostCenter) {
+    const key = (c.codSindicato ?? '').trim()
+    if (!key || key === '0') continue
+    const nome = (c.nomeSindicato ?? '').trim()
+    map.set(key, nome || `Sindicato ${key}`)
+  }
+  if (payrollRows) {
+    for (const r of payrollRows) {
+      const key = (r.codSindicato ?? '').trim()
+      if (!key || key === '0') continue
+      const nome = (r.nomeSindicato ?? '').trim()
+      if (!map.has(key) || nome) {
+        map.set(key, nome || map.get(key) || `Sindicato ${key}`)
+      }
+    }
+  }
+  return [...map.entries()]
+    .map(([key, label]) => ({
+      key,
+      label: label.includes(key) ? label : `${label} (${key})`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'))
+}
+
+/**
+ * Filter CostCenterResult rows by Filial/CNPJ, CC, and/or Sindicato.
+ * Empty string on an axis = no restriction. Uses dominant sindicato on CC
+ * plus Folha rows when present (pass-through without regrouping HC).
+ */
+export function filterCostCentersByDossier(opts: {
+  centers: CostCenterResult[]
+  payrollRows?: PayrollRow[] | null
+  filterCnpjKey?: string
+  filterCc?: string
+  filterSindicatoKey?: string
+}): CostCenterResult[] {
+  const {
+    centers,
+    payrollRows,
+    filterCnpjKey = '',
+    filterCc = '',
+    filterSindicatoKey = '',
+  } = opts
+
+  let allowedBySindicato: Set<string> | null = null
+  if (filterSindicatoKey && payrollRows?.length) {
+    allowedBySindicato = new Set()
+    for (const r of payrollRows) {
+      const cod = (r.codSindicato ?? '').trim()
+      if (cod !== filterSindicatoKey) continue
+      const dig = cnpjDigits(r.cnpjCompleto)
+      const cc = (r.centroCusto ?? '').trim()
+      if (cc) {
+        allowedBySindicato.add(
+          dig.length >= 8 ? `${dig}\u0001${cc}` : cc,
+        )
+      }
+    }
+  }
+
+  return centers.filter((c) => {
+    if (filterCnpjKey) {
+      const dig = cnpjDigits(c.cnpjCompleto)
+      if (dig !== filterCnpjKey) return false
+    }
+    if (filterCc) {
+      const cc = c.centroCusto.trim()
+      const cod = (c.codCc ?? '').trim()
+      if (cc !== filterCc && cod !== filterCc) return false
+    }
+    if (filterSindicatoKey) {
+      const cod = (c.codSindicato ?? '').trim()
+      if (cod === filterSindicatoKey) return true
+      if (allowedBySindicato) {
+        const dig = cnpjDigits(c.cnpjCompleto)
+        const key =
+          dig.length >= 8
+            ? `${dig}\u0001${c.centroCusto.trim()}`
+            : c.centroCusto.trim()
+        return allowedBySindicato.has(key)
+      }
+      return false
+    }
+    return true
+  })
+}
+
 /**
  * Which CC codes remain visible given Filial/CNPJ + CC filters.
  * Empty filter string = no restriction on that axis.

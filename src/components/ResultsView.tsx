@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -46,8 +47,12 @@ import { logPerf } from '../utils/perfTelemetry'
 import {
   DEFAULT_DOSSIER_OPEN,
   collapseAllDossier,
+  dossierCentroCustoOptions,
+  dossierEstablishmentOptions,
+  dossierSindicatoOptions,
   executiveImpactSummary,
   expandAllDossier,
+  filterCostCentersByDossier,
   OPERACIONAL_SEM_CNPJ_KEY,
   groupOperacionalByCnpj,
   nestCentersByCc,
@@ -62,6 +67,8 @@ import {
   initialLgpdNameMask,
 } from './LgpdNameMaskToggle'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
+import { OhScopeBadge } from './OhScopeBadge'
+import { ResultsScopeFilters } from './ResultsScopeFilters'
 import { CalibrationHistory } from './CalibrationHistory'
 import { HcIncreaseSummary } from './HcIncreaseSummary'
 import { PrintableReport } from './PrintableReport'
@@ -324,10 +331,37 @@ export function ResultsView({
   const passo5MountLoggedRef = useRef(false)
   /** LGPD: collaborator names masked by default (managerial may unmask UI). */
   const [lgpdMaskNames, setLgpdMaskNames] = useState(initialLgpdNameMask)
+  /** Etapa 4 — Filial / CC / Sindicato scope filters. */
+  const [filterCnpj, setFilterCnpj] = useState('')
+  const [filterCc, setFilterCc] = useState('')
+  const [filterSindicato, setFilterSindicato] = useState('')
   const payrollNameSamples = (input.payrollRows ?? [])
     .map((r) => r.nome)
     .filter((n): n is string => Boolean(n && n.trim()))
 
+  const establishments = useMemo(
+    () => dossierEstablishmentOptions(input.payrollRows),
+    [input.payrollRows],
+  )
+  const ccFilterOptions = useMemo(
+    () => dossierCentroCustoOptions(byCostCenter, input.payrollRows),
+    [byCostCenter, input.payrollRows],
+  )
+  const sindicatoOptions = useMemo(
+    () => dossierSindicatoOptions(byCostCenter, input.payrollRows),
+    [byCostCenter, input.payrollRows],
+  )
+  const filteredCostCenters = useMemo(
+    () =>
+      filterCostCentersByDossier({
+        centers: byCostCenter,
+        payrollRows: input.payrollRows,
+        filterCnpjKey: filterCnpj,
+        filterCc,
+        filterSindicatoKey: filterSindicato,
+      }),
+    [byCostCenter, input.payrollRows, filterCnpj, filterCc, filterSindicato],
+  )
   function toggleSection(id: DossierSectionId) {
     setDossier((prev) => ({ ...prev, [id]: !prev[id] }))
   }
@@ -409,11 +443,11 @@ export function ResultsView({
     }))
   }
 
-  const operacionalGroups = groupOperacionalByCnpj({
-    centers:
-      byCostCenter.length > 0
-        ? byCostCenter
-        : [
+  const scopeCenters =
+    filteredCostCenters.length > 0
+      ? filteredCostCenters
+      : byCostCenter.length === 0
+        ? [
             {
               centroCusto: 'Geral',
               currentHeadcount: coverage.currentHeadcount,
@@ -450,8 +484,13 @@ export function ResultsView({
               assistOdontoMonthly: 0,
               regimeFuncionamento: distribuicaoTurmas.regime,
               distribuicaoTurmas,
+              ohScopeMatch: { scopeType: 'global' as const, targetValue: '' },
             },
-          ],
+          ]
+        : []
+
+  const operacionalGroups = groupOperacionalByCnpj({
+    centers: scopeCenters,
     payrollRows: input.payrollRows,
   })
   /** Accordion whenever ≥1 real Filial/CNPJ (not only when 2+). */
@@ -690,6 +729,19 @@ export function ResultsView({
             maskOn={lgpdMaskNames}
             onChange={setLgpdMaskNames}
             sampleNames={payrollNameSamples}
+          />
+          <ResultsScopeFilters
+            establishments={establishments}
+            ccOptions={ccFilterOptions}
+            sindicatoOptions={sindicatoOptions}
+            filterCnpj={filterCnpj}
+            filterCc={filterCc}
+            filterSindicato={filterSindicato}
+            onFilterCnpj={setFilterCnpj}
+            onFilterCc={setFilterCc}
+            onFilterSindicato={setFilterSindicato}
+            visibleCount={filteredCostCenters.length}
+            totalCount={byCostCenter.length}
           />
         </div>
 
@@ -979,20 +1031,23 @@ export function ResultsView({
                   </p>
                 ) : null}
 
-                {byCostCenter.length > 0 ? (
+                {filteredCostCenters.length > 0 ? (
                   <div>
                     <h4 className="text-sm font-semibold tracking-wide text-[var(--color-ink)] uppercase">
                       Por centro de custo
                     </h4>
                     <p className="mt-1 text-xs text-[var(--color-muted)]">
                       Salários e VR/VT agregados da folha importada, com HC
-                      adicional proporcional ao fator de escala.
+                      adicional proporcional ao fator de escala. Badge OH =
+                      cascata global vs segmentada (`ohScopeMatch`).
                     </p>
                     <div className="mt-3 overflow-x-auto border border-[var(--color-line)] bg-white">
                       <table className="w-full text-left text-xs">
                         <thead>
                           <tr className="border-b border-[var(--color-line)] text-[var(--color-muted)]">
                             <th className="px-3 py-2 font-normal">Centro</th>
+                            <th className="px-3 py-2 font-normal">OH</th>
+                            <th className="px-3 py-2 font-normal">Sindicato</th>
                             <th className="px-3 py-2 font-normal">HC</th>
                             <th className="px-3 py-2 font-normal">Δ Folha</th>
                             <th className="px-3 py-2 font-normal">Δ VR</th>
@@ -1000,7 +1055,7 @@ export function ResultsView({
                           </tr>
                         </thead>
                         <tbody>
-                          {byCostCenter.map((c) => (
+                          {filteredCostCenters.map((c) => (
                             <tr
                               key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${c.codHorarioAtual ?? ''}`}
                               className="border-b border-[var(--color-line)]"
@@ -1010,6 +1065,15 @@ export function ResultsView({
                                 {c.codHorarioAtual?.trim()
                                   ? ` · hor. ${formatHorarioAtualLabel(c)}`
                                   : ''}
+                              </td>
+                              <td className="px-3 py-2">
+                                <OhScopeBadge match={c.ohScopeMatch} short />
+                              </td>
+                              <td className="px-3 py-2 text-[var(--color-muted)]">
+                                {(c.nomeSindicato ?? '').trim() ||
+                                  (c.codSindicato
+                                    ? `Cód. ${c.codSindicato}`
+                                    : '—')}
                               </td>
                               <td className="px-3 py-2 tabular-nums">
                                 {c.currentHeadcount} → {c.requiredHeadcount}
@@ -1029,6 +1093,11 @@ export function ResultsView({
                       </table>
                     </div>
                   </div>
+                ) : byCostCenter.length > 0 ? (
+                  <p className="text-sm text-[var(--color-muted)]">
+                    Nenhum centro de custo no filtro atual (Filial / CC /
+                    Sindicato).
+                  </p>
                 ) : null}
 
                 <div>
@@ -1138,6 +1207,12 @@ export function ResultsView({
             result={result}
             dataInicio={apdataDataInicio}
             onDataInicioChange={setApdataDataInicio}
+            filterCnpj={filterCnpj}
+            filterCc={filterCc}
+            filterSindicato={filterSindicato}
+            onFilterCnpj={setFilterCnpj}
+            onFilterCc={setFilterCc}
+            onFilterSindicato={setFilterSindicato}
           />
         </DossierSection>
       </section>
@@ -1340,12 +1415,20 @@ function OperacionalFilialBody({
         <ul className="mt-2 space-y-2 text-xs text-[var(--color-muted)]">
           {ccGroups.map((ccGroup) => (
             <li key={ccGroup.centroCusto}>
-              <p className="font-medium text-[var(--color-ink)]">
-                CC{' '}
-                {centroCustoDisplayLabel({
-                  centroCusto: ccGroup.centroCusto,
-                  descCc: ccGroup.descCc,
-                })}
+              <p className="flex flex-wrap items-center gap-2 font-medium text-[var(--color-ink)]">
+                <span>
+                  CC{' '}
+                  {centroCustoDisplayLabel({
+                    centroCusto: ccGroup.centroCusto,
+                    descCc: ccGroup.descCc,
+                  })}
+                </span>
+                {ccGroup.horarios[0]?.ohScopeMatch ? (
+                  <OhScopeBadge
+                    match={ccGroup.horarios[0].ohScopeMatch}
+                    short
+                  />
+                ) : null}
               </p>
               <ul className="mt-1 space-y-0.5 border-l border-[var(--color-line)] pl-3">
                 {ccGroup.horarios.map((c) => {
@@ -1356,11 +1439,15 @@ function OperacionalFilialBody({
                       ? `${c.cargaSemanalAtual.toLocaleString('pt-BR')} h/sem`
                       : '—'
                   const cod = formatHorarioAtualLabel(c)
+                  const sind =
+                    (c.nomeSindicato ?? '').trim() ||
+                    (c.codSindicato ? `sind. ${c.codSindicato}` : '')
                   return (
                     <li
                       key={`${c.cnpjCompleto ?? ''}-${c.centroCusto}-${c.codHorarioAtual?.trim() || '—'}`}
                     >
                       Horário {cod} · escala {escala} · carga {carga}
+                      {sind ? ` · ${sind}` : ''}
                       {d
                         ? ` · ${d.crewCount} turma(s) · HC ${d.totalHeadcount}`
                         : ` · HC ${c.requiredHeadcount}`}
@@ -1397,7 +1484,10 @@ function OperacionalFilialBody({
                       className="border-t border-[var(--color-line)] pt-3 first:border-t-0 first:pt-0"
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <p className="text-sm font-semibold">{s.label}</p>
+                        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                          <span>{s.label}</span>
+                          <OhScopeBadge match={s.ohScopeMatch} short />
+                        </p>
                         <p className="text-sm tabular-nums">
                           Δ total {brl(s.monthlyDeltaVsCurrent)}/mês
                         </p>

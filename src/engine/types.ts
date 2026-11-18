@@ -223,7 +223,7 @@ export interface CostCenterResult {
   /** Establishment CNPJ from folha (digits or formatted); used to group Seção 2. */
   cnpjCompleto?: string | null
   /**
-   * OH cascade match for this center (Etapa 2). Etapa 3 badge reads
+   * OH cascade match for this center (Etapa 2). Etapa 4 badge reads
    * `scopeType` / `targetValue` without re-resolving.
    */
   ohScopeMatch?: OHScopeMatchMeta
@@ -232,6 +232,10 @@ export interface CostCenterResult {
    * When omitted, callers fall back to `SimulationInput.operatingHours`.
    */
   operatingHours?: OperatingHours
+  /** Dominant sindicato code from Folha (Results filter — Etapa 4). */
+  codSindicato?: string | null
+  /** Dominant sindicato name (collective framing; not person PII). */
+  nomeSindicato?: string | null
 }
 
 export interface CoverageGap {
