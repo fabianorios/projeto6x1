@@ -188,6 +188,11 @@ export {
   prepareOHScopeRulesForInput,
   ensureGlobalOHScopeRule,
   effectiveGlobalOperatingHours,
+  normalizeOHScopeKey,
+  ohScopeMatchContextFromPayrollRow,
+  ohScopeMatchContextFromCostCenter,
+  resolveOperatingHoursForEntity,
+  resolveOperatingHours,
 } from './operating-hours'
 export type {
   DayOperatingHours,
@@ -196,6 +201,9 @@ export type {
   OHScopeType,
   OHScopeWindow,
   OHScopeRule,
+  OHScopeMatchContext,
+  OHScopeMatchMeta,
+  OHScopeResolution,
 } from './operating-hours'
 export {
   buildShiftWindows,

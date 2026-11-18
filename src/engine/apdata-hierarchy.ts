@@ -31,6 +31,8 @@ import {
 import {
   DEFAULT_OPERATING_HOURS,
   formatHourClock,
+  ohScopeMatchContextFromCostCenter,
+  resolveOperatingHoursForEntity,
   resolveShiftWindows,
   type OperatingHours,
 } from './operating-hours'
@@ -674,19 +676,60 @@ export function defaultApdataDataInicio(scenarioId: string): string {
   return `${year}-${String(month).padStart(2, '0')}-01`
 }
 
+/** Effective OH for one CC: prefer simulate cascade result, else resolve. */
+function operatingHoursForCenter(
+  result: SimulationResult,
+  cc: CostCenterResult,
+): OperatingHours {
+  if (cc.operatingHours) return cc.operatingHours
+  const global = result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
+  return resolveOperatingHoursForEntity(
+    result.input.ohScopeRules,
+    global,
+    ohScopeMatchContextFromCostCenter({
+      centroCusto: cc.centroCusto,
+      codCc: cc.codCc,
+      descCc: cc.descCc,
+      cargo: cc.cargo,
+      codCargo: cc.codCargo,
+      descCargo: cc.descCargo,
+    }),
+  ).hours
+}
+
 /**
  * Derive jornada + horário candidates from Quadro Proposto / simulation.
  * Entrada/saída come from operating hours × turnos/dia (shift tiles), not a
  * hardcoded 09–17. Horário ids are stable for session selection UI.
+ * When `ohScopeRules` are present, each CC tiles from its cascaded OH.
  */
 export function deriveApdataCandidates(
   result: SimulationResult,
   options: Pick<BuildApdataHierarchyOptions, 'includeLunchJornada'> = {},
 ): ApdataStructureCandidates {
-  const operatingHours =
-    result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
   const shiftsPerDay = Math.max(1, result.input.shiftsPerDay || 1)
-  const shifts = resolveApdataShiftWindows(operatingHours, shiftsPerDay)
+  const centersIn = centersFromResult(result)
+
+  const shiftsByCc = new Map<string, ApdataShiftWindow[]>()
+  const allShiftKeys = new Map<string, ApdataShiftWindow>()
+  for (const cc of centersIn) {
+    const oh = operatingHoursForCenter(result, cc)
+    const shifts = resolveApdataShiftWindows(oh, shiftsPerDay)
+    const ccKey = `${(cc.cnpjCompleto ?? '').replace(/\D/g, '')}\u0001${cc.centroCusto}\u0001${cc.codHorarioAtual ?? ''}`
+    shiftsByCc.set(ccKey, shifts)
+    for (const s of shifts) {
+      const key = `${clockCode(s.startHour)}-${clockCode(s.endHour)}`
+      if (!allShiftKeys.has(key)) allShiftKeys.set(key, s)
+    }
+  }
+
+  const shifts =
+    allShiftKeys.size > 0
+      ? [...allShiftKeys.values()]
+      : resolveApdataShiftWindows(
+          result.input.operatingHours ?? DEFAULT_OPERATING_HOURS,
+          shiftsPerDay,
+        )
   const shift = shifts[0]!
   const meal = resolveMealWindow(shift.startHour, shift.endHour)
   const includeLunchDefault = shifts.some(
@@ -713,11 +756,12 @@ export function deriveApdataCandidates(
   }
   const jornadas = [...jornadasByCode.values()]
 
-  const centersIn = centersFromResult(result)
   const horarioMap = new Map<string, ApdataHorarioCandidate>()
 
   for (const cc of centersIn) {
     const dist = resolveDist(cc, result.distribuicaoTurmas)
+    const ccKey = `${(cc.cnpjCompleto ?? '').replace(/\D/g, '')}\u0001${cc.centroCusto}\u0001${cc.codHorarioAtual ?? ''}`
+    const ccShifts = shiftsByCc.get(ccKey) ?? shifts
     // Group crews that share the same workday pattern + escala → one base group.
     const groups = new Map<string, TurmaCrew[]>()
     for (const crew of dist.crews) {
@@ -731,7 +775,7 @@ export function deriveApdataCandidates(
     for (const crews of groups.values()) {
       const lead = crews[0]!
       const work = normalizeWorkDays(lead.workDays)
-      for (const s of shifts) {
+      for (const s of ccShifts) {
         const shiftKey = `${clockCode(s.startHour)}-${clockCode(s.endHour)}`
         const jornadaCodigos = jornadasForShift.get(shiftKey) ?? []
         const codigo = horarioCodigoFor(

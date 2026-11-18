@@ -6,8 +6,12 @@
 import {
   DEFAULT_OPERATING_HOURS,
   formatOperatingWindow,
+  resolveOperatingHoursForEntity,
   tileCoverageWindow,
   widestCoverageDay,
+  type OHScopeMatchContext,
+  type OHScopeMatchMeta,
+  type OHScopeRule,
   type OperatingHours,
 } from './operating-hours'
 import { estimateWorkDaysPerMonth } from './payroll'
@@ -70,6 +74,8 @@ export interface ScheduleSuggestion {
   /** estimated.monthlyTotal − current.monthlyTotal */
   monthlyDeltaVsCurrent: number
   policyVersion: string
+  /** OH cascade match used to tile this suggestion (Etapa 2 → badge). */
+  ohScopeMatch?: OHScopeMatchMeta
 }
 
 export interface ScheduleSuggestionResult {
@@ -92,6 +98,11 @@ export interface CostCenterDemand {
   currentMonthlyVt: number | null
   /** Operating regime for this center (fixed-off waiver). */
   regimeFuncionamento?: RegimeFuncionamento | null
+  /** Pre-resolved OH for this center (from simulate cascade). */
+  operatingHours?: OperatingHours
+  ohScopeMatch?: OHScopeMatchMeta
+  /** When operatingHours omitted, resolve via ohScopeRules + this context. */
+  ohMatchContext?: OHScopeMatchContext
 }
 
 export interface SuggestSchedulesInput {
@@ -107,6 +118,8 @@ export interface SuggestSchedulesInput {
   shiftsPerDay: number
   /** Establishment open/close — shift times are derived from this window. */
   operatingHours: OperatingHours
+  /** Optional segmented OH rules (cascade when resolving per center). */
+  ohScopeRules?: OHScopeRule[]
   /** Scenario charge factor applied to projected salary mass. */
   projectedChargeFactor: number
   /** Scenario coverage buffer (0–1). */
@@ -258,6 +271,33 @@ function rankAndPick(
   return picked
 }
 
+function resolveDemandOperatingHours(
+  demand: CostCenterDemand,
+  input: SuggestSchedulesInput,
+): { hours: OperatingHours; ohScopeMatch: OHScopeMatchMeta } {
+  if (demand.operatingHours) {
+    return {
+      hours: demand.operatingHours,
+      ohScopeMatch: demand.ohScopeMatch ?? {
+        scopeType: 'global',
+        targetValue: '',
+      },
+    }
+  }
+  const resolved = resolveOperatingHoursForEntity(
+    input.ohScopeRules,
+    input.operatingHours ?? DEFAULT_OPERATING_HOURS,
+    demand.ohMatchContext ?? { centroCusto: demand.centroCusto },
+  )
+  return {
+    hours: resolved.hours,
+    ohScopeMatch: {
+      scopeType: resolved.scopeType,
+      targetValue: resolved.targetValue,
+    },
+  }
+}
+
 function suggestForCenter(
   demand: CostCenterDemand,
   input: SuggestSchedulesInput,
@@ -267,6 +307,10 @@ function suggestForCenter(
   const codes = listSuggestableCodes(input.scenarioId, input.currentScale)
   const regime = resolveRegime(
     demand.regimeFuncionamento ?? input.defaultRegimeFuncionamento,
+  )
+  const { hours: centerHours, ohScopeMatch } = resolveDemandOperatingHours(
+    demand,
+    input,
   )
 
   // Roster base = demand HC only. units×shifts/dia is informative in simulate
@@ -291,11 +335,11 @@ function suggestForCenter(
       regime,
     )
 
-    const shifts = buildShiftWindows(code, input.operatingHours, hc)
+    const shifts = buildShiftWindows(code, centerHours, hc)
     if (shifts.length === 0) continue
     // Exact split — Σ shift HC === required roster (no invent pad).
     const totalHeadcount = shifts.reduce((s, w) => s + w.headcount, 0)
-    const window = formatOperatingWindow(widestCoverageDay(input.operatingHours))
+    const window = formatOperatingWindow(widestCoverageDay(centerHours))
 
     const estimated = estimateCosts({
       headcount: totalHeadcount,
@@ -335,6 +379,7 @@ function suggestForCenter(
         estimated.monthlyTotal - current.monthlyTotal,
       ),
       policyVersion: SCHEDULE_POLICY_VERSION,
+      ohScopeMatch,
     })
   }
 
@@ -424,6 +469,7 @@ export function suggestSchedulesFromSimulation(
     units: input.units,
     shiftsPerDay: input.shiftsPerDay,
     operatingHours: input.operatingHours ?? DEFAULT_OPERATING_HOURS,
+    ohScopeRules: input.ohScopeRules,
     projectedChargeFactor: opts.projectedChargeFactor,
     coverageBuffer: opts.coverageBuffer,
     defaultRegimeFuncionamento: input.defaultRegimeFuncionamento,

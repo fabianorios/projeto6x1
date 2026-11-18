@@ -608,9 +608,9 @@ export function ensureGlobalOHScopeRule(
 }
 
 /**
- * Etapa 1 effective OH: prefer an explicit `global` scope rule when present;
- * otherwise the legacy `operatingHours` field. Cascade (cargo→…→global) is
- * Etapa 2 — callers must not treat this as segmented resolution.
+ * Prefer an explicit `global` scope rule when present; otherwise the legacy
+ * `operatingHours` field. Prefer {@link resolveOperatingHoursForEntity} when
+ * segmented cascade (cargo→CC→público→global) is needed.
  */
 export function effectiveGlobalOperatingHours(
   rules: OHScopeRule[] | undefined,
@@ -620,6 +620,202 @@ export function effectiveGlobalOperatingHours(
   const global = rules.find((r) => r.scope_type === 'global')
   if (!global) return fallback
   return ohWindowToOperatingHours(global.operating_hours)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Etapa 2 — cascade resolution (cargo → centro_custo → publico → global)     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Attributes available on a Folha row / cost-center aggregate for OH matching.
+ * `publico` is optional (consultant audience label; may be absent on Folha).
+ */
+export interface OHScopeMatchContext {
+  cargo?: string | null
+  codCargo?: string | null
+  descCargo?: string | null
+  /** Cost-center code (prefer `cod_cc`). */
+  codCc?: string | null
+  /** Cost-center key / description as stored on the row (`centro_custo`). */
+  centroCusto?: string | null
+  descCc?: string | null
+  /** Audience / population label (trim/case match). */
+  publico?: string | null
+}
+
+/** Compact match metadata for results (Etapa 3 badge — no re-resolve). */
+export interface OHScopeMatchMeta {
+  scopeType: OHScopeType
+  /** Matched `target_value`; empty string for global / legacy fallback. */
+  targetValue: string
+}
+
+export interface OHScopeResolution extends OHScopeMatchMeta {
+  hours: OperatingHours
+}
+
+/** Normalize free-text keys (cargo / público / CC description). */
+export function normalizeOHScopeKey(value: string | null | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')
+}
+
+/** True when `candidate` equals `target` after text normalization. */
+function textKeysMatch(
+  target: string,
+  candidate: string | null | undefined,
+): boolean {
+  const t = normalizeOHScopeKey(target)
+  if (!t) return false
+  return normalizeOHScopeKey(candidate) === t
+}
+
+/**
+ * Centro de custo: match `cod_cc` and/or description fields.
+ * Codes compare trimmed case-insensitively; descriptions use text normalize.
+ */
+function centroCustoMatches(
+  target: string,
+  ctx: OHScopeMatchContext,
+): boolean {
+  const raw = target.trim()
+  if (!raw) return false
+  const codeTarget = raw.toLocaleLowerCase('pt-BR')
+  for (const candidate of [ctx.codCc, ctx.centroCusto]) {
+    const c = (candidate ?? '').trim()
+    if (c && c.toLocaleLowerCase('pt-BR') === codeTarget) return true
+  }
+  // Description / free-text CC labels
+  if (textKeysMatch(raw, ctx.descCc)) return true
+  if (textKeysMatch(raw, ctx.centroCusto)) return true
+  return false
+}
+
+function cargoMatches(target: string, ctx: OHScopeMatchContext): boolean {
+  return (
+    textKeysMatch(target, ctx.cargo) ||
+    textKeysMatch(target, ctx.descCargo) ||
+    textKeysMatch(target, ctx.codCargo)
+  )
+}
+
+function publicoMatches(target: string, ctx: OHScopeMatchContext): boolean {
+  return textKeysMatch(target, ctx.publico)
+}
+
+function ruleMatchesEntity(
+  rule: OHScopeRule,
+  ctx: OHScopeMatchContext,
+): boolean {
+  switch (rule.scope_type) {
+    case 'cargo':
+      return cargoMatches(rule.target_value, ctx)
+    case 'centro_custo':
+      return centroCustoMatches(rule.target_value, ctx)
+    case 'publico':
+      return publicoMatches(rule.target_value, ctx)
+    case 'global':
+      return true
+    default:
+      return false
+  }
+}
+
+/**
+ * Build match context from a Folha / payroll row.
+ * `publico` is not a Folha column today — pass via overrides when available.
+ */
+export function ohScopeMatchContextFromPayrollRow(
+  row: {
+    cargo?: string | null
+    codCargo?: string | null
+    descCargo?: string | null
+    codCc?: string | null
+    centroCusto?: string | null
+    descCc?: string | null
+    publico?: string | null
+  },
+  overrides?: Partial<OHScopeMatchContext>,
+): OHScopeMatchContext {
+  return {
+    cargo: row.cargo ?? null,
+    codCargo: row.codCargo ?? null,
+    descCargo: row.descCargo ?? null,
+    codCc: row.codCc ?? null,
+    centroCusto: row.centroCusto ?? null,
+    descCc: row.descCc ?? null,
+    publico: row.publico ?? null,
+    ...overrides,
+  }
+}
+
+/** Match context from a cost-center aggregate / result slice. */
+export function ohScopeMatchContextFromCostCenter(
+  cc: {
+    centroCusto?: string | null
+    codCc?: string | null
+    descCc?: string | null
+    /** Dominant cargo label when known. */
+    cargo?: string | null
+    codCargo?: string | null
+    descCargo?: string | null
+    publico?: string | null
+  },
+  overrides?: Partial<OHScopeMatchContext>,
+): OHScopeMatchContext {
+  return ohScopeMatchContextFromPayrollRow(cc, overrides)
+}
+
+/**
+ * Resolve establishment OH for one entity via cascade priority:
+ * cargo → centro_custo → publico → global (then legacy `operatingHours`).
+ *
+ * First matching rule in priority order wins. When `ohScopeRules` is omitted,
+ * returns the legacy global `operatingHours` with `scopeType: 'global'`.
+ */
+export function resolveOperatingHoursForEntity(
+  rules: OHScopeRule[] | undefined,
+  globalHours: OperatingHours,
+  entity: OHScopeMatchContext = {},
+): OHScopeResolution {
+  const fallbackHours =
+    effectiveGlobalOperatingHours(rules, globalHours) ?? globalHours
+
+  if (!rules || rules.length === 0) {
+    return {
+      hours: globalHours,
+      scopeType: 'global',
+      targetValue: '',
+    }
+  }
+
+  for (const scopeType of OH_SCOPE_CASCADE_PRIORITY) {
+    const match = rules.find(
+      (r) => r.scope_type === scopeType && ruleMatchesEntity(r, entity),
+    )
+    if (!match) continue
+    return {
+      hours: ohWindowToOperatingHours(match.operating_hours),
+      scopeType: match.scope_type,
+      targetValue: match.target_value,
+    }
+  }
+
+  // Defensive: rules present but nothing matched (should not happen when a
+  // global rule was ensured). Fall back to effective global / wizard OH.
+  return {
+    hours: fallbackHours,
+    scopeType: 'global',
+    targetValue: '',
+  }
+}
+
+/** Convenience: resolve + return only the `OperatingHours` window. */
+export function resolveOperatingHours(
+  rules: OHScopeRule[] | undefined,
+  globalHours: OperatingHours,
+  entity?: OHScopeMatchContext,
+): OperatingHours {
+  return resolveOperatingHoursForEntity(rules, globalHours, entity ?? {}).hours
 }
 
 function normalizeDiasSemana(raw: unknown[]): number[] {

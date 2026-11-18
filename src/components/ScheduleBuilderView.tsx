@@ -1104,7 +1104,9 @@ export function ScheduleBuilderView({
                     <CostCenterScheduleCard
                       key={`${m}-${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
                       cc={cc}
-                      operatingHours={result.input.operatingHours}
+                      operatingHours={
+                        cc.operatingHours ?? result.input.operatingHours
+                      }
                       shiftsPerDay={result.input.shiftsPerDay}
                       variant="print"
                       year={year}
@@ -1169,7 +1171,7 @@ function LazyCcSchedulePanel({
         <CostCenterScheduleCard
           key={`${cc.cnpjCompleto ?? ''}-${cc.centroCusto}-${cc.codHorarioAtual ?? ''}`}
           cc={cc}
-          operatingHours={operatingHours}
+          operatingHours={cc.operatingHours ?? operatingHours}
           shiftsPerDay={shiftsPerDay}
           variant="interactive"
           year={year}
