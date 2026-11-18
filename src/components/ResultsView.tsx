@@ -44,10 +44,6 @@ import { downloadAhrHandoff } from '../utils/exportHandoff'
 import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
 import { logPerf } from '../utils/perfTelemetry'
 import {
-  getSimulateFilialSlice,
-  getSimulateFull,
-} from '../api/simulate'
-import {
   DEFAULT_DOSSIER_OPEN,
   collapseAllDossier,
   executiveImpactSummary,
@@ -61,12 +57,6 @@ import {
   type DossierSectionId,
   type OperacionalFilialGroup,
 } from '../utils/resultsDossier'
-import {
-  filialIndexToGroups,
-  sliceFilialPayload,
-  type FilialIndexEntry,
-  type FilialSlice,
-} from '../utils/progressiveFilial'
 import { ApdataHierarchyView } from './ApdataHierarchyView'
 import { CalibrationHistory } from './CalibrationHistory'
 import { HcIncreaseSummary } from './HcIncreaseSummary'
@@ -80,15 +70,6 @@ import {
 import { ScenarioWhyPanel } from './ScenarioWhyPanel'
 import { SuggestionFeedbackControls } from './SuggestionFeedbackControls'
 
-/** P4 progressive Passo 5 — shell KPIs + filial on demand. */
-export type ProgressivePasso5Meta = {
-  /** Server cache id; null when slicing a local full result (API fallback). */
-  simulationId: string | null
-  filialIndex: FilialIndexEntry[]
-  /** Full result kept off the React tree until print/cadastral/export. */
-  localFull?: SimulationResult | null
-}
-
 interface ResultsViewProps {
   result: SimulationResult
   basket: ScenarioBasket | null
@@ -98,13 +79,6 @@ interface ResultsViewProps {
   onClearBasket: () => void
   estrategiaAbsorcao: EstrategiaAbsorcao
   onEstrategiaChange: (next: EstrategiaAbsorcao) => void
-  /**
-   * When set, Passo 5 holds only open-filial slices (P4). Closing a filial
-   * drops its payload; print / cadastral / export hydrate the full DTO once.
-   */
-  progressive?: ProgressivePasso5Meta | null
-  /** Promote shell → full after hydrate (parent should clear progressive). */
-  onPromoteFullResult?: (full: SimulationResult) => void
 }
 
 const ABSORCAO_OPTIONS: { id: EstrategiaAbsorcao; label: string }[] = [
@@ -303,8 +277,6 @@ export function ResultsView({
   onClearBasket,
   estrategiaAbsorcao,
   onEstrategiaChange,
-  progressive = null,
-  onPromoteFullResult,
 }: ResultsViewProps) {
   const template = getTemplate(result.input.sector)
   const {
@@ -346,70 +318,16 @@ export function ResultsView({
   const [printMounted, setPrintMounted] = useState(false)
   const printPendingRef = useRef(false)
   const passo5MountLoggedRef = useRef(false)
-  /** Full DTO after progressive hydrate (print / cadastral / export). */
-  const [hydratedFull, setHydratedFull] = useState<SimulationResult | null>(
-    null,
-  )
-  const [hydrateError, setHydrateError] = useState<string | null>(null)
-  const [hydrating, setHydrating] = useState(false)
-
-  const displayResult = hydratedFull ?? result
-  const isProgressive = Boolean(progressive) && !hydratedFull
-
-  // New simulate / absorção run → drop prior hydrate.
-  useEffect(() => {
-    setHydratedFull(null)
-    setHydrateError(null)
-  }, [result, progressive?.simulationId])
 
   function toggleSection(id: DossierSectionId) {
     setDossier((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
-  const ensureFullResult = useCallback(async (): Promise<SimulationResult> => {
-    if (hydratedFull) return hydratedFull
-    if (!progressive) return result
-    if (progressive.localFull) {
-      setHydratedFull(progressive.localFull)
-      onPromoteFullResult?.(progressive.localFull)
-      return progressive.localFull
-    }
-    if (!progressive.simulationId) {
-      throw new Error(
-        'Resultado completo indisponível. Gere os resultados novamente.',
-      )
-    }
-    setHydrating(true)
-    setHydrateError(null)
-    try {
-      const remote = await getSimulateFull(progressive.simulationId)
-      setHydratedFull(remote.result)
-      onPromoteFullResult?.(remote.result)
-      return remote.result
-    } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Falha ao carregar o resultado completo.'
-      setHydrateError(msg)
-      throw err
-    } finally {
-      setHydrating(false)
-    }
-  }, [hydratedFull, progressive, result, onPromoteFullResult])
-
   /** Mount print tree, then open the browser print dialog. */
   const handlePrint = useCallback(() => {
     printPendingRef.current = true
-    void (async () => {
-      try {
-        if (isProgressive) await ensureFullResult()
-        setPrintMounted(true)
-      } catch {
-        printPendingRef.current = false
-      }
-    })()
-  }, [ensureFullResult, isProgressive])
+    setPrintMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!printMounted || !printPendingRef.current) return
@@ -443,21 +361,14 @@ export function ResultsView({
 
   /** Open cadastral (if needed) then smooth-scroll — does not download/send JSON. */
   function handleIrParaEstruturaApdata() {
-    void (async () => {
-      try {
-        if (isProgressive) await ensureFullResult()
-        setDossier((prev) => ({ ...prev, cadastral: true }))
-        window.setTimeout(() => {
-          const section = document.getElementById('hierarquia-apdata')
-          if (section) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            section.focus({ preventScroll: true })
-          }
-        }, 40)
-      } catch {
-        /* hydrateError already set */
+    setDossier((prev) => ({ ...prev, cadastral: true }))
+    window.setTimeout(() => {
+      const section = document.getElementById('hierarquia-apdata')
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        section.focus({ preventScroll: true })
       }
-    })()
+    }, 40)
   }
 
   function handleSelectBest(scenarioId: ScenarioId | null) {
@@ -489,53 +400,51 @@ export function ResultsView({
     }))
   }
 
-  const operacionalGroups = isProgressive
-    ? filialIndexToGroups(progressive!.filialIndex)
-    : groupOperacionalByCnpj({
-        centers:
-          displayResult.byCostCenter.length > 0
-            ? displayResult.byCostCenter
-            : [
-                {
-                  centroCusto: 'Geral',
-                  currentHeadcount: coverage.currentHeadcount,
-                  requiredHeadcount: coverage.requiredHeadcount,
-                  additionalHeadcount: coverage.additionalHeadcount,
-                  baselineSalaryMass:
-                    cost.baselineSalaryMass ??
-                    coverage.currentHeadcount * input.averageMonthlySalary,
-                  baselinePayroll: cost.baselineMonthlyPayroll,
-                  projectedPayroll: cost.projectedMonthlyPayroll,
-                  payrollMonthlyDelta: cost.monthlyDelta,
-                  vr: vr ?? {
-                    currentMonthly: 0,
-                    proposedMonthly: 0,
-                    monthlyDelta: 0,
-                    annualDelta: 0,
-                    proposedDaysPerMonth: 0,
-                  },
-                  vt: vt ?? {
-                    currentMonthly: 0,
-                    proposedMonthly: 0,
-                    monthlyDelta: 0,
-                    annualDelta: 0,
-                    proposedDaysPerMonth: 0,
-                  },
-                  va: {
-                    currentMonthly: 0,
-                    proposedMonthly: 0,
-                    monthlyDelta: 0,
-                    annualDelta: 0,
-                    proposedDaysPerMonth: 0,
-                  },
-                  assistMedicaMonthly: 0,
-                  assistOdontoMonthly: 0,
-                  regimeFuncionamento: distribuicaoTurmas.regime,
-                  distribuicaoTurmas,
-                },
-              ],
-        payrollRows: displayResult.input.payrollRows,
-      })
+  const operacionalGroups = groupOperacionalByCnpj({
+    centers:
+      byCostCenter.length > 0
+        ? byCostCenter
+        : [
+            {
+              centroCusto: 'Geral',
+              currentHeadcount: coverage.currentHeadcount,
+              requiredHeadcount: coverage.requiredHeadcount,
+              additionalHeadcount: coverage.additionalHeadcount,
+              baselineSalaryMass:
+                cost.baselineSalaryMass ??
+                coverage.currentHeadcount * input.averageMonthlySalary,
+              baselinePayroll: cost.baselineMonthlyPayroll,
+              projectedPayroll: cost.projectedMonthlyPayroll,
+              payrollMonthlyDelta: cost.monthlyDelta,
+              vr: vr ?? {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              vt: vt ?? {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              va: {
+                currentMonthly: 0,
+                proposedMonthly: 0,
+                monthlyDelta: 0,
+                annualDelta: 0,
+                proposedDaysPerMonth: 0,
+              },
+              assistMedicaMonthly: 0,
+              assistOdontoMonthly: 0,
+              regimeFuncionamento: distribuicaoTurmas.regime,
+              distribuicaoTurmas,
+            },
+          ],
+    payrollRows: input.payrollRows,
+  })
   /** Accordion whenever ≥1 real Filial/CNPJ (not only when 2+). */
   const filialAccordion = shouldShowFilialAccordion(operacionalGroups)
   const multiFilial =
@@ -548,23 +457,18 @@ export function ResultsView({
     const t0 = performance.now()
     const id = window.requestAnimationFrame(() => {
       logPerf('passo5-mount', performance.now() - t0, {
-        centerCount: isProgressive
-          ? progressive!.filialIndex.reduce((s, e) => s + e.centerCount, 0)
-          : displayResult.byCostCenter.length,
+        centerCount: byCostCenter.length,
         filialCount: operacionalGroups.length,
-        suggestionCount: displayResult.scheduleSuggestions.length,
+        suggestionCount: scheduleSuggestions.length,
         filialAccordion,
-        progressive: isProgressive,
       })
     })
     return () => window.cancelAnimationFrame(id)
   }, [
-    displayResult.byCostCenter.length,
-    displayResult.scheduleSuggestions.length,
+    byCostCenter.length,
     operacionalGroups.length,
+    scheduleSuggestions.length,
     filialAccordion,
-    isProgressive,
-    progressive,
   ])
 
   const topSuggestion = scheduleSuggestions[0]
@@ -628,35 +532,9 @@ export function ResultsView({
     formatSigned: formatSignedExecutiveNumber,
   })
 
-  const operacionalTurmasSummary = isProgressive
-    ? {
-        crewCount: progressive!.filialIndex.reduce(
-          (s, e) => s + e.crewCount,
-          0,
-        ),
-        totalHeadcount: progressive!.filialIndex.reduce(
-          (s, e) => s + e.totalHeadcount,
-          0,
-        ),
-        dailyCoverageNeed: 0,
-        regimes: [
-          ...new Set(progressive!.filialIndex.flatMap((e) => e.regimes)),
-        ],
-      }
-    : summarizeOperacionalTurmas(
-        operacionalGroups.flatMap((g) => g.centers),
-      )
-
-  async function expandAllMaybeHydrate() {
-    if (isProgressive) {
-      try {
-        await ensureFullResult()
-      } catch {
-        return
-      }
-    }
-    setDossier(expandAllDossier())
-  }
+  const operacionalTurmasSummary = summarizeOperacionalTurmas(
+    operacionalGroups.flatMap((g) => g.centers),
+  )
   const operacionalBadgeParts = [
     input.currentScale,
     proposedScaleLabel !== input.currentScale ? proposedScaleLabel : null,
@@ -695,7 +573,7 @@ export function ResultsView({
               <div className="hidden items-center gap-2 border-r border-[var(--color-line)] pr-3 md:flex">
                 <button
                   type="button"
-                  onClick={() => void expandAllMaybeHydrate()}
+                  onClick={() => setDossier(expandAllDossier())}
                   className="text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                 >
                   Expandir Todos
@@ -714,7 +592,7 @@ export function ResultsView({
               <div className="flex gap-2 md:hidden">
                 <button
                   type="button"
-                  onClick={() => void expandAllMaybeHydrate()}
+                  onClick={() => setDossier(expandAllDossier())}
                   className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs font-medium"
                 >
                   Expandir Todos
@@ -753,20 +631,11 @@ export function ResultsView({
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      void (async () => {
-                        try {
-                          const full = isProgressive
-                            ? await ensureFullResult()
-                            : displayResult
-                          downloadAhrHandoff(full, {
-                            dataInicio: apdataDataInicio,
-                          })
-                        } catch {
-                          /* hydrateError already set */
-                        }
-                      })()
-                    }}
+                    onClick={() =>
+                      downloadAhrHandoff(result, {
+                        dataInicio: apdataDataInicio,
+                      })
+                    }
                     className="mt-2 min-h-11 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
                   >
                     Baixar JSON Handoff (offline)
@@ -1201,22 +1070,7 @@ export function ResultsView({
                   {multiFilial
                     ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
                     : ''}
-                  . Cada filial abre/recolhe no acordeão abaixo
-                  {isProgressive
-                    ? ' — dados de calendário carregados sob demanda ao expandir'
-                    : ''}
-                  .
-                </p>
-              ) : null}
-
-              {hydrateError ? (
-                <p className="text-sm text-red-700" role="alert">
-                  {hydrateError}
-                </p>
-              ) : null}
-              {hydrating ? (
-                <p className="text-xs text-[var(--color-muted)]" role="status">
-                  Carregando resultado completo…
+                  . Cada filial abre/recolhe no acordeão abaixo.
                 </p>
               ) : null}
 
@@ -1231,50 +1085,28 @@ export function ResultsView({
                       key={group.key}
                       group={group}
                       defaultOpen={idx === 0}
-                      result={displayResult}
-                      scheduleSuggestions={
-                        isProgressive
-                          ? []
-                          : displayResult.scheduleSuggestions
-                      }
-                      scheduleSuggestionDisclaimer={
-                        scheduleSuggestionDisclaimer
-                      }
+                      result={result}
+                      scheduleSuggestions={scheduleSuggestions}
+                      scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
                       recorded={recorded}
                       onFeedback={recordFeedback}
-                      progressiveLoad={isProgressive}
-                      progressiveSimulationId={
-                        isProgressive ? progressive!.simulationId : null
-                      }
-                      progressiveLocalFull={
-                        isProgressive
-                          ? (progressive!.localFull ?? null)
-                          : null
-                      }
-                      progressiveIndexEntry={
-                        isProgressive
-                          ? progressive!.filialIndex.find(
-                              (e) => e.key === group.key,
-                            )
-                          : undefined
-                      }
                     />
                   ))}
                 </div>
               ) : operacionalGroups[0] ? (
                 <OperacionalFilialBody
                   group={operacionalGroups[0]}
-                  result={displayResult}
+                  result={result}
                   embeddedSchedule={false}
                   showFilialHeader={false}
-                  scheduleSuggestions={displayResult.scheduleSuggestions}
+                  scheduleSuggestions={scheduleSuggestions}
                   scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
                   recorded={recorded}
                   onFeedback={recordFeedback}
                   globalTurmasNote={distribuicaoTurmas.note}
                 />
               ) : (
-                <ScheduleBuilderView result={displayResult} />
+                <ScheduleBuilderView result={result} />
               )}
             </>
           ) : null}
@@ -1283,38 +1115,19 @@ export function ResultsView({
         <DossierSection
           sectionId="cadastral"
           open={dossier.cadastral}
-          onToggle={() => {
-            if (!dossier.cadastral && isProgressive) {
-              void (async () => {
-                try {
-                  await ensureFullResult()
-                  toggleSection('cadastral')
-                } catch {
-                  /* hydrateError already set */
-                }
-              })()
-              return
-            }
-            toggleSection('cadastral')
-          }}
+          onToggle={() => toggleSection('cadastral')}
           collapsedSummary="Fiel da Balança fechado — Jornadas → Horários → Ciclos → Grades. Use “Ir para Estrutura Apdata” ou Expandir."
         >
-          {dossier.cadastral && !isProgressive ? (
-            <ApdataHierarchyView
-              result={displayResult}
-              dataInicio={apdataDataInicio}
-              onDataInicioChange={setApdataDataInicio}
-            />
-          ) : dossier.cadastral && isProgressive ? (
-            <p className="text-sm text-[var(--color-muted)]" role="status">
-              Carregando estrutura cadastral…
-            </p>
-          ) : null}
+          <ApdataHierarchyView
+            result={result}
+            dataInicio={apdataDataInicio}
+            onDataInicioChange={setApdataDataInicio}
+          />
         </DossierSection>
       </section>
 
       {printMounted ? (
-        <PrintableReport result={displayResult} basket={basket} />
+        <PrintableReport result={result} basket={basket} />
       ) : null}
     </>
   )
@@ -1378,10 +1191,6 @@ function OperacionalFilialPanel({
   scheduleSuggestionDisclaimer,
   recorded,
   onFeedback,
-  progressiveLoad = false,
-  progressiveSimulationId = null,
-  progressiveLocalFull = null,
-  progressiveIndexEntry,
 }: {
   group: OperacionalFilialGroup
   defaultOpen: boolean
@@ -1394,125 +1203,10 @@ function OperacionalFilialPanel({
     action: FeedbackAction,
     editedShifts?: EditedShiftFields[],
   ) => void
-  progressiveLoad?: boolean
-  progressiveSimulationId?: string | null
-  progressiveLocalFull?: SimulationResult | null
-  progressiveIndexEntry?: FilialIndexEntry
 }) {
   // Controlled open — bare `open={defaultOpen}` stuck the first panel open.
   const [open, setOpen] = useState(defaultOpen)
-  /** P4: hold slice only while open; drop on close to free memory. */
-  const [slice, setSlice] = useState<FilialSlice | null>(null)
-  const [sliceLoading, setSliceLoading] = useState(false)
-  const [sliceError, setSliceError] = useState<string | null>(null)
-  const loadGenRef = useRef(0)
-
-  const summaryCenters = slice?.centers ?? group.centers
-  const turmas = progressiveIndexEntry
-    ? {
-        crewCount: progressiveIndexEntry.crewCount,
-        totalHeadcount: progressiveIndexEntry.totalHeadcount,
-        dailyCoverageNeed: 0,
-        regimes: progressiveIndexEntry.regimes,
-      }
-    : summarizeOperacionalTurmas(summaryCenters)
-  const centroCount =
-    progressiveIndexEntry?.centroCustoCount ??
-    (group.centroCustos.length ||
-      new Set(summaryCenters.map((c) => c.centroCusto.trim())).size)
-
-  useEffect(() => {
-    if (!open) {
-      setSlice(null)
-      setSliceError(null)
-      setSliceLoading(false)
-      return
-    }
-    if (!progressiveLoad) return
-
-    const gen = ++loadGenRef.current
-    const t0 = performance.now()
-    setSliceLoading(true)
-    setSliceError(null)
-
-    void (async () => {
-      try {
-        let next: FilialSlice
-        let via: 'local' | 'api'
-        if (progressiveLocalFull) {
-          next = sliceFilialPayload(progressiveLocalFull, group.key)
-          via = 'local'
-        } else if (progressiveSimulationId) {
-          const remote = await getSimulateFilialSlice(
-            progressiveSimulationId,
-            group.key,
-          )
-          next = {
-            filialKey: remote.filialKey,
-            centers: remote.centers,
-            scheduleSuggestions: remote.scheduleSuggestions,
-          }
-          via = 'api'
-        } else {
-          throw new Error(
-            'Simulação progressiva indisponível. Gere os resultados novamente.',
-          )
-        }
-        if (loadGenRef.current !== gen) return
-        setSlice(next)
-        logPerf('passo5-filial-slice', performance.now() - t0, {
-          centerCount: next.centers.length,
-          suggestionCount: next.scheduleSuggestions.length,
-          via,
-        })
-      } catch (err) {
-        if (loadGenRef.current !== gen) return
-        setSliceError(
-          err instanceof Error
-            ? err.message
-            : 'Falha ao carregar dados desta filial.',
-        )
-      } finally {
-        if (loadGenRef.current === gen) setSliceLoading(false)
-      }
-    })()
-
-    return () => {
-      loadGenRef.current += 1
-    }
-  }, [
-    open,
-    progressiveLoad,
-    progressiveSimulationId,
-    progressiveLocalFull,
-    group.key,
-  ])
-
-  const liveGroup: OperacionalFilialGroup = slice
-    ? {
-        key: group.key,
-        label: group.label,
-        centers: slice.centers,
-        centroCustos: [
-          ...new Set(
-            slice.centers.map((c) => c.centroCusto.trim()).filter(Boolean),
-          ),
-        ].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-      }
-    : group
-
-  const liveSuggestions = slice
-    ? slice.scheduleSuggestions
-    : scheduleSuggestions
-
-  const liveResult: SimulationResult = slice
-    ? {
-        ...result,
-        byCostCenter: slice.centers,
-        scheduleSuggestions: slice.scheduleSuggestions,
-      }
-    : result
-
+  const turmas = summarizeOperacionalTurmas(group.centers)
   return (
     <details
       className="border border-[var(--color-line)] bg-white/90"
@@ -1529,8 +1223,8 @@ function OperacionalFilialPanel({
               {group.label}
             </p>
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-              {centroCount} centro(s) · {turmas.crewCount} turma(s) · HC{' '}
-              {turmas.totalHeadcount}
+              {group.centroCustos.length} centro(s) · {turmas.crewCount}{' '}
+              turma(s) · HC {turmas.totalHeadcount}
             </p>
           </div>
           <span className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
@@ -1541,28 +1235,16 @@ function OperacionalFilialPanel({
       {/* Lazy-mount: closed <details> alone still kept React trees alive (P0). */}
       {open ? (
         <div className="space-y-4 border-t border-[var(--color-line)] px-4 py-4">
-          {progressiveLoad && sliceLoading ? (
-            <p className="text-sm text-[var(--color-muted)]" role="status">
-              Carregando calendários desta filial…
-            </p>
-          ) : null}
-          {sliceError ? (
-            <p className="text-sm text-red-700" role="alert">
-              {sliceError}
-            </p>
-          ) : null}
-          {!progressiveLoad || slice ? (
-            <OperacionalFilialBody
-              group={liveGroup}
-              result={liveResult}
-              embeddedSchedule
-              showFilialHeader={false}
-              scheduleSuggestions={liveSuggestions}
-              scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
-              recorded={recorded}
-              onFeedback={onFeedback}
-            />
-          ) : null}
+          <OperacionalFilialBody
+            group={group}
+            result={result}
+            embeddedSchedule
+            showFilialHeader={false}
+            scheduleSuggestions={scheduleSuggestions}
+            scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+            recorded={recorded}
+            onFeedback={onFeedback}
+          />
         </div>
       ) : null}
     </details>

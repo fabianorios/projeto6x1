@@ -53,11 +53,6 @@ const prefsSchema = z
   .object({
     includeScheduleSuggestions: z.boolean().optional(),
     includeApdataHierarchySeed: z.boolean().optional(),
-    /**
-     * P4: when true and ≥2 filiais, cache full result and return shell +
-     * simulationId; SPA fetches per-filial slices on demand.
-     */
-    progressivePayload: z.boolean().optional(),
   })
   .optional();
 
@@ -216,7 +211,6 @@ export type PreparedSimulate = {
   prefs: {
     includeScheduleSuggestions: boolean;
     includeApdataHierarchySeed: boolean;
-    progressivePayload: boolean;
   };
   mapLatencyMs: number;
   rowCount: number;
@@ -305,7 +299,6 @@ export function prepareSimulateInput(body: SimulateBody): PreparedSimulate {
         body.prefs?.includeScheduleSuggestions !== false,
       includeApdataHierarchySeed:
         body.prefs?.includeApdataHierarchySeed === true,
-      progressivePayload: body.prefs?.progressivePayload === true,
     },
     mapLatencyMs,
     rowCount: payrollRows?.length ?? 0,
