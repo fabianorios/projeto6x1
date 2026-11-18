@@ -319,6 +319,7 @@ export async function exportPayrollFromApdata(
     const cargosRes = await runStep('cargos')
     const centrosRes = await runStep('centros')
     const hmvRes = await runStep('hmv')
+    const sindicatosRes = await runStep('sindicatos')
     const conAtRes = await runStep('con-at')
     const meiosRes = await runStep('meios-itens')
 
@@ -465,6 +466,19 @@ export async function exportPayrollFromApdata(
       })
     }
 
+    const sindicatoById = new Map<
+      number,
+      { nome: string; cnpj: string }
+    >()
+    for (const r of sindicatosRes.rows) {
+      const id = num(r.SIN_CdiSindicato)
+      if (id === null) continue
+      sindicatoById.set(id, {
+        nome: str(r.SIN_D1sNome) || 'SEM_SINDICATO',
+        cnpj: str(r.SIN_NusCNPJ),
+      })
+    }
+
     type AggKey = string
     type Agg = {
       cargo: string
@@ -474,6 +488,9 @@ export async function exportPayrollFromApdata(
       codEmpresa: string | null
       codFilial: string | null
       codHorarioAtual: string | null
+      codSindicato: string | null
+      nomeSindicato: string | null
+      cnpjSindicato: string | null
       salarioSum: number
       salarioN: number
       cargaMensal: number
@@ -571,6 +588,7 @@ export async function exportPayrollFromApdata(
       const cargoId = num(r.CON_CdiCargo)
       const ccId = num(r.CON_CdiCentroCusto)
       const hmvId = num(r.CON_CdiQuantidadeHoraMes)
+      const sindicatoId = num(r.CON_CdiSindicato)
       const horarioId = num(r.CON_CdiHorario)
 
       const cargo =
@@ -583,6 +601,12 @@ export async function exportPayrollFromApdata(
       const hmv = hmvId !== null ? hmvById.get(hmvId) : undefined
       const cargaMensal = hmv?.mensal ?? 220
       const cargaSemanal = hmv?.semanal ?? 44
+      const sin =
+        sindicatoId !== null ? sindicatoById.get(sindicatoId) : undefined
+      const codSindicato =
+        sindicatoId != null && sindicatoId > 0 ? String(sindicatoId) : null
+      const nomeSindicato = sin?.nome ?? (codSindicato ? 'SEM_SINDICATO' : null)
+      const cnpjSindicato = sin?.cnpj || null
 
       const cycle: (CycleStats & { escala: Exclude<EscalaCode, '12x36'> }) | undefined =
         horarioId !== null ? cycleMap.get(horarioId) : undefined
@@ -631,6 +655,7 @@ export async function exportPayrollFromApdata(
         cargo,
         centroCusto,
         codHorarioAtual ?? '',
+        codSindicato ?? '',
         String(cargaMensal),
         String(cargaSemanal),
         escala,
@@ -647,6 +672,9 @@ export async function exportPayrollFromApdata(
           codEmpresa,
           codFilial,
           codHorarioAtual,
+          codSindicato,
+          nomeSindicato,
+          cnpjSindicato,
           salarioSum: 0,
           salarioN: 0,
           cargaMensal,
@@ -721,6 +749,9 @@ export async function exportPayrollFromApdata(
         codCc: agg.centroCusto,
         descCargo: agg.cargo,
         codHorarioAtual: agg.codHorarioAtual,
+        codSindicato: agg.codSindicato,
+        nomeSindicato: agg.nomeSindicato,
+        cnpjSindicato: agg.cnpjSindicato,
         massaSalarialBase: salario * agg.quantidade,
       })
       line += 1

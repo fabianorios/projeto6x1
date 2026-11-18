@@ -31,6 +31,12 @@ export type ExtractorAggregate = {
   horario_trabalho_atual?: string
   escala_atual?: string
   carga_semanal_atual?: number
+  /** QuantidadesHorasMes.HMV_QtnQuantidadeHoraMes (Horas Base). */
+  carga_horaria_mensal?: number
+  /** Sindicatos via CON_CdiSindicato. */
+  cod_sindicato?: string
+  nome_sindicato?: string
+  cnpj_sindicato?: string
   qtd_colaboradores?: number
   massa_salarial_base?: number
   vr_dia_medio?: number
@@ -84,6 +90,11 @@ export function mapExtractorAggregatesToPayroll(
     const massa = num(r.massa_salarial_base, 0)
     const salario = qty > 0 ? massa / qty : massa
     const cargaSemanal = num(r.carga_semanal_atual, 44)
+    const cargaMensalRaw = num(r.carga_horaria_mensal, 0)
+    const cargaMensal =
+      cargaMensalRaw > 0
+        ? cargaMensalRaw
+        : Math.round(cargaSemanal * 5 * 100) / 100
     const dias = num(r.dias_trabalho_mes_atual, 22)
     const benefits = applyBenefitOverrides(
       parseBeneficiosAgg(r.beneficios_agg),
@@ -144,13 +155,14 @@ export function mapExtractorAggregatesToPayroll(
     return {
       cargo,
       salario,
-      cargaHorariaMensal: Math.round(cargaSemanal * 5 * 100) / 100,
+      cargaHorariaMensal: cargaMensal,
       cargaHorariaSemanal: cargaSemanal,
       centroCusto: centro,
       vrValorDia: vr != null && vr > 0 ? vr : null,
       vrDiasMesAtual: dias > 0 ? dias : null,
       vtValorDia: vt > 0 ? vt : null,
       vtDiasMesAtual: dias > 0 ? dias : null,
+      /** Aggregated Folha never carries person names (LGPD). */
       nome: null,
       quantidade: qty || 1,
       escalaAtual: r.escala_atual || null,
@@ -166,6 +178,9 @@ export function mapExtractorAggregatesToPayroll(
       codVinculo: r.cod_vinculo || null,
       codHorarioAtual: r.cod_horario_atual || null,
       horarioTrabalhoAtual: r.horario_trabalho_atual?.trim() || null,
+      codSindicato: r.cod_sindicato || null,
+      nomeSindicato: r.nome_sindicato?.trim() || null,
+      cnpjSindicato: r.cnpj_sindicato?.trim() || null,
       massaSalarialBase: massa,
       vaModoValor: va != null && va > 0 ? vaModo : null,
       vaValorDia: va != null && va > 0 && vaModo === 'DIA' ? va : null,

@@ -94,6 +94,7 @@ describe("allowlist", () => {
       "CentrosCustos",
       "Cargos",
       "QuantidadesHorasMes",
+      "Sindicatos",
       "Folhas",
       "Locais",
       "Empresas",

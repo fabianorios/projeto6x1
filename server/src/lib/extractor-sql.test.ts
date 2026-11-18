@@ -172,6 +172,55 @@ describe("extractor SQL", () => {
     assert.match(oracle, /AS desc_cc/);
   });
 
+  it("joins Sindicatos + QuantidadesHorasMes (Horas Base)", () => {
+    const mssql = getAptoolsExtractorScript("mssql");
+    const oracle = getAptoolsExtractorScript("oracle");
+    for (const sql of [mssql, oracle]) {
+      assert.match(sql, /QuantidadesHorasMes/);
+      assert.match(sql, /HMV_QtnQuantidadeHoraMes/);
+      assert.match(sql, /CON_CdiQuantidadeHoraMes/);
+      assert.match(sql, /Sindicatos/);
+      assert.match(sql, /SIN_D1sNome/);
+      assert.match(sql, /SIN_NusCNPJ/);
+      assert.match(sql, /CON_CdiSindicato/);
+      assert.match(sql, /AS carga_horaria_mensal/);
+      assert.match(sql, /AS nome_sindicato/);
+      assert.ok(!/CON_DssNome/i.test(sql));
+    }
+  });
+
+  it("mapExtractorRows keeps sindicato + HMV fields", () => {
+    const mapped = mapExtractorRows([
+      {
+        cod_empresa: "1",
+        cod_filial: "2",
+        cnpj_completo: "12345678000190",
+        cod_cc: "CC-01",
+        desc_cc: "Loja",
+        cod_cargo: "9",
+        desc_cargo: "Operador",
+        cod_vinculo: "1",
+        cod_horario_atual: "4",
+        horario_trabalho_atual: "08:00-17:00",
+        escala_atual: "6x1",
+        carga_semanal_atual: 40,
+        carga_horaria_mensal: 220,
+        cod_sindicato: "12",
+        nome_sindicato: "Sindicato Demo",
+        cnpj_sindicato: "11222333000144",
+        qtd_colaboradores: 3,
+        massa_salarial_base: 9000,
+        dias_trabalho_mes_atual: 26,
+        beneficios_agg: "",
+      },
+    ]);
+    assert.equal(mapped[0]!.carga_horaria_mensal, 220);
+    assert.equal(mapped[0]!.carga_semanal_atual, 40);
+    assert.equal(mapped[0]!.cod_sindicato, "12");
+    assert.equal(mapped[0]!.nome_sindicato, "Sindicato Demo");
+    assert.equal(mapped[0]!.cnpj_sindicato, "11222333000144");
+  });
+
   it("applies incluirAfastados=false and custom regime/categoria", () => {
     const { sql } = buildExtractorQuery("mssql", {
       incluirAfastados: false,

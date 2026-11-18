@@ -174,6 +174,59 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].centroCusto, 'CC-01')
   })
 
+  it('maps sindicato + HMV horas base into PayrollRow', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 40,
+        carga_horaria_mensal: 220,
+        cod_sindicato: '12',
+        nome_sindicato: 'Sindicato Demo',
+        cnpj_sindicato: '11222333000144',
+        escala_atual: '6x1',
+      },
+    ])
+    assert.equal(rows[0]!.cargaHorariaMensal, 220)
+    assert.equal(rows[0]!.cargaHorariaSemanal, 40)
+    assert.equal(rows[0]!.codSindicato, '12')
+    assert.equal(rows[0]!.nomeSindicato, 'Sindicato Demo')
+    assert.equal(rows[0]!.cnpjSindicato, '11222333000144')
+    assert.equal(rows[0]!.nome, null)
+  })
+
+  it('falls back carga mensal from semanal when HMV absent', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+      },
+    ])
+    assert.equal(rows[0]!.cargaHorariaMensal, 220)
+  })
+
+  it('Folha SQL joins Sindicatos + QuantidadesHorasMes', () => {
+    const mssql = getAptoolsExtractorScript('mssql')
+    const oracle = getAptoolsExtractorScript('oracle')
+    for (const sql of [mssql, oracle]) {
+      assert.match(sql, /QuantidadesHorasMes/)
+      assert.match(sql, /HMV_QtnQuantidadeHoraMes/)
+      assert.match(sql, /CON_CdiQuantidadeHoraMes/)
+      assert.match(sql, /Sindicatos/)
+      assert.match(sql, /SIN_D1sNome/)
+      assert.match(sql, /SIN_NusCNPJ/)
+      assert.match(sql, /CON_CdiSindicato/)
+      assert.match(sql, /AS carga_horaria_mensal/)
+      assert.match(sql, /AS nome_sindicato/)
+      assert.ok(!/CON_DssNome/i.test(sql))
+    }
+  })
+
   it('maps optional horario_trabalho_atual and keeps it optional', () => {
     const withWin = mapExtractorAggregatesToPayroll([
       {

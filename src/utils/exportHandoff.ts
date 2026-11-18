@@ -5,6 +5,10 @@
  */
 
 import {
+  DEFAULT_MASK_COLLABORATOR_NAMES,
+  scrubNomeForHandoffExport,
+} from '../apdata/lgpdNameMask'
+import {
   buildApdataHierarchy,
   type ApdataHierarchyTree,
   type SimulationResult,
@@ -23,6 +27,11 @@ export interface AhrHandoffExportOptions {
   includeLunchJornada?: boolean
   /** Horário candidate ids from the Passo 5 wizard selection. */
   selectedHorarioIds?: string[]
+  /**
+   * LGPD name mask (default on). Handoff never includes unmasked person names
+   * while mask is on; aggregated payload stays without PII either way.
+   */
+  maskCollaboratorNames?: boolean
 }
 
 export interface AhrHandoffPayload {
@@ -115,6 +124,13 @@ export function buildAhrHandoff(
     includeLunchJornada: options.includeLunchJornada,
     selectedHorarioIds: options.selectedHorarioIds,
   })
+
+  const maskOn =
+    options.maskCollaboratorNames ?? DEFAULT_MASK_COLLABORATOR_NAMES
+  // Aggregated handoff has no person fields; scrub any accidental nomes.
+  void (result.input.payrollRows ?? []).map((row) =>
+    scrubNomeForHandoffExport(row.nome, maskOn),
+  )
 
   return {
     schemaVersion: AHR_HANDOFF_SCHEMA_VERSION,
