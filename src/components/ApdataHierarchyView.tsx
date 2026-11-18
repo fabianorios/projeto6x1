@@ -1,6 +1,6 @@
 /**
- * Passo 5 — Guided Apdata structure: Jornadas→Steps, then selectable Horários.
- * Does not “send” to ERP; rotina 1215 txt (só Jornadas / 29752) + optional JSON handoff.
+ * Passo 5 — Guided Apdata structure: Jornadas+Steps, then selectable Horários.
+ * Does not “send” to ERP; rotina 1215 txt (29752 Jornadas + 29762 Itens) + optional JSON.
  * LGPD: CC codes, schedule codes, turmas — no names/CPF.
  */
 
@@ -44,10 +44,8 @@ const STEP_LABEL: Record<string, string> = {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  MANHA: 'A · Entrada → saída almoço',
-  ALMOCO: 'Jornada de almoço',
-  TARDE: 'B · Retorno almoço → saída',
-  INTEGRAL: 'Jornada integral',
+  INTEGRAL: 'Jornada contínua (1 período)',
+  COMPOSTA: 'Jornada composta (2 períodos)',
 }
 
 function CycleStrip({ node }: { node: ApdataHierarchyNode }) {
@@ -588,11 +586,9 @@ export function ApdataHierarchyView({
       {wizardStep === 1 ? (
         <div className="mt-4 space-y-3">
           <p className="text-xs text-[var(--color-muted)]">
-            Jornadas nomeadas com início/fim do bloco. Steps:{' '}
-            <strong className="text-[var(--color-ink)]">A</strong> entrada do
-            expediente → saída do almoço;{' '}
-            <strong className="text-[var(--color-ink)]">B</strong> retorno do
-            almoço → saída do expediente.
+            Uma jornada por faixa de horário (única no catálogo). Descrição =
+            composição dos períodos de trabalho; steps = 1 período contínuo ou 2
+            períodos com intervalo de almoço (sem jornada de almoço separada).
           </p>
           {candidates.meal ? (
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-[var(--color-ink)]">
@@ -605,14 +601,14 @@ export function ApdataHierarchyView({
                 }}
                 className="size-4 accent-[var(--color-accent)]"
               />
-              Criar jornada de almoço
-              {includeLunch
-                ? ` (${candidates.jornadas.find((j) => j.kind === 'ALMOCO')?.descricao ?? 'Almoço'})`
+              Separar intervalo de almoço (2 períodos de trabalho)
+              {includeLunch && candidates.meal
+                ? ` · gap ${formatHourClock(candidates.meal.breakStart)}–${formatHourClock(candidates.meal.breakEnd)}`
                 : ''}
             </label>
           ) : (
             <p className="text-xs text-[var(--color-muted)]">
-              Turno &lt; 6h — jornada integral (sem intervalo de almoço).
+              Turno &lt; 6h — jornada contínua (1 período).
             </p>
           )}
           <ul className="grid gap-2 sm:grid-cols-2">
@@ -774,7 +770,9 @@ export function ApdataHierarchyView({
               {tree.grades.length} turma(s) · {tree.jornadas.length} jornada(s) ·{' '}
               {tree.horarios.length} horário(s) · {tree.ciclos.length} ciclo(s) ·
               vigência {tree.dataInicio}
-              {tree.includeLunchJornada ? ' · com jornada de almoço' : ''}
+              {tree.includeLunchJornada
+                ? ' · períodos com intervalo'
+                : ' · período contínuo'}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -794,9 +792,9 @@ export function ApdataHierarchyView({
                   })
                 }
                 className="min-h-11 bg-emerald-800 px-4 py-2.5 text-sm font-medium text-white"
-                title="Gera arquivo-texto da rotina 1215 (transação 29752 · Jornadas) — não envia ao ERP"
+                title="Gera arquivo-texto da rotina 1215 (29752 Jornadas + 29762 Steps) — não envia ao ERP"
               >
-                Baixar Jornadas (rotina 1215)
+                Baixar Jornadas + Steps (rotina 1215)
               </button>
               <details className="relative">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)]">
@@ -840,13 +838,17 @@ export function ApdataHierarchyView({
               </li>
             </ul>
             <p className="mt-2 text-[11px] text-[var(--color-muted)]">
-              Arquivo rotina 1215 (transação 29752):{' '}
+              Arquivo rotina 1215:{' '}
               <strong className="font-medium text-[var(--color-ink)]">
-                {tree.jornadas.length} linha(s)
+                {tree.jornadas.length} jornada(s)
               </strong>{' '}
-              — uma por jornada única (`JOR-…`). Formato
-              `IdTransacao;IdCampo;(valor)…`. Não inclui Steps/itens e não
-              envia ao ERP.
+              (29752) +{' '}
+              <strong className="font-medium text-[var(--color-ink)]">
+                {tree.jornadas.reduce((n, j) => n + j.workPeriods.length, 0)}{' '}
+                step(s)
+              </strong>{' '}
+              (29762). Uma jornada composta por períodos (`09:00–13:00 /
+              14:00–18:00`); sem duplicar por local/CC/cargo. Não envia ao ERP.
             </p>
           </div>
 
