@@ -15,6 +15,7 @@ import {
   parseScopeClock,
   prepareOHScopeRulesForInput,
   resolveOperatingHoursForEntity,
+  syncOhScopeRulesWithGlobalHours,
   type OHScopeRule,
 } from './operating-hours'
 
@@ -201,6 +202,36 @@ describe('OHScopeRule helpers (Etapa 1)', () => {
     assert.ok(prepared)
     assert.equal(prepared![0].scope_type, 'global')
     assert.equal(prepared![1].scope_type, 'centro_custo')
+  })
+
+  it('syncOhScopeRulesWithGlobalHours refreshes global window from wizard OH', () => {
+    const synced = syncOhScopeRulesWithGlobalHours(
+      [
+        {
+          scope_type: 'global',
+          target_value: '',
+          operating_hours: {
+            abertura: '01:00',
+            fechamento: '02:00',
+            dias_semana: [],
+          },
+        },
+        {
+          scope_type: 'cargo',
+          target_value: 'Operador',
+          operating_hours: {
+            abertura: '06:00',
+            fechamento: '14:00',
+            dias_semana: [],
+          },
+        },
+      ],
+      { default: { openHour: 9, closeHour: 21 } },
+    )
+    assert.equal(synced[0]!.scope_type, 'global')
+    assert.equal(synced[0]!.operating_hours.abertura, '09:00')
+    assert.equal(synced[0]!.operating_hours.fechamento, '21:00')
+    assert.equal(synced[1]!.scope_type, 'cargo')
   })
 })
 

@@ -6,8 +6,10 @@ import {
   DEFAULT_DOSSIER_OPEN,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
+  dossierSindicatoOptions,
   executiveImpactSummary,
   expandAllDossier,
+  filterCostCentersByDossier,
   groupFilialCcHorario,
   groupOperacionalByCnpj,
   nestCentersByCc,
@@ -157,6 +159,91 @@ describe('resultsDossier helpers', () => {
       }),
       null,
     )
+  })
+
+  it('lists sindicatos and filters centers by sindicato / CC', () => {
+    const stub = (partial: Partial<CostCenterResult>): CostCenterResult => ({
+      centroCusto: 'X',
+      currentHeadcount: 1,
+      requiredHeadcount: 1,
+      additionalHeadcount: 0,
+      baselineSalaryMass: 0,
+      baselinePayroll: 0,
+      projectedPayroll: 0,
+      payrollMonthlyDelta: 0,
+      vr: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      vt: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      va: {
+        currentMonthly: 0,
+        proposedMonthly: 0,
+        monthlyDelta: 0,
+        annualDelta: 0,
+        proposedDaysPerMonth: 0,
+      },
+      assistMedicaMonthly: 0,
+      assistOdontoMonthly: 0,
+      ...partial,
+    })
+    const centers = [
+      stub({
+        centroCusto: 'CC-A',
+        cnpjCompleto: '12345678000190',
+        codSindicato: '12',
+        nomeSindicato: 'Sindicato Alpha',
+      }),
+      stub({
+        centroCusto: 'CC-B',
+        cnpjCompleto: '12345678000190',
+        codSindicato: '99',
+        nomeSindicato: 'Sindicato Beta',
+      }),
+    ]
+    const sind = dossierSindicatoOptions(centers)
+    assert.equal(sind.length, 2)
+    assert.match(sind[0]!.label, /Alpha|Beta/)
+
+    const onlyAlpha = filterCostCentersByDossier({
+      centers,
+      filterSindicatoKey: '12',
+    })
+    assert.deepEqual(
+      onlyAlpha.map((c) => c.centroCusto),
+      ['CC-A'],
+    )
+
+    const viaFolha = filterCostCentersByDossier({
+      centers: [
+        stub({
+          centroCusto: 'CC-MIX',
+          cnpjCompleto: '12345678000190',
+          codSindicato: '99',
+          nomeSindicato: 'Sindicato Beta',
+        }),
+      ],
+      payrollRows: [
+        row({
+          centroCusto: 'CC-MIX',
+          cnpjCompleto: '12345678000190',
+          codSindicato: '12',
+          nomeSindicato: 'Sindicato Alpha',
+        }),
+      ],
+      filterSindicatoKey: '12',
+    })
+    assert.equal(viaFolha.length, 1)
+    assert.equal(viaFolha[0]!.centroCusto, 'CC-MIX')
   })
 
   it('groups Bloco Operacional centers by Filial/CNPJ', () => {

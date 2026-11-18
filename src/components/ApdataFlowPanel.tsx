@@ -69,7 +69,10 @@ import {
   simulate,
   upsertSimulationInBasket,
   loadScenarioBasket,
+  prepareOHScopeRulesForInput,
+  syncOhScopeRulesWithGlobalHours,
   type EstrategiaAbsorcao,
+  type OHScopeRule,
   type OperatingHours,
   type PayrollParseIssue,
   type PayrollRow,
@@ -112,6 +115,7 @@ import {
   ephemeralFormComplete,
   type EphemeralCredsFormValue,
 } from './EphemeralCredsFields'
+import { OhScopeExceptionsSection } from './OhScopeExceptionsSection'
 import { PayrollImport } from './PayrollImport'
 import { ResultsView } from './ResultsView'
 import { SectorStep } from './SectorStep'
@@ -304,7 +308,11 @@ export function ApdataFlowPanel({
     DEFAULT_REGIME_FUNCIONAMENTO,
   )
   const [overridesOpen, setOverridesOpen] = useState(false)
-  const [operatingHours] = useState<OperatingHours>(DEFAULT_OPERATING_HOURS)
+  const [operatingHours, setOperatingHours] = useState<OperatingHours>(
+    DEFAULT_OPERATING_HOURS,
+  )
+  /** Segmented OH exceptions (Etapa 4). Empty → global `operatingHours` only. */
+  const [ohScopeRules, setOhScopeRules] = useState<OHScopeRule[]>([])
   const [establishments, setEstablishments] = useState<Establishment[]>([])
   const [selectedCnpjKeys, setSelectedCnpjKeys] = useState<string[]>([])
   const [ramos, setRamos] = useState<RamoAtividade[]>([])
@@ -805,6 +813,10 @@ export function ApdataFlowPanel({
     const headcount = exported.stats.contratadosAtivos || 1
     const averageMonthlySalary =
       Number(defaultSalario.replace(',', '.')) || 2200
+    const preparedOhRules = prepareOHScopeRulesForInput(
+      ohScopeRules.length > 0 ? ohScopeRules : undefined,
+      operatingHours,
+    )
     const input = {
       sector,
       sectorLabel: sectorLabel.trim() || undefined,
@@ -815,6 +827,7 @@ export function ApdataFlowPanel({
       units: 1,
       shiftsPerDay: 2,
       operatingHours,
+      ohScopeRules: preparedOhRules,
       scenarioId,
       payrollRows,
       estrategiaAbsorcao: nextAbs,
@@ -842,6 +855,7 @@ export function ApdataFlowPanel({
         units: 1,
         shiftsPerDay: 2,
         operatingHours,
+        ohScopeRules: preparedOhRules,
         estrategiaAbsorcao: nextAbs,
         defaultTaxRegime,
         defaultRegimeFuncionamento: defaultRegime,
@@ -1541,6 +1555,21 @@ export function ApdataFlowPanel({
                     }
                   />
                 </div>
+
+                <OhScopeExceptionsSection
+                  operatingHours={operatingHours}
+                  onOperatingHoursChange={(next) => {
+                    setOperatingHours(next)
+                    if (ohScopeRules.length > 0) {
+                      setOhScopeRules(
+                        syncOhScopeRulesWithGlobalHours(ohScopeRules, next),
+                      )
+                    }
+                  }}
+                  ohScopeRules={ohScopeRules}
+                  onOhScopeRulesChange={setOhScopeRules}
+                  payrollRows={exported?.rows}
+                />
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">

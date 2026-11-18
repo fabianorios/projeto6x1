@@ -187,6 +187,7 @@ export {
   normalizeOHScopeRules,
   prepareOHScopeRulesForInput,
   ensureGlobalOHScopeRule,
+  syncOhScopeRulesWithGlobalHours,
   effectiveGlobalOperatingHours,
   normalizeOHScopeKey,
   ohScopeMatchContextFromPayrollRow,

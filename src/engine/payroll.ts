@@ -684,6 +684,10 @@ export interface CostCenterTotals {
   cargo: string | null
   codCargo: string | null
   descCargo: string | null
+  /** Dominant sindicato code (pass-through for Results filter — Etapa 4). */
+  codSindicato: string | null
+  /** Dominant sindicato name (collective framing; not person PII). */
+  nomeSindicato: string | null
   headcount: number
   baselinePayroll: number
   /** Weighted sum of salaries for average (salario × qty). */
@@ -794,6 +798,8 @@ export function aggregateByCostCenter(
       cargoVotes: Map<string, number>
       codCargoByLabel: Map<string, string>
       descCargoByLabel: Map<string, string>
+      sindicatoVotes: Map<string, number>
+      nomeSindicatoByCod: Map<string, string>
     }
   >()
 
@@ -814,6 +820,8 @@ export function aggregateByCostCenter(
         cargo: null,
         codCargo: null,
         descCargo: null,
+        codSindicato: null,
+        nomeSindicato: null,
         headcount: 0,
         baselinePayroll: 0,
         salaryMass: 0,
@@ -866,6 +874,8 @@ export function aggregateByCostCenter(
         cargoVotes: new Map(),
         codCargoByLabel: new Map(),
         descCargoByLabel: new Map(),
+        sindicatoVotes: new Map(),
+        nomeSindicatoByCod: new Map(),
       }
       map.set(key, agg)
     }
@@ -904,6 +914,15 @@ export function aggregateByCostCenter(
       if (row.descCargo?.trim()) {
         agg.descCargoByLabel.set(cargoLabel, row.descCargo.trim())
       }
+    }
+    const sindicatoCod = (row.codSindicato ?? '').trim()
+    if (sindicatoCod && sindicatoCod !== '0') {
+      agg.sindicatoVotes.set(
+        sindicatoCod,
+        (agg.sindicatoVotes.get(sindicatoCod) ?? 0) + qty,
+      )
+      const nome = (row.nomeSindicato ?? '').trim()
+      if (nome) agg.nomeSindicatoByCod.set(sindicatoCod, nome)
     }
     if (!agg.regimeFuncionamento && row.regimeFuncionamento) {
       agg.regimeFuncionamento = row.regimeFuncionamento
@@ -1001,9 +1020,12 @@ export function aggregateByCostCenter(
         cargoVotes,
         codCargoByLabel,
         descCargoByLabel,
+        sindicatoVotes,
+        nomeSindicatoByCod,
         ...rest
       }) => {
         const cargo = dominantVote(cargoVotes)
+        const codSindicato = dominantVote(sindicatoVotes)
         return {
           ...rest,
           avgVrValorDia:
@@ -1033,6 +1055,10 @@ export function aggregateByCostCenter(
           cargo,
           codCargo: cargo ? codCargoByLabel.get(cargo) ?? null : null,
           descCargo: cargo ? descCargoByLabel.get(cargo) ?? null : null,
+          codSindicato,
+          nomeSindicato: codSindicato
+            ? nomeSindicatoByCod.get(codSindicato) ?? null
+            : null,
         }
       },
     )

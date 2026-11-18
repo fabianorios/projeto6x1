@@ -824,6 +824,8 @@ function buildCostCenterResults(
         targetValue: ohResolution.targetValue,
       },
       operatingHours: ohResolution.hours,
+      codSindicato: agg.codSindicato,
+      nomeSindicato: agg.nomeSindicato,
     }
   })
 

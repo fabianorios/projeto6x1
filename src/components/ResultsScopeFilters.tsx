@@ -1,0 +1,127 @@
+/**
+ * Passo 5 — Filial / CC / Sindicato filters (Etapa 4).
+ * Reflects segmented OH + collective framing when narrowing results.
+ */
+
+import type { DossierEstablishmentOption } from '../utils/resultsDossier'
+import type { DossierSindicatoOption } from '../utils/resultsDossier'
+
+export type ResultsScopeFiltersProps = {
+  establishments: DossierEstablishmentOption[]
+  ccOptions: string[]
+  sindicatoOptions: DossierSindicatoOption[]
+  filterCnpj: string
+  filterCc: string
+  filterSindicato: string
+  onFilterCnpj: (next: string) => void
+  onFilterCc: (next: string) => void
+  onFilterSindicato: (next: string) => void
+  visibleCount: number
+  totalCount: number
+}
+
+export function ResultsScopeFilters({
+  establishments,
+  ccOptions,
+  sindicatoOptions,
+  filterCnpj,
+  filterCc,
+  filterSindicato,
+  onFilterCnpj,
+  onFilterCc,
+  onFilterSindicato,
+  visibleCount,
+  totalCount,
+}: ResultsScopeFiltersProps) {
+  const active = Boolean(filterCnpj || filterCc || filterSindicato)
+
+  return (
+    <div
+      className="mt-3 space-y-2 rounded-lg border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-paper)_75%,white)] p-3"
+      data-testid="results-scope-filters"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+          Filtros de escopo
+        </p>
+        <p className="text-[10px] text-[var(--color-muted)]">
+          {active
+            ? `${visibleCount} de ${totalCount} centro(s) · OH e enquadramento coletivo`
+            : `${totalCount} centro(s)`}
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block text-xs text-[var(--color-ink)]">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Filial / CNPJ
+          </span>
+          <select
+            value={filterCnpj}
+            onChange={(e) => {
+              const next = e.target.value
+              onFilterCnpj(next)
+              if (filterCc && next) {
+                const est = establishments.find((x) => x.key === next)
+                if (est && !est.centroCustos.includes(filterCc)) {
+                  onFilterCc('')
+                }
+              }
+            }}
+            className="mt-1 block min-h-10 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm"
+            disabled={establishments.length === 0}
+          >
+            <option value="">
+              {establishments.length === 0
+                ? 'Todas (sem CNPJ na folha)'
+                : 'Todas as filiais'}
+            </option>
+            {establishments.map((e) => (
+              <option key={e.key} value={e.key}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-[var(--color-ink)]">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Centro de custo
+          </span>
+          <select
+            value={filterCc}
+            onChange={(e) => onFilterCc(e.target.value)}
+            className="mt-1 block min-h-10 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm"
+          >
+            <option value="">Todos os centros</option>
+            {ccOptions.map((cc) => (
+              <option key={cc} value={cc}>
+                {cc}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-[var(--color-ink)]">
+          <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+            Sindicato
+          </span>
+          <select
+            value={filterSindicato}
+            onChange={(e) => onFilterSindicato(e.target.value)}
+            className="mt-1 block min-h-10 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm"
+            disabled={sindicatoOptions.length === 0}
+          >
+            <option value="">
+              {sindicatoOptions.length === 0
+                ? 'Todos (sem sindicato na folha)'
+                : 'Todos os sindicatos'}
+            </option>
+            {sindicatoOptions.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  )
+}
