@@ -187,19 +187,22 @@ function hierarchySheetRows(tree: ApdataHierarchyTree): string[] {
       cell('HorasDia'),
       cell('Ordem'),
       cell('TipoStep'),
-      cell('Hora'),
+      cell('Inicio'),
+      cell('Fim'),
     ]),
   )
   for (const j of tree.jornadas) {
-    for (const s of j.steps) {
+    // Work periods = 29762 steps (Trabalho only). Lunch gap is not a step/jornada.
+    for (const p of j.workPeriods) {
       lines.push(
         row([
           cell(j.codigo),
           cell(j.descricao),
           cell(j.horasDia, 'Number'),
-          cell(s.ordem, 'Number'),
-          cell(s.tipo),
-          cell(s.hora),
+          cell(p.ordem, 'Number'),
+          cell('TRABALHO'),
+          cell(p.inicio),
+          cell(p.fim),
         ]),
       )
     }

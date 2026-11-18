@@ -132,9 +132,9 @@ export interface ApdataGradeTurma {
 
 /** Nested review tree: Jornadas → Horário → Ciclo → Grade/Turma. */
 export interface ApdataHierarchyNode {
-  /** Bound jornadas in order (manhã, [almoço], tarde) or single integral. */
+  /** Bound jornadas for this horário (one composite/integral per clock). */
   jornadas: ApdataJornada[]
-  /** First work block — convenience for sheets that expect a single code. */
+  /** First bound jornada — convenience for sheets that expect a single code. */
   jornada: ApdataJornada
   horario: ApdataHorario
   ciclo: ApdataCicloHorario
@@ -176,9 +176,9 @@ export interface BuildApdataHierarchyOptions {
   /** Grade type — proposed quadro uses VAGAS (no PII). */
   tipoGrade?: ApdataGradeTipo
   /**
-   * When true (default if shift ≥6h): split into two work periods with lunch gap.
-   * When false: one continuous work period (outer entrada→saída).
-   * Never creates a top-level “jornada de almoço”.
+   * When true (default if shift ≥6h): one COMPOSTA jornada with **two work
+   * periods** (lunch = unpaid gap). When false: one continuous INTEGRAL period.
+   * Never emits a top-level lunch jornada / `JOR-ALM-*` / kind ALMOCO.
    */
   includeLunchJornada?: boolean
   /**

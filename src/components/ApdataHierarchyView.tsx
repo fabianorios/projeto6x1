@@ -36,16 +36,41 @@ interface ApdataHierarchyViewProps {
 
 type WizardStep = 1 | 2 | 3
 
-const STEP_LABEL: Record<string, string> = {
-  ENTRADA: 'Entrada',
-  INTERVALO_INICIO: 'Início intervalo',
-  INTERVALO_FIM: 'Fim intervalo',
-  SAIDA: 'Saída',
-}
-
 const KIND_LABEL: Record<string, string> = {
   INTEGRAL: 'Jornada contínua (1 período)',
   COMPOSTA: 'Jornada composta (2 períodos)',
+}
+
+/** Apdata step preview = work periods (29762), never lunch as a jornada. */
+function WorkPeriodSteps({
+  workPeriods,
+}: {
+  workPeriods: readonly { ordem: number; inicio: string; fim: string }[]
+}) {
+  if (workPeriods.length === 0) return null
+  const gap =
+    workPeriods.length >= 2
+      ? `${workPeriods[0]!.fim}–${workPeriods[1]!.inicio}`
+      : null
+  return (
+    <>
+      <ul className="mt-0.5 flex flex-wrap gap-1.5 text-[11px]">
+        {workPeriods.map((p) => (
+          <li
+            key={`wp-${p.ordem}-${p.inicio}-${p.fim}`}
+            className="border border-[var(--color-line)] bg-white px-1.5 py-0.5 tabular-nums"
+          >
+            {p.ordem}. Trabalho {p.inicio}–{p.fim}
+          </li>
+        ))}
+      </ul>
+      {gap ? (
+        <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+          Intervalo (gap, não jornada): {gap}
+        </p>
+      ) : null}
+    </>
+  )
 }
 
 function CycleStrip({ node }: { node: ApdataHierarchyNode }) {
@@ -97,16 +122,7 @@ function NodeBlock({ node }: { node: ApdataHierarchyNode }) {
                   {' '}
                   · {j.codigo} · {j.horasDia}h
                 </span>
-                <ul className="mt-0.5 flex flex-wrap gap-1.5 text-[11px]">
-                  {j.steps.map((s) => (
-                    <li
-                      key={`${j.codigo}-${s.ordem}`}
-                      className="border border-[var(--color-line)] bg-white px-1.5 py-0.5 tabular-nums"
-                    >
-                      {s.ordem}. {STEP_LABEL[s.tipo] ?? s.tipo} {s.hora}
-                    </li>
-                  ))}
-                </ul>
+                <WorkPeriodSteps workPeriods={j.workPeriods} />
               </li>
             ))}
           </ul>
@@ -170,18 +186,12 @@ function JornadaPreviewCard({ jornada }: { jornada: ApdataJornadaCandidate }) {
         {jornada.descricao}
       </p>
       <p className="mt-0.5 font-mono text-[11px] text-[var(--color-muted)]">
-        {jornada.codigo} · {jornada.horasDia}h
+        {jornada.codigo} · {jornada.horasDia}h · {jornada.workPeriods.length}{' '}
+        step(s) 29762
       </p>
-      <ul className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
-        {jornada.steps.map((s) => (
-          <li
-            key={`${jornada.codigo}-${s.ordem}`}
-            className="border border-[var(--color-line)] bg-[var(--color-surface)] px-1.5 py-0.5 tabular-nums"
-          >
-            {s.ordem}. {STEP_LABEL[s.tipo] ?? s.tipo} {s.hora}
-          </li>
-        ))}
-      </ul>
+      <div className="mt-1.5">
+        <WorkPeriodSteps workPeriods={jornada.workPeriods} />
+      </div>
     </li>
   )
 }
