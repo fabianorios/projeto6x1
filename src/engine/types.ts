@@ -1,6 +1,10 @@
 /** Shared types for the PEC 6×1 impact simulation engine. */
 
-import type { OHScopeRule, OperatingHours } from './operating-hours'
+import type {
+  OHScopeMatchMeta,
+  OHScopeRule,
+  OperatingHours,
+} from './operating-hours'
 import type { PayrollRow } from './payroll'
 import type { ExclusionHit } from './schedule-policy'
 import type { ScheduleSuggestion } from './schedule-suggest'
@@ -124,8 +128,8 @@ export interface SimulationInput {
   operatingHours: OperatingHours
   /**
    * Optional segmented OH rules (cargo → centro_custo → publico → global).
-   * Etapa 1: carried through the DTO only. Sims without this field keep
-   * using `operatingHours` alone. Cascade resolution is Etapa 2.
+   * Motor resolves per Folha row / CC via cascade; sims without this field
+   * keep using `operatingHours` alone.
    */
   ohScopeRules?: OHScopeRule[]
   /**
@@ -178,8 +182,14 @@ export interface BenefitDelta {
 /** Totals for one centro de custo after scale + charge projection. */
 export interface CostCenterResult {
   centroCusto: string
+  /** Optional CC code from Folha `cod_cc`. */
+  codCc?: string | null
   /** Optional CC description (CCU_D1sCentroCusto) for UI. */
   descCc?: string | null
+  /** Dominant cargo (by HC) — used for OH cargo-scope matching. */
+  cargo?: string | null
+  codCargo?: string | null
+  descCargo?: string | null
   currentHeadcount: number
   requiredHeadcount: number
   additionalHeadcount: number
@@ -212,6 +222,16 @@ export interface CostCenterResult {
   coberturaAtualPorDia?: CoberturaPorDia
   /** Establishment CNPJ from folha (digits or formatted); used to group Seção 2. */
   cnpjCompleto?: string | null
+  /**
+   * OH cascade match for this center (Etapa 2). Etapa 3 badge reads
+   * `scopeType` / `targetValue` without re-resolving.
+   */
+  ohScopeMatch?: OHScopeMatchMeta
+  /**
+   * Effective establishment OH after cascade (tiling / Quadro Proposto).
+   * When omitted, callers fall back to `SimulationInput.operatingHours`.
+   */
+  operatingHours?: OperatingHours
 }
 
 export interface CoverageGap {

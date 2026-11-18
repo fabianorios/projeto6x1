@@ -17,6 +17,11 @@ import {
   type PayrollRow,
 } from './payroll'
 import {
+  DEFAULT_OPERATING_HOURS,
+  ohScopeMatchContextFromCostCenter,
+  resolveOperatingHoursForEntity,
+} from './operating-hours'
+import {
   DEFAULT_DISCLAIMER,
   getRuleVersion,
   getSectorCalibration,
@@ -567,6 +572,16 @@ export function simulate(input: SimulationInput): SimulationResult {
           currentMonthlyVr: c.vr.currentMonthly > 0 ? c.vr.currentMonthly : null,
           currentMonthlyVt: c.vt.currentMonthly > 0 ? c.vt.currentMonthly : null,
           regimeFuncionamento: c.regimeFuncionamento,
+          operatingHours: c.operatingHours,
+          ohScopeMatch: c.ohScopeMatch,
+          ohMatchContext: ohScopeMatchContextFromCostCenter({
+            centroCusto: c.centroCusto,
+            codCc: c.codCc,
+            descCc: c.descCc,
+            cargo: c.cargo,
+            codCargo: c.codCargo,
+            descCargo: c.descCargo,
+          }),
         }
       })
     : undefined
@@ -764,9 +779,26 @@ function buildCostCenterResults(
       regime,
     )
 
+    const ohResolution = resolveOperatingHoursForEntity(
+      input.ohScopeRules,
+      input.operatingHours ?? DEFAULT_OPERATING_HOURS,
+      ohScopeMatchContextFromCostCenter({
+        centroCusto: agg.centroCusto,
+        codCc: agg.codCc,
+        descCc: agg.descCc,
+        cargo: agg.cargo,
+        codCargo: agg.codCargo,
+        descCargo: agg.descCargo,
+      }),
+    )
+
     return {
       centroCusto: agg.centroCusto,
+      codCc: agg.codCc,
       descCc: agg.descCc,
+      cargo: agg.cargo,
+      codCargo: agg.codCargo,
+      descCargo: agg.descCargo,
       currentHeadcount: agg.headcount,
       requiredHeadcount: effectiveRequired,
       additionalHeadcount: additional,
@@ -787,6 +819,11 @@ function buildCostCenterResults(
       cargaSemanalAtual: agg.cargaSemanalAtual,
       coberturaAtualPorDia,
       cnpjCompleto: agg.cnpjCompleto,
+      ohScopeMatch: {
+        scopeType: ohResolution.scopeType,
+        targetValue: ohResolution.targetValue,
+      },
+      operatingHours: ohResolution.hours,
     }
   })
 

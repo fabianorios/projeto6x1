@@ -454,4 +454,105 @@ describe('simulate() v2 wiring', () => {
     assert.equal(r.byCostCenter[1]!.currentHeadcount, 3)
     assert.equal(r.byCostCenter[2]!.currentHeadcount, 2)
   })
+
+  it('OH cascade: cargo beats CC; metadata + tiles use matched scope', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual;cod_cc;regime_funcionamento',
+      'Operador;3000;220;44;CC-102;10;6x1;CC-102;SEG_SEX',
+      'Gerente;5000;220;44;CC-102;2;6x1;CC-102;SEG_SEX',
+    ].join('\n')
+    const { rows } = parsePayrollCsv(csv)
+    const r = simulate(
+      baseInput({
+        payrollRows: rows,
+        defaultRegimeFuncionamento: 'SEG_SEX',
+        operatingHours: { default: { openHour: 9, closeHour: 21 } },
+        ohScopeRules: [
+          {
+            scope_type: 'global',
+            target_value: '',
+            operating_hours: {
+              abertura: '09:00',
+              fechamento: '21:00',
+              dias_semana: [],
+            },
+          },
+          {
+            scope_type: 'centro_custo',
+            target_value: 'CC-102',
+            operating_hours: {
+              abertura: '08:00',
+              fechamento: '16:00',
+              dias_semana: [],
+            },
+          },
+          {
+            scope_type: 'cargo',
+            target_value: 'Operador',
+            operating_hours: {
+              abertura: '06:00',
+              fechamento: '14:00',
+              dias_semana: [],
+            },
+          },
+        ],
+      }),
+    )
+    // Dominant cargo in the single CC×horário slice is Operador (10 vs 2).
+    assert.equal(r.byCostCenter.length, 1)
+    const cc = r.byCostCenter[0]!
+    assert.equal(cc.ohScopeMatch?.scopeType, 'cargo')
+    assert.equal(cc.ohScopeMatch?.targetValue, 'Operador')
+    assert.deepEqual(cc.operatingHours?.default, {
+      openHour: 6,
+      closeHour: 14,
+    })
+    // Short 8h window → single tile (no 09–21 double tile invent).
+    const sug = r.scheduleSuggestions.filter((s) => s.centroCusto === cc.centroCusto)
+    assert.ok(sug.length > 0)
+    assert.equal(sug[0]!.ohScopeMatch?.scopeType, 'cargo')
+    assert.equal(sug[0]!.shifts.length, 1)
+    assert.equal(sug[0]!.shifts[0]!.startHour, 6)
+    assert.equal(r.coverage.additionalHeadcount, 0)
+  })
+
+  it('OH cascade: falls back to global when no segmented match', () => {
+    const csv = [
+      'cargo;salario;carga_horaria_mensal;carga_horaria_semanal;centro_custo;quantidade;escala_atual',
+      'Analista;4000;220;44;CC-OTHER;5;6x1',
+    ].join('\n')
+    const { rows } = parsePayrollCsv(csv)
+    const r = simulate(
+      baseInput({
+        payrollRows: rows,
+        defaultRegimeFuncionamento: 'SEG_SEX',
+        ohScopeRules: [
+          {
+            scope_type: 'global',
+            target_value: '',
+            operating_hours: {
+              abertura: '10:00',
+              fechamento: '18:00',
+              dias_semana: [],
+            },
+          },
+          {
+            scope_type: 'centro_custo',
+            target_value: 'CC-102',
+            operating_hours: {
+              abertura: '07:00',
+              fechamento: '15:00',
+              dias_semana: [],
+            },
+          },
+        ],
+      }),
+    )
+    const cc = r.byCostCenter[0]!
+    assert.equal(cc.ohScopeMatch?.scopeType, 'global')
+    assert.deepEqual(cc.operatingHours?.default, {
+      openHour: 10,
+      closeHour: 18,
+    })
+  })
 })

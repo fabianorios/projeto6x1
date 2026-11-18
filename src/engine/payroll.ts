@@ -658,8 +658,14 @@ export function centroCustoDisplayLabel(opts: {
 
 export interface CostCenterTotals {
   centroCusto: string
+  /** Optional CC code from Folha `cod_cc` (when distinct from centroCusto). */
+  codCc: string | null
   /** Optional CC description (CCU_D1sCentroCusto). */
   descCc: string | null
+  /** Dominant cargo label (by headcount) — for OH cargo-scope matching. */
+  cargo: string | null
+  codCargo: string | null
+  descCargo: string | null
   headcount: number
   baselinePayroll: number
   /** Weighted sum of salaries for average (salario × qty). */
@@ -767,6 +773,9 @@ export function aggregateByCostCenter(
       cargaSemanalSum: number
       escalaVotes: Map<string, number>
       horarioVotes: Map<string, number>
+      cargoVotes: Map<string, number>
+      codCargoByLabel: Map<string, string>
+      descCargoByLabel: Map<string, string>
     }
   >()
 
@@ -782,7 +791,11 @@ export function aggregateByCostCenter(
     if (!agg) {
       agg = {
         centroCusto: row.centroCusto,
+        codCc: row.codCc?.trim() || null,
         descCc: row.descCc?.trim() || null,
+        cargo: null,
+        codCargo: null,
+        descCargo: null,
         headcount: 0,
         baselinePayroll: 0,
         salaryMass: 0,
@@ -832,6 +845,9 @@ export function aggregateByCostCenter(
         cargaSemanalSum: 0,
         escalaVotes: new Map(),
         horarioVotes: new Map(),
+        cargoVotes: new Map(),
+        codCargoByLabel: new Map(),
+        descCargoByLabel: new Map(),
       }
       map.set(key, agg)
     }
@@ -855,11 +871,30 @@ export function aggregateByCostCenter(
         (agg.horarioVotes.get(row.codHorarioAtual) ?? 0) + qty,
       )
     }
+    const cargoLabel =
+      (row.cargo ?? '').trim() ||
+      (row.descCargo ?? '').trim() ||
+      (row.codCargo ?? '').trim()
+    if (cargoLabel) {
+      agg.cargoVotes.set(
+        cargoLabel,
+        (agg.cargoVotes.get(cargoLabel) ?? 0) + qty,
+      )
+      if (row.codCargo?.trim()) {
+        agg.codCargoByLabel.set(cargoLabel, row.codCargo.trim())
+      }
+      if (row.descCargo?.trim()) {
+        agg.descCargoByLabel.set(cargoLabel, row.descCargo.trim())
+      }
+    }
     if (!agg.regimeFuncionamento && row.regimeFuncionamento) {
       agg.regimeFuncionamento = row.regimeFuncionamento
     }
     if (!agg.cnpjCompleto && row.cnpjCompleto) {
       agg.cnpjCompleto = row.cnpjCompleto
+    }
+    if (!agg.codCc && row.codCc?.trim()) {
+      agg.codCc = row.codCc.trim()
     }
     if (!agg.descCc && row.descCc?.trim()) {
       agg.descCc = row.descCc.trim()
@@ -945,30 +980,43 @@ export function aggregateByCostCenter(
         cargaSemanalSum,
         escalaVotes,
         horarioVotes,
+        cargoVotes,
+        codCargoByLabel,
+        descCargoByLabel,
         ...rest
-      }) => ({
-        ...rest,
-        avgVrValorDia: rest.peopleWithVr > 0 ? vrDiaSum / rest.peopleWithVr : 0,
-        avgVtValorDia: rest.peopleWithVt > 0 ? vtDiaSum / rest.peopleWithVt : 0,
-        avgVaValorDia: rest.peopleWithVa > 0 ? vaDiaSum / rest.peopleWithVa : 0,
-        avgVaValorMes: rest.peopleWithVa > 0 ? vaMesSum / rest.peopleWithVa : 0,
-        avgAssistMedicaMes:
-          rest.peopleWithAssistMedica > 0
-            ? medSum / rest.peopleWithAssistMedica
-            : 0,
-        avgAssistOdontoMes:
-          rest.peopleWithAssistOdonto > 0
-            ? odontoSum / rest.peopleWithAssistOdonto
-            : 0,
-        heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
-        cargaSemanalAtual:
-          rest.headcount > 0
-            ? Math.round((cargaSemanalSum / rest.headcount) * 100) / 100
-            : null,
-        escalaAtual: dominantVote(escalaVotes),
-        // Prefer the slice key horário; fall back to dominant vote if empty.
-        codHorarioAtual: rest.codHorarioAtual || dominantVote(horarioVotes),
-      }),
+      }) => {
+        const cargo = dominantVote(cargoVotes)
+        return {
+          ...rest,
+          avgVrValorDia:
+            rest.peopleWithVr > 0 ? vrDiaSum / rest.peopleWithVr : 0,
+          avgVtValorDia:
+            rest.peopleWithVt > 0 ? vtDiaSum / rest.peopleWithVt : 0,
+          avgVaValorDia:
+            rest.peopleWithVa > 0 ? vaDiaSum / rest.peopleWithVa : 0,
+          avgVaValorMes:
+            rest.peopleWithVa > 0 ? vaMesSum / rest.peopleWithVa : 0,
+          avgAssistMedicaMes:
+            rest.peopleWithAssistMedica > 0
+              ? medSum / rest.peopleWithAssistMedica
+              : 0,
+          avgAssistOdontoMes:
+            rest.peopleWithAssistOdonto > 0
+              ? odontoSum / rest.peopleWithAssistOdonto
+              : 0,
+          heMediaMensalHoras: rest.headcount > 0 ? heSum / rest.headcount : 0,
+          cargaSemanalAtual:
+            rest.headcount > 0
+              ? Math.round((cargaSemanalSum / rest.headcount) * 100) / 100
+              : null,
+          escalaAtual: dominantVote(escalaVotes),
+          // Prefer the slice key horário; fall back to dominant vote if empty.
+          codHorarioAtual: rest.codHorarioAtual || dominantVote(horarioVotes),
+          cargo,
+          codCargo: cargo ? codCargoByLabel.get(cargo) ?? null : null,
+          descCargo: cargo ? descCargoByLabel.get(cargo) ?? null : null,
+        }
+      },
     )
     .sort((a, b) => {
       const ca = (a.cnpjCompleto ?? '').replace(/\D/g, '')

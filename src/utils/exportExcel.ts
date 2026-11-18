@@ -351,7 +351,6 @@ export function buildEscalasTurmasSpreadsheetXml(
   const operatingHours =
     result.input.operatingHours ?? DEFAULT_OPERATING_HOURS
   const shiftsPerDay = Math.max(1, result.input.shiftsPerDay || 1)
-  const shiftWindows = resolveShiftWindows(operatingHours, shiftsPerDay)
 
   for (const cc of centers) {
     const regime =
@@ -361,6 +360,8 @@ export function buildEscalasTurmasSpreadsheetXml(
     const dist =
       cc.distribuicaoTurmas ??
       distributeCrews(regime, cc.requiredHeadcount)
+    const ccHours = cc.operatingHours ?? operatingHours
+    const shiftWindows = resolveShiftWindows(ccHours, shiftsPerDay)
 
     body.push(
       row([
@@ -373,7 +374,7 @@ export function buildEscalasTurmasSpreadsheetXml(
     // Atual only: Folha window when present; Proposto keeps OH tiles.
     const atualWindows = resolveBaselineShiftWindows(
       cc.horarioTrabalhoAtual,
-      operatingHours,
+      ccHours,
       shiftsPerDay,
     )
     const atualCrews = applyTurmaHourLabels(

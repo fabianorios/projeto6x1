@@ -8,11 +8,13 @@ import {
   globalRuleFromOperatingHours,
   isOHScopeType,
   normalizeOHScopeRules,
+  ohScopeMatchContextFromPayrollRow,
   ohWindowToOperatingHours,
   operatingHoursToOhWindow,
   parseOHScopeRule,
   parseScopeClock,
   prepareOHScopeRulesForInput,
+  resolveOperatingHoursForEntity,
   type OHScopeRule,
 } from './operating-hours'
 
@@ -199,5 +201,152 @@ describe('OHScopeRule helpers (Etapa 1)', () => {
     assert.ok(prepared)
     assert.equal(prepared![0].scope_type, 'global')
     assert.equal(prepared![1].scope_type, 'centro_custo')
+  })
+})
+
+describe('resolveOperatingHoursForEntity (Etapa 2 cascade)', () => {
+  const cargoRule: OHScopeRule = {
+    scope_type: 'cargo',
+    target_value: 'Operador',
+    operating_hours: {
+      abertura: '06:00',
+      fechamento: '14:00',
+      dias_semana: [],
+    },
+  }
+  const ccRule: OHScopeRule = {
+    scope_type: 'centro_custo',
+    target_value: 'CC-102',
+    operating_hours: {
+      abertura: '07:00',
+      fechamento: '15:00',
+      dias_semana: [],
+    },
+  }
+  const publicoRule: OHScopeRule = {
+    scope_type: 'publico',
+    target_value: 'Administrativo',
+    operating_hours: {
+      abertura: '08:00',
+      fechamento: '17:00',
+      dias_semana: [1, 2, 3, 4, 5],
+    },
+  }
+  const globalRule: OHScopeRule = {
+    scope_type: 'global',
+    target_value: '',
+    operating_hours: {
+      abertura: '10:00',
+      fechamento: '20:00',
+      dias_semana: [],
+    },
+  }
+  const allRules = [globalRule, publicoRule, ccRule, cargoRule]
+
+  it('falls back to wizard operatingHours when ohScopeRules omitted', () => {
+    const r = resolveOperatingHoursForEntity(
+      undefined,
+      DEFAULT_OPERATING_HOURS,
+      { cargo: 'Operador', centroCusto: 'CC-102' },
+    )
+    assert.equal(r.scopeType, 'global')
+    assert.equal(r.targetValue, '')
+    assert.deepEqual(r.hours.default, DEFAULT_OPERATING_HOURS.default)
+  })
+
+  it('prefers cargo over CC, publico, and global', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'operador',
+      centroCusto: 'CC-102',
+      publico: 'Administrativo',
+    })
+    assert.equal(r.scopeType, 'cargo')
+    assert.equal(r.targetValue, 'Operador')
+    assert.deepEqual(r.hours.default, { openHour: 6, closeHour: 14 })
+  })
+
+  it('matches cargo via descCargo / codCargo (trim + case)', () => {
+    const byDesc = resolveOperatingHoursForEntity(
+      allRules,
+      DEFAULT_OPERATING_HOURS,
+      { descCargo: '  OPERADOR  ' },
+    )
+    assert.equal(byDesc.scopeType, 'cargo')
+    const byCod = resolveOperatingHoursForEntity(
+      [{ ...cargoRule, target_value: 'CARGO-9' }, globalRule],
+      DEFAULT_OPERATING_HOURS,
+      { codCargo: 'cargo-9' },
+    )
+    assert.equal(byCod.scopeType, 'cargo')
+    assert.equal(byCod.targetValue, 'CARGO-9')
+  })
+
+  it('falls through to centro_custo when cargo misses', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'Gerente',
+      codCc: 'CC-102',
+      publico: 'Administrativo',
+    })
+    assert.equal(r.scopeType, 'centro_custo')
+    assert.equal(r.targetValue, 'CC-102')
+    assert.deepEqual(r.hours.default, { openHour: 7, closeHour: 15 })
+  })
+
+  it('matches CC by description when cod differs', () => {
+    const rules: OHScopeRule[] = [
+      globalRule,
+      {
+        scope_type: 'centro_custo',
+        target_value: 'Loja Centro',
+        operating_hours: {
+          abertura: '09:30',
+          fechamento: '18:30',
+          dias_semana: [],
+        },
+      },
+    ]
+    const r = resolveOperatingHoursForEntity(rules, DEFAULT_OPERATING_HOURS, {
+      centroCusto: '999',
+      descCc: 'loja  centro',
+    })
+    assert.equal(r.scopeType, 'centro_custo')
+    assert.deepEqual(r.hours.default, { openHour: 9.5, closeHour: 18.5 })
+  })
+
+  it('falls through to publico when cargo and CC miss', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'Gerente',
+      centroCusto: 'CC-999',
+      publico: 'administrativo',
+    })
+    assert.equal(r.scopeType, 'publico')
+    assert.equal(r.targetValue, 'Administrativo')
+    assert.equal(r.hours.default.openHour, 8)
+    assert.equal(r.hours.default.closeHour, 17)
+    assert.equal(r.hours.byWeekday?.sat?.closed, true)
+  })
+
+  it('falls back to global rule when no segmented match', () => {
+    const r = resolveOperatingHoursForEntity(allRules, DEFAULT_OPERATING_HOURS, {
+      cargo: 'X',
+      centroCusto: 'Y',
+      publico: 'Z',
+    })
+    assert.equal(r.scopeType, 'global')
+    assert.deepEqual(r.hours.default, { openHour: 10, closeHour: 20 })
+  })
+
+  it('ohScopeMatchContextFromPayrollRow feeds cascade', () => {
+    const ctx = ohScopeMatchContextFromPayrollRow({
+      cargo: 'Operador',
+      codCc: 'CC-102',
+      centroCusto: 'CC-102',
+    })
+    const r = resolveOperatingHoursForEntity(
+      allRules,
+      DEFAULT_OPERATING_HOURS,
+      ctx,
+    )
+    assert.equal(r.scopeType, 'cargo')
   })
 })
