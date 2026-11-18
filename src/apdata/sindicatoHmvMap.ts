@@ -35,7 +35,7 @@ export function indexSindicatoRows(
     const id = num(r.SIN_CdiSindicato)
     if (id === null) continue
     byId.set(id, {
-      nome: str(r.SIN_D1sNome) || 'SEM_SINDICATO',
+      nome: str(r.SIN_D1sSindicato) || 'SEM_SINDICATO',
       cnpj: str(r.SIN_NusCNPJ),
     })
   }

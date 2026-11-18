@@ -14,13 +14,13 @@ describe('Apdata LIVE selects — Sindicatos + HMV (Etapa 5)', () => {
     ])
   })
 
-  it('sindicatos step lists SIN_CdiSindicato / SIN_D1sNome / SIN_NusCNPJ', () => {
+  it('sindicatos step lists SIN_CdiSindicato / SIN_D1sSindicato / SIN_NusCNPJ', () => {
     const step = LIVE_SELECT_STEPS.find((s) => s.id === 'sindicatos')
     assert.ok(step)
     assert.equal(step.table, 'Sindicatos')
     assert.deepEqual(step.columns, [
       'SIN_CdiSindicato',
-      'SIN_D1sNome',
+      'SIN_D1sSindicato',
       'SIN_NusCNPJ',
     ])
   })

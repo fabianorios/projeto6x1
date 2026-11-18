@@ -260,7 +260,7 @@ SELECT
     CAST(ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)) AS DECIMAL(10,2)) AS carga_semanal_atual,
     CAST(ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS DECIMAL(10,2)) AS carga_horaria_mensal,
     CAST(ISNULL(c.CON_CdiSindicato, 0) AS VARCHAR(20)) AS cod_sindicato,
-    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS nome_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sSindicato, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS nome_sindicato,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_NusCNPJ, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(ISNULL(c.CON_VlnSalario, 0)) AS DECIMAL(18,2)) AS massa_salarial_base,
@@ -315,7 +315,7 @@ GROUP BY
     ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)),
     ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5),
     c.CON_CdiSindicato,
-    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_D1sSindicato, 'SEM_SINDICATO'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(sin.SIN_NusCNPJ, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo;;
@@ -534,7 +534,7 @@ SELECT
     CAST(NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)) AS NUMBER(10,2)) AS carga_semanal_atual,
     CAST(NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS NUMBER(10,2)) AS carga_horaria_mensal,
     TO_CHAR(NVL(c.CON_CdiSindicato, 0)) AS cod_sindicato,
-    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS nome_sindicato,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sSindicato, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS nome_sindicato,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_NusCNPJ, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(NVL(c.CON_VlnSalario, 0)) AS NUMBER(18,2)) AS massa_salarial_base,
@@ -589,7 +589,7 @@ GROUP BY
     NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)),
     NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5),
     c.CON_CdiSindicato,
-    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sNome, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_D1sSindicato, 'SEM_SINDICATO'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(sin.SIN_NusCNPJ, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo

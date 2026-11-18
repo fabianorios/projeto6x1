@@ -7,19 +7,19 @@ import {
 } from './sindicatoHmvMap'
 
 describe('sindicatoHmvMap (Etapa 5 — Apdata SIN_* / HMV_*)', () => {
-  it('indexes SIN_CdiSindicato / SIN_D1sNome / SIN_NusCNPJ', () => {
+  it('indexes SIN_CdiSindicato / SIN_D1sSindicato / SIN_NusCNPJ', () => {
     const byId = indexSindicatoRows([
       {
         SIN_CdiSindicato: 12,
-        SIN_D1sNome: 'Sindicato Metalurgicos Demo',
+        SIN_D1sSindicato: 'Sindicato Metalurgicos Demo',
         SIN_NusCNPJ: '11222333000144',
       },
       {
         SIN_CdiSindicato: '7',
-        SIN_D1sNome: '  ',
+        SIN_D1sSindicato: '  ',
         SIN_NusCNPJ: null,
       },
-      { SIN_D1sNome: 'orphan without id' },
+      { SIN_D1sSindicato: 'orphan without id' },
     ])
     assert.equal(byId.size, 2)
     assert.deepEqual(byId.get(12), {
@@ -53,7 +53,7 @@ describe('sindicatoHmvMap (Etapa 5 — Apdata SIN_* / HMV_*)', () => {
     const sin = indexSindicatoRows([
       {
         SIN_CdiSindicato: 12,
-        SIN_D1sNome: 'Sindicato Demo',
+        SIN_D1sSindicato: 'Sindicato Demo',
         SIN_NusCNPJ: '11222333000144',
       },
     ])
