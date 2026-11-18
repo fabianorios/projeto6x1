@@ -5,6 +5,7 @@ import {
   DEFAULT_REGIME_FUNCIONAMENTO,
   DEFAULT_TAX_REGIME,
   type EstrategiaAbsorcao,
+  type OHScopeRule,
   type OperatingHours,
   type PayrollParseIssue,
   type PayrollRow,
@@ -36,6 +37,11 @@ export interface WizardFormState {
   units: number
   shiftsPerDay: number
   operatingHours: OperatingHours
+  /**
+   * Segmented OH rules (Etapa 1 DTO). Empty = use `operatingHours` only.
+   * UI for exceptions lands in Etapa 3.
+   */
+  ohScopeRules: OHScopeRule[]
   scenarioId: ScenarioId
   payrollRows: PayrollRow[]
   payrollIssues: PayrollParseIssue[]
@@ -56,6 +62,7 @@ export const initialWizardForm: WizardFormState = {
   units: 1,
   shiftsPerDay: 2,
   operatingHours: DEFAULT_OPERATING_HOURS,
+  ohScopeRules: [],
   scenarioId: 'fase1_2026_42h',
   payrollRows: [],
   payrollIssues: [],

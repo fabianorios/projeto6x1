@@ -7,7 +7,10 @@
  */
 
 export { simulate } from "../../../src/engine/simulate";
-export { DEFAULT_OPERATING_HOURS } from "../../../src/engine/operating-hours";
+export {
+  DEFAULT_OPERATING_HOURS,
+  prepareOHScopeRulesForInput,
+} from "../../../src/engine/operating-hours";
 export {
   emptyPayrollExtras,
   parsePayrollCsv,
@@ -33,7 +36,12 @@ export type {
   PayrollParseResult,
   PayrollRow,
 } from "../../../src/engine/payroll";
-export type { OperatingHours } from "../../../src/engine/operating-hours";
+export type {
+  OperatingHours,
+  OHScopeRule,
+  OHScopeType,
+  OHScopeWindow,
+} from "../../../src/engine/operating-hours";
 export type { ExtractorAggregate } from "../../../src/apdata/mapExtractorRows";
 export type {
   EstrategiaAbsorcao,

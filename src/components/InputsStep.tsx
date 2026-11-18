@@ -79,6 +79,8 @@ export function InputsStep({
         units: form.units,
         shiftsPerDay: form.shiftsPerDay,
         operatingHours: form.operatingHours,
+        ohScopeRules:
+          form.ohScopeRules.length > 0 ? form.ohScopeRules : undefined,
         scenarioId: form.scenarioId,
         payrollRows:
           form.payrollRows.length > 0 ? form.payrollRows : undefined,

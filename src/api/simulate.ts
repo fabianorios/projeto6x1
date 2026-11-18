@@ -29,6 +29,8 @@ export type SimulateApiRequest = {
   units?: number
   shiftsPerDay?: number
   operatingHours: SimulationInput['operatingHours']
+  /** Optional segmented OH rules; omit → global `operatingHours` only. */
+  ohScopeRules?: SimulationInput['ohScopeRules']
   defaultRegimeFuncionamento?: SimulationInput['defaultRegimeFuncionamento']
   regimeFuncionamentoByCc?: SimulationInput['regimeFuncionamentoByCc']
   defaultTaxRegime?: SimulationInput['defaultTaxRegime']

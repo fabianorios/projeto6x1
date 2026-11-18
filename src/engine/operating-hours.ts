@@ -374,3 +374,260 @@ export function summarizeOperatingHours(hours: OperatingHours): string {
   }
   return notes.length ? `${base} (${notes.join(', ')})` : base
 }
+
+/* -------------------------------------------------------------------------- */
+/* Segmented OH scopes (Etapa 1 — types/DTO only; cascade is Etapa 2)          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Scope granularity for establishment operating hours.
+ * Etapa 2 cascade priority (most specific first): cargo → centro_custo →
+ * publico → global.
+ */
+export type OHScopeType = 'global' | 'publico' | 'centro_custo' | 'cargo'
+
+export const OH_SCOPE_TYPES: readonly OHScopeType[] = [
+  'global',
+  'publico',
+  'centro_custo',
+  'cargo',
+] as const
+
+/**
+ * Documented cascade order for Etapa 2 motor (not applied in Etapa 1).
+ * First match wins when resolving OH for a Folha row.
+ */
+export const OH_SCOPE_CASCADE_PRIORITY: readonly OHScopeType[] = [
+  'cargo',
+  'centro_custo',
+  'publico',
+  'global',
+] as const
+
+/**
+ * Clock window carried on a scope rule.
+ * - `abertura` / `fechamento`: `HH:MM` (fechamento may be `24:00`).
+ * - `dias_semana`: `Date.getDay()` indices — 0=Sun … 6=Sat.
+ *   Empty array → same window every day (no closed weekdays).
+ */
+export interface OHScopeWindow {
+  abertura: string
+  fechamento: string
+  dias_semana: number[]
+}
+
+/**
+ * One OH exception / override keyed by scope.
+ * `target_value` examples: `''` or `'*'` for global; `Administrativo` (público);
+ * `CC-102` (centro); cargo label/code.
+ */
+export interface OHScopeRule {
+  scope_type: OHScopeType
+  target_value: string
+  operating_hours: OHScopeWindow
+}
+
+const CLOCK_RE = /^(\d{1,2}):(\d{2})$/
+
+/** WeekdayKey → Date.getDay() (0=Sun … 6=Sat). */
+const WEEKDAY_TO_DIAS: Record<WeekdayKey, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+}
+
+const DIAS_TO_WEEKDAY: Record<number, WeekdayKey> = {
+  0: 'sun',
+  1: 'mon',
+  2: 'tue',
+  3: 'wed',
+  4: 'thu',
+  5: 'fri',
+  6: 'sat',
+}
+
+export function isOHScopeType(value: unknown): value is OHScopeType {
+  return (
+    typeof value === 'string' &&
+    (OH_SCOPE_TYPES as readonly string[]).includes(value)
+  )
+}
+
+/** Parse `HH:MM` / `24:00` into fractional hour; null when invalid. */
+export function parseScopeClock(value: string): number | null {
+  const text = value.trim()
+  const m = CLOCK_RE.exec(text)
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null
+  if (mm < 0 || mm > 59) return null
+  if (hh === 24 && mm === 0) return 24
+  if (hh < 0 || hh > 23) return null
+  return normalizeHour(hh + mm / 60)
+}
+
+export function formatScopeClock(hour: number): string {
+  return formatHourClock(hour)
+}
+
+export function weekdayKeyFromDias(day: number): WeekdayKey | null {
+  return DIAS_TO_WEEKDAY[day] ?? null
+}
+
+export function diasFromWeekdayKey(key: WeekdayKey): number {
+  return WEEKDAY_TO_DIAS[key]
+}
+
+/** Convert a scope window into engine `OperatingHours` (closed days marked). */
+export function ohWindowToOperatingHours(window: OHScopeWindow): OperatingHours {
+  const openHour = parseScopeClock(window.abertura) ?? 9
+  const closeHour = parseScopeClock(window.fechamento) ?? 21
+  const day: DayOperatingHours = { openHour, closeHour }
+  const dias = normalizeDiasSemana(window.dias_semana)
+  if (dias.length === 0) {
+    return { default: day }
+  }
+  const openSet = new Set(dias)
+  const byWeekday = {} as NonNullable<OperatingHours['byWeekday']>
+  for (const key of WEEKDAY_ORDER) {
+    const d = WEEKDAY_TO_DIAS[key]
+    if (!openSet.has(d)) {
+      byWeekday[key] = { openHour, closeHour, closed: true }
+    }
+  }
+  return Object.keys(byWeekday).length > 0
+    ? { default: day, byWeekday }
+    : { default: day }
+}
+
+/**
+ * Flatten engine OH into a scope window (default open/close + open dias).
+ * Closed weekdays are omitted from `dias_semana`; when every day matches
+ * default and none are closed → empty `dias_semana`.
+ */
+export function operatingHoursToOhWindow(hours: OperatingHours): OHScopeWindow {
+  const abertura = formatScopeClock(hours.default.openHour)
+  const fechamento = formatScopeClock(hours.default.closeHour)
+  if (!hours.byWeekday || Object.keys(hours.byWeekday).length === 0) {
+    return { abertura, fechamento, dias_semana: [] }
+  }
+  const openDays: number[] = []
+  let anyClosed = false
+  for (const key of WEEKDAY_ORDER) {
+    const d = hoursForWeekday(hours, key)
+    const dias = WEEKDAY_TO_DIAS[key]
+    if (d.closed) {
+      anyClosed = true
+      continue
+    }
+    openDays.push(dias)
+  }
+  if (!anyClosed) {
+    return { abertura, fechamento, dias_semana: [] }
+  }
+  return { abertura, fechamento, dias_semana: openDays }
+}
+
+/** Build the canonical global rule from wizard `operatingHours`. */
+export function globalRuleFromOperatingHours(
+  hours: OperatingHours,
+): OHScopeRule {
+  return {
+    scope_type: 'global',
+    target_value: '',
+    operating_hours: operatingHoursToOhWindow(hours),
+  }
+}
+
+export function parseOHScopeRule(raw: unknown): OHScopeRule | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  if (!isOHScopeType(obj.scope_type)) return null
+  const oh = obj.operating_hours
+  if (!oh || typeof oh !== 'object') return null
+  const win = oh as Record<string, unknown>
+  if (typeof win.abertura !== 'string' || typeof win.fechamento !== 'string') {
+    return null
+  }
+  if (parseScopeClock(win.abertura) == null) return null
+  if (parseScopeClock(win.fechamento) == null) return null
+  const diasRaw = Array.isArray(win.dias_semana) ? win.dias_semana : []
+  const dias_semana = normalizeDiasSemana(diasRaw)
+  const target_value =
+    typeof obj.target_value === 'string' ? obj.target_value.trim() : ''
+  return {
+    scope_type: obj.scope_type,
+    target_value,
+    operating_hours: {
+      abertura: formatScopeClock(parseScopeClock(win.abertura)!),
+      fechamento: formatScopeClock(parseScopeClock(win.fechamento)!),
+      dias_semana,
+    },
+  }
+}
+
+/** Drop invalid entries; preserve order. */
+export function normalizeOHScopeRules(raw: unknown): OHScopeRule[] {
+  if (!Array.isArray(raw)) return []
+  const out: OHScopeRule[] = []
+  for (const item of raw) {
+    const rule = parseOHScopeRule(item)
+    if (rule) out.push(rule)
+  }
+  return out
+}
+
+/**
+ * Carry-through helper: when rules are omitted → `undefined` (backward
+ * compatible — sims keep using only `operatingHours`).
+ * When an array is provided, ensure a `global` rule exists (synthesized from
+ * `operatingHours` when missing). Does **not** resolve cargo/CC/público.
+ */
+export function prepareOHScopeRulesForInput(
+  raw: unknown,
+  globalHours: OperatingHours,
+): OHScopeRule[] | undefined {
+  if (raw == null) return undefined
+  const rules = normalizeOHScopeRules(raw)
+  return ensureGlobalOHScopeRule(rules, globalHours)
+}
+
+/** Prepend/replace missing global rule from wizard OH. */
+export function ensureGlobalOHScopeRule(
+  rules: OHScopeRule[],
+  globalHours: OperatingHours,
+): OHScopeRule[] {
+  const hasGlobal = rules.some((r) => r.scope_type === 'global')
+  if (hasGlobal) return rules
+  return [globalRuleFromOperatingHours(globalHours), ...rules]
+}
+
+/**
+ * Etapa 1 effective OH: prefer an explicit `global` scope rule when present;
+ * otherwise the legacy `operatingHours` field. Cascade (cargo→…→global) is
+ * Etapa 2 — callers must not treat this as segmented resolution.
+ */
+export function effectiveGlobalOperatingHours(
+  rules: OHScopeRule[] | undefined,
+  fallback: OperatingHours,
+): OperatingHours {
+  if (!rules || rules.length === 0) return fallback
+  const global = rules.find((r) => r.scope_type === 'global')
+  if (!global) return fallback
+  return ohWindowToOperatingHours(global.operating_hours)
+}
+
+function normalizeDiasSemana(raw: unknown[]): number[] {
+  const set = new Set<number>()
+  for (const v of raw) {
+    const n = typeof v === 'number' ? v : Number(v)
+    if (!Number.isInteger(n) || n < 0 || n > 6) continue
+    set.add(n)
+  }
+  return [...set].sort((a, b) => a - b)
+}
