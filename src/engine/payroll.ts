@@ -102,7 +102,7 @@ export interface PayrollRow {
   horarioTrabalhoAtual: string | null
   /** Sindicatos.SIN_CdiSindicato via CON_CdiSindicato (aggregate OK). */
   codSindicato: string | null
-  /** Sindicatos.SIN_D1sNome — org name, not person PII. */
+  /** Sindicatos.SIN_D1sSindicato — org name, not person PII. */
   nomeSindicato: string | null
   /** Sindicatos.SIN_NusCNPJ (optional). */
   cnpjSindicato: string | null

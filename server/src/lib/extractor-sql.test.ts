@@ -181,7 +181,7 @@ describe("extractor SQL", () => {
       assert.match(sql, /CON_CdiQuantidadeHoraMes/);
       assert.match(sql, /Sindicatos/);
       assert.match(sql, /SIN_CdiSindicato/);
-      assert.match(sql, /SIN_D1sNome/);
+      assert.match(sql, /SIN_D1sSindicato/);
       assert.match(sql, /SIN_NusCNPJ/);
       assert.match(sql, /CON_CdiSindicato/);
       assert.match(sql, /AS carga_horaria_mensal/);

@@ -274,7 +274,7 @@ SELECT
     CAST(ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)) AS DECIMAL(10,2)) AS carga_semanal_atual,
     CAST(ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS DECIMAL(10,2)) AS carga_horaria_mensal,
     CAST(ISNULL(c.CON_CdiSindicato, 0) AS VARCHAR(20)) AS cod_sindicato,
-    ${SANITIZE_MSSQL('sin.SIN_D1sNome', 'SEM_SINDICATO')} AS nome_sindicato,
+    ${SANITIZE_MSSQL('sin.SIN_D1sSindicato', 'SEM_SINDICATO')} AS nome_sindicato,
     ${SANITIZE_MSSQL('sin.SIN_NusCNPJ', '')} AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(ISNULL(c.CON_VlnSalario, 0)) AS DECIMAL(18,2)) AS massa_salarial_base,
@@ -329,7 +329,7 @@ GROUP BY
     ISNULL(hmv.HMV_QtnHorasSemanal, ISNULL(h.HOR_QtnHorasSemanal, 44.0)),
     ISNULL(hmv.HMV_QtnQuantidadeHoraMes, ISNULL(h.HOR_QtnHorasSemanal, 44.0) * 5),
     c.CON_CdiSindicato,
-    ${SANITIZE_MSSQL('sin.SIN_D1sNome', 'SEM_SINDICATO')},
+    ${SANITIZE_MSSQL('sin.SIN_D1sSindicato', 'SEM_SINDICATO')},
     ${SANITIZE_MSSQL('sin.SIN_NusCNPJ', '')},
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo
@@ -529,7 +529,7 @@ SELECT
     CAST(NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)) AS NUMBER(10,2)) AS carga_semanal_atual,
     CAST(NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5) AS NUMBER(10,2)) AS carga_horaria_mensal,
     TO_CHAR(NVL(c.CON_CdiSindicato, 0)) AS cod_sindicato,
-    ${SANITIZE_ORACLE('sin.SIN_D1sNome', 'SEM_SINDICATO')} AS nome_sindicato,
+    ${SANITIZE_ORACLE('sin.SIN_D1sSindicato', 'SEM_SINDICATO')} AS nome_sindicato,
     ${SANITIZE_ORACLE('sin.SIN_NusCNPJ', '')} AS cnpj_sindicato,
     COUNT(c.CON_CdiContratado) AS qtd_colaboradores,
     CAST(SUM(NVL(c.CON_VlnSalario, 0)) AS NUMBER(18,2)) AS massa_salarial_base,
@@ -584,7 +584,7 @@ GROUP BY
     NVL(hmv.HMV_QtnHorasSemanal, NVL(h.HOR_QtnHorasSemanal, 44.0)),
     NVL(hmv.HMV_QtnQuantidadeHoraMes, NVL(h.HOR_QtnHorasSemanal, 44.0) * 5),
     c.CON_CdiSindicato,
-    ${SANITIZE_ORACLE('sin.SIN_D1sNome', 'SEM_SINDICATO')},
+    ${SANITIZE_ORACLE('sin.SIN_D1sSindicato', 'SEM_SINDICATO')},
     ${SANITIZE_ORACLE('sin.SIN_NusCNPJ', '')},
     ht.horario_trabalho_atual
 ORDER BY cod_empresa, cod_filial, cod_cc, desc_cargo

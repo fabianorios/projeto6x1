@@ -494,7 +494,7 @@ export const LIVE_SELECT_STEPS: {
     id: 'sindicatos',
     label: 'Sindicatos (SIN)',
     table: 'Sindicatos',
-    columns: ['SIN_CdiSindicato', 'SIN_D1sNome', 'SIN_NusCNPJ'],
+    columns: ['SIN_CdiSindicato', 'SIN_D1sSindicato', 'SIN_NusCNPJ'],
     note: 'Via CON_CdiSindicato — nome de entidade coletiva (não PII de pessoa).',
   },
   {
