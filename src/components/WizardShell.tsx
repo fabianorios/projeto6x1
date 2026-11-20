@@ -115,50 +115,69 @@ export function WizardShell() {
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <div
-              className="app-chrome-mark flex h-8 w-8 shrink-0 items-center justify-center rounded text-xs font-bold tracking-tight"
+              className="app-chrome-mark flex h-8 w-8 shrink-0 items-center justify-center rounded text-[11px] font-bold tracking-tight"
               aria-hidden
             >
-              6×1
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 32 32"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  fill="currentColor"
+                  d="M8 22V10h2.4v9.2H16V22H8zm9.2 0V10H19.6v9.2H26V22h-8.8z"
+                />
+              </svg>
             </div>
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-bold tracking-tight text-white uppercase">
                 Turnocheck
               </p>
-              <p className="text-[10px] leading-none text-white/80">
-                Projeto 6×1 · AHR BRASIL
+              <p className="app-chrome-privacy truncate text-[10px] leading-none text-white/85">
+                Sessão Aberta · Proteção LGPD Ativa
               </p>
             </div>
           </div>
-          <nav
-            className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"
-            aria-label="Modo do aplicativo"
-          >
-            <button
-              type="button"
-              onClick={() => go('wizard')}
-              aria-current={studio ? undefined : 'page'}
-              className={
-                studio
-                  ? 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
-                  : 'rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
-              }
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <span
+              className="app-chrome-lumen hidden text-[9px] font-medium tracking-[0.14em] text-white/70 uppercase sm:inline"
+              title="Assistente Lumen (discreto)"
             >
-              Wizard
-            </button>
-            <button
-              type="button"
-              onClick={() => go('studio')}
-              aria-current={studio ? 'page' : undefined}
-              className={
-                studio
-                  ? 'rounded-[var(--radius)] bg-[var(--color-teal)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
-                  : 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
-              }
-              title="Studio SQL"
+              Lumen
+            </span>
+            <nav
+              className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"
+              aria-label="Modo do aplicativo"
             >
-              ⚙️ Studio SQL
-            </button>
-          </nav>
+              <button
+                type="button"
+                onClick={() => go('wizard')}
+                aria-current={studio ? undefined : 'page'}
+                className={
+                  studio
+                    ? 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
+                    : 'rounded-[var(--radius)] bg-[var(--color-green)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
+                }
+              >
+                Wizard
+              </button>
+              <button
+                type="button"
+                onClick={() => go('studio')}
+                aria-current={studio ? 'page' : undefined}
+                className={
+                  studio
+                    ? 'rounded-[var(--radius)] bg-[var(--color-green)] px-2.5 py-1.5 text-xs font-medium text-white sm:px-3 sm:text-sm'
+                    : 'rounded-[var(--radius)] border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15 sm:px-3 sm:text-sm'
+                }
+                title="Studio SQL"
+              >
+                Studio SQL
+              </button>
+            </nav>
+          </div>
         </div>
       </header>
 

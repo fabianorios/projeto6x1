@@ -1,11 +1,12 @@
 /**
  * Excel (SpreadsheetML) export for Escala Atual × Proposta calendars
  * + Apdata cadastral hierarchy (Jornada→Horário→Ciclo→Grade).
- * Sheet "Escalas e Turmas" includes Dia 01…Dia N with T/F marks.
+ * Sheet "Escalas e Turmas" includes Dia 01…Dia N with person/posto rows.
  * Sheet "Apdata Hierarquia" is the ERP fiel-da-balança tree.
- * LGPD: no person names / CPF — CC + turma aggregates only.
+ * LGPD: anonymize names default ON — never emit unmasked person names.
  */
 
+import { DEFAULT_MASK_COLLABORATOR_NAMES } from '../apdata/lgpdNameMask'
 import {
   MONTH_LABELS_PT,
   applyTurmaHourLabels,
@@ -23,10 +24,19 @@ import {
   type SimulationResult,
 } from '../engine/display'
 import { resolveApdataHierarchy } from './resolveApdataHierarchy'
+import {
+  dayMarkLabel,
+  excelPersonLabel,
+  expandMatrixToPersonRows,
+} from './schedulePersonRows'
 
 export interface EscalasExcelExportOptions {
   /** Data Início for Ciclos (YYYY-MM-DD). */
   dataInicio?: string
+  /** LGPD anonymize names (default ON). */
+  maskCollaboratorNames?: boolean
+  year?: number
+  month?: number
 }
 
 function xmlEscape(s: string): string {
@@ -104,10 +114,20 @@ function centersFromResult(result: SimulationResult): CostCenterResult[] {
 function matrixToBlock(
   title: string,
   matrix: MonthCalendarMatrix,
+  opts: {
+    maskOn: boolean
+    payrollRows: SimulationResult['input']['payrollRows']
+    centroCusto: string
+  },
 ): string[] {
   const dayHeaders = matrix.days.map(
     (d) => `Dia ${String(d.day).padStart(2, '0')}`,
   )
+  const people = expandMatrixToPersonRows(matrix, {
+    maskOn: opts.maskOn,
+    payrollRows: opts.payrollRows,
+    centroCusto: opts.centroCusto,
+  })
   const lines: string[] = []
   lines.push(
     row([
@@ -117,19 +137,19 @@ function matrixToBlock(
   )
   lines.push(
     row([
+      cell('Pessoa / Posto'),
       cell('Turma'),
-      cell('HC'),
-      cell('Escala'),
+      cell('Cargo'),
       ...dayHeaders.map((h) => cell(h)),
     ]),
   )
-  for (const r of matrix.rows) {
+  for (const p of people) {
     lines.push(
       row([
-        cell(r.label?.trim() || `T${r.turmaIndex}`),
-        cell(r.headcount, 'Number'),
-        cell(r.escala),
-        ...r.marks.map((m) => cell(m)),
+        cell(excelPersonLabel(p, opts.maskOn)),
+        cell(`T${p.turmaIndex}`),
+        cell(p.cargo ?? ''),
+        ...p.marks.map((m) => cell(dayMarkLabel(m))),
       ]),
     )
   }
@@ -339,12 +359,20 @@ export function buildEscalasTurmasSpreadsheetXml(
   options: EscalasExcelExportOptions = {},
 ): string {
   const centers = centersFromResult(result)
+  const maskOn =
+    options.maskCollaboratorNames ?? DEFAULT_MASK_COLLABORATOR_NAMES
+  const payrollRows = result.input.payrollRows
   const body: string[] = []
   body.push(
     row([
       cell('Turnocheck · Escalas e Turmas'),
       cell(result.ruleVersion.label),
       cell(`Período ${String(period.month).padStart(2, '0')}/${period.year}`),
+      cell(
+        maskOn
+          ? 'LGPD: nomes anonimizados'
+          : 'LGPD: visão gerencial (sem máscara na UI; export ainda redige handoff)',
+      ),
     ]),
   )
   body.push(row([cell('')]))
@@ -363,6 +391,11 @@ export function buildEscalasTurmasSpreadsheetXml(
       distributeCrews(regime, cc.requiredHeadcount)
     const ccHours = cc.operatingHours ?? operatingHours
     const shiftWindows = resolveShiftWindows(ccHours, shiftsPerDay)
+    const personOpts = {
+      maskOn,
+      payrollRows,
+      centroCusto: cc.centroCusto,
+    }
 
     body.push(
       row([
@@ -396,7 +429,9 @@ export function buildEscalasTurmasSpreadsheetXml(
       dailyCoverageNeed: dist.dailyCoverageNeed,
       rotateWeekly: regime === 'CONTINUO_7D',
     })
-    body.push(...matrixToBlock('Quadro Atual (Baseline)', atualMatrix))
+    body.push(
+      ...matrixToBlock('Quadro Atual (Baseline)', atualMatrix, personOpts),
+    )
 
     const propostoCrews = applyTurmaHourLabels(
       dist.crews,
@@ -412,7 +447,13 @@ export function buildEscalasTurmasSpreadsheetXml(
       dailyCoverageNeed: dist.dailyCoverageNeed,
       rotateWeekly: regime === 'CONTINUO_7D',
     })
-    body.push(...matrixToBlock('Quadro Proposto (Nova Escala)', propostoMatrix))
+    body.push(
+      ...matrixToBlock(
+        'Quadro Proposto (Nova Escala)',
+        propostoMatrix,
+        personOpts,
+      ),
+    )
   }
 
   const tree = resolveApdataHierarchy(result, {
@@ -448,10 +489,20 @@ ${hierarchyBody.join('\n')}
 /** Trigger browser download of Escalas e Turmas (.xls SpreadsheetML). */
 export function downloadEscalasTurmasExcel(
   result: SimulationResult,
-  period: { year: number; month: number },
+  periodOrOpts: { year: number; month: number } & EscalasExcelExportOptions,
   options: EscalasExcelExportOptions = {},
 ): void {
-  const xml = buildEscalasTurmasSpreadsheetXml(result, period, options)
+  const period = {
+    year: periodOrOpts.year,
+    month: periodOrOpts.month,
+  }
+  const merged: EscalasExcelExportOptions = {
+    ...options,
+    dataInicio: periodOrOpts.dataInicio ?? options.dataInicio,
+    maskCollaboratorNames:
+      periodOrOpts.maskCollaboratorNames ?? options.maskCollaboratorNames,
+  }
+  const xml = buildEscalasTurmasSpreadsheetXml(result, period, merged)
   const blob = new Blob([xml], {
     type: 'application/vnd.ms-excel;charset=utf-8',
   })

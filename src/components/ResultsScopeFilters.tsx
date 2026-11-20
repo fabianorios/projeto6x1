@@ -44,23 +44,28 @@ export function ResultsScopeFilters({
 
   return (
     <div
-      className="mt-3 space-y-2 rounded-lg border border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-paper)_75%,white)] p-3"
+      className="mt-3 space-y-2 quiet-panel p-3"
       data-testid="results-scope-filters"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-          Filtros de escopo
-        </p>
-        <p className="text-[10px] text-[var(--color-muted)]">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-[var(--color-ink)]">
+            Onde olhar na reunião?
+          </p>
+          <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+            Recorte por filial, centro ou sindicato — sem recalcular.
+          </p>
+        </div>
+        <p className="text-[10px] tabular-nums text-[var(--color-muted)]">
           {active
-            ? `${visibleCount} de ${totalCount} centro(s) · OH e enquadramento coletivo`
+            ? `${visibleCount} de ${totalCount} centro(s)`
             : `${totalCount} centro(s)`}
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-xs text-[var(--color-ink)]">
           <span className="font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-            Filial / CNPJ
+            Filial
           </span>
           <select
             value={filterCnpj}

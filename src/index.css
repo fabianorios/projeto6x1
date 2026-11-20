@@ -1,26 +1,29 @@
 @import 'tailwindcss';
 
 /*
- * Visual identity aligned with Gestão Consultoria (AHR Brasil).
- * Source: fabianorios/gestaoconsultoria-core src/styles.css + app shell.
+ * Quiet Chrome — AHR Brasil commercial UI.
+ * Palette: navy #0B2545 + corporate green; clean 1px dividers; generous space.
  * Product copy stays Turnocheck / Projeto 6×1; chrome shares the family look.
  */
 :root {
-  /* AHR Brasil — navy #143C6B / sidebar #003366 */
-  --color-ink: #143c6b;
-  --color-sidebar: #003366;
-  /* Cool paper (Gestão --background ≈ oklch(0.99 0.003 250)) */
-  --color-paper: #f5f7fa;
-  /* Primary CTAs = navy (Gestão --primary / button default) */
-  --color-accent: #143c6b;
-  /* Soft teal wash from Gestão interactive #00A896 */
-  --color-accent-soft: #d9f2ee;
-  --color-teal: #00a896;
-  --color-success: #22b24b;
+  /* AHR Brasil Quiet Chrome */
+  --color-ink: #0b2545;
+  --color-sidebar: #0b2545;
+  /* Cool paper */
+  --color-paper: #f3f6f9;
+  /* Primary CTAs = navy */
+  --color-accent: #0b2545;
+  /* Soft green wash */
+  --color-accent-soft: #e4f0ea;
+  /* Corporate green (sober) */
+  --color-green: #1f6b4a;
+  --color-teal: #1f6b4a;
+  --color-success: #1f6b4a;
   --color-muted: #5a6b7c;
-  --color-line: #dce3ec;
+  --color-line: #d5dde6;
   --color-surface: #ffffff;
-  --radius: 0.625rem;
+  --radius: 0.5rem;
+  --space-section: 1.5rem;
 }
 
 html,
@@ -33,8 +36,8 @@ body {
   margin: 0;
   color: var(--color-ink);
   background:
-    radial-gradient(ellipse 120% 80% at 8% -10%, #e4eef6 0%, transparent 55%),
-    radial-gradient(ellipse 90% 55% at 100% 0%, #dff3ef 0%, transparent 48%),
+    radial-gradient(ellipse 110% 70% at 6% -8%, #dce8f2 0%, transparent 52%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, #ddeee6 0%, transparent 46%),
     var(--color-paper);
   font-family:
     Inter,
@@ -43,18 +46,27 @@ body {
     'Segoe UI',
     Arial,
     sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
 }
 
-/* Shared AHR chrome — matches Gestão top bar */
+/* Shared AHR Quiet Chrome — top bar */
 .app-chrome {
   background: var(--color-sidebar);
   color: #fff;
 }
 
 .app-chrome-mark {
-  background: var(--color-teal);
+  background: var(--color-green);
   color: #fff;
+}
+
+.app-chrome-privacy {
+  letter-spacing: 0.04em;
+}
+
+.app-chrome-lumen {
+  opacity: 0.72;
+  letter-spacing: 0.08em;
 }
 
 .btn-primary {
@@ -75,16 +87,26 @@ body {
 }
 
 .btn-secondary:hover {
-  border-color: var(--color-teal);
+  border-color: var(--color-green);
 }
 
 .surface-card {
   border: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
   border-radius: var(--radius);
 }
 
-/* Gestão radius on interactive surfaces (shell stays product-specific) */
+/* Quiet surfaces: 1px dividers, no heavy shadows */
+.quiet-panel {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+}
+
+.tabular-finance {
+  font-variant-numeric: tabular-nums;
+}
+
 button,
 input,
 select,
