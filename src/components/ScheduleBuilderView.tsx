@@ -37,6 +37,16 @@ import {
   nestCentersByCc,
 } from '../utils/resultsDossier'
 import { cnpjDigits } from '../apdata/cnpj'
+import { DEFAULT_MASK_COLLABORATOR_NAMES } from '../apdata/lgpdNameMask'
+import {
+  LgpdNameMaskToggle,
+  initialLgpdNameMask,
+} from './LgpdNameMaskToggle'
+import type { PayrollRow } from '../engine/display'
+import {
+  dayMarkLabel,
+  expandMatrixToPersonRows,
+} from '../utils/schedulePersonRows'
 
 export interface EditableTurmaRow {
   turmaIndex: number
@@ -65,6 +75,12 @@ interface ScheduleBuilderViewProps {
   cnpjFilter?: string | null
   /** Hide the outer title/export chrome when nested under a Filial accordion. */
   embedded?: boolean
+  /**
+   * LGPD anonymize names (default ON). When omitted, the view owns local state
+   * seeded from {@link initialLgpdNameMask}.
+   */
+  maskCollaboratorNames?: boolean
+  onMaskCollaboratorNamesChange?: (maskOn: boolean) => void
 }
 
 type QuadroMode = 'atual' | 'proposto'
@@ -186,11 +202,11 @@ function markCellClass(mark: 'T' | 'F', print?: boolean): string {
   if (mark === 'T') {
     return print
       ? 'bg-emerald-50 text-emerald-900'
-      : 'bg-emerald-50/90 text-emerald-900'
+      : 'bg-[var(--color-accent-soft)] text-[var(--color-green)]'
   }
   return print
     ? 'bg-amber-50 text-neutral-600'
-    : 'bg-neutral-100 text-neutral-500'
+    : 'bg-[var(--color-paper)] text-[var(--color-muted)]'
 }
 
 function PeriodSelector({
@@ -336,13 +352,17 @@ function MonthlyCalendarGrid({
   print,
   editable,
   onHeadcountChange,
+  personSlots,
 }: {
   matrix: MonthCalendarMatrix
   mode: QuadroMode
   print?: boolean
   editable?: boolean
   onHeadcountChange?: (turmaIndex: number, headcount: number) => void
+  /** Nominal person/posto rows (1 HC each). */
+  personSlots: ReturnType<typeof expandMatrixToPersonRows>
 }) {
+  const showCompactMark = print
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-max min-w-full border-collapse text-center text-[11px]">
@@ -355,21 +375,12 @@ function MonthlyCalendarGrid({
                   : 'border border-[var(--color-line)] bg-[var(--color-paper)]'
               }`}
             >
-              Turma
-            </th>
-            <th
-              className={`px-2 py-1.5 font-semibold ${
-                print
-                  ? 'border border-neutral-300'
-                  : 'border border-[var(--color-line)]'
-              }`}
-            >
-              HC
+              Pessoa / Posto
             </th>
             {matrix.days.map((d) => (
               <th
                 key={d.day}
-                className={`min-w-[2.1rem] px-1 py-1 font-semibold ${
+                className={`min-w-[2.4rem] px-1 py-1 font-semibold tabular-nums ${
                   print
                     ? 'border border-neutral-300'
                     : 'border border-[var(--color-line)]'
@@ -391,36 +402,81 @@ function MonthlyCalendarGrid({
           </tr>
         </thead>
         <tbody>
-          {matrix.rows.map((row) => (
-            <tr key={`${mode}-${row.turmaIndex}`}>
+          {personSlots.map((slot) => (
+            <tr key={`${mode}-${slot.id}`}>
               <th
                 scope="row"
-                className={`sticky left-0 z-10 px-2 py-1 text-left font-medium whitespace-nowrap ${
+                className={`sticky left-0 z-10 px-2 py-1.5 text-left font-medium ${
                   print
                     ? 'border border-neutral-300 bg-white'
                     : 'border border-[var(--color-line)] bg-white'
                 }`}
               >
-                <span className="tabular-nums">
-                  {row.label?.trim() || `T${row.turmaIndex}`}
-                </span>
-                <span
-                  className={`ml-1 font-normal ${
-                    print ? 'text-neutral-600' : 'text-[var(--color-muted)]'
-                  }`}
-                >
-                  ({row.escala})
-                </span>
+                <div className="flex min-w-[11rem] items-center gap-2">
+                  <span
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tracking-wide ${
+                      print
+                        ? 'bg-neutral-100 text-neutral-800'
+                        : 'bg-[var(--color-accent-soft)] text-[var(--color-green)]'
+                    }`}
+                    aria-hidden
+                  >
+                    {slot.initials}
+                  </span>
+                  <span className="min-w-0 leading-tight">
+                    <span className="block truncate text-[11px] text-[var(--color-ink)]">
+                      {slot.primaryLabel}
+                    </span>
+                    {slot.secondaryLabel ? (
+                      <span
+                        className={`block truncate text-[10px] font-normal ${
+                          print
+                            ? 'text-neutral-600'
+                            : 'text-[var(--color-muted)]'
+                        }`}
+                      >
+                        {slot.secondaryLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
               </th>
-              <td
-                className={`px-1 py-1 tabular-nums ${
-                  print
-                    ? 'border border-neutral-300'
-                    : 'border border-[var(--color-line)]'
-                }`}
-              >
-                {editable && onHeadcountChange ? (
-                  <>
+              {slot.marks.map((mark, i) => (
+                <td
+                  key={`${slot.id}-${matrix.days[i]!.day}`}
+                  className={`px-1 py-1 font-semibold ${
+                    print
+                      ? 'border border-neutral-300'
+                      : 'border border-[var(--color-line)]'
+                  } ${markCellClass(mark, print)} ${
+                    matrix.days[i]!.isWeekend ? 'opacity-95' : ''
+                  }`}
+                  title={dayMarkLabel(mark)}
+                >
+                  {showCompactMark ? (
+                    mark
+                  ) : (
+                    <span className="block text-[9px] leading-tight">
+                      {mark === 'T' ? 'Trab.' : 'Folga'}
+                    </span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {editable && onHeadcountChange
+            ? matrix.rows.map((row) => (
+                <tr key={`edit-hc-${row.turmaIndex}`}>
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 border border-[var(--color-line)] bg-[var(--color-paper)] px-2 py-1 text-left text-[10px] font-normal text-[var(--color-muted)]"
+                  >
+                    Ajuste HC · {row.label?.trim() || `T${row.turmaIndex}`}
+                  </th>
+                  <td
+                    colSpan={matrix.days.length}
+                    className="border border-[var(--color-line)] px-2 py-1 text-left"
+                  >
                     <label className="sr-only">
                       Headcount T{row.turmaIndex}
                     </label>
@@ -440,27 +496,10 @@ function MonthlyCalendarGrid({
                       }}
                       className="min-h-9 w-14 border border-[var(--color-line)] bg-white px-1 py-1 text-center tabular-nums"
                     />
-                  </>
-                ) : (
-                  row.headcount
-                )}
-              </td>
-              {row.marks.map((mark, i) => (
-                <td
-                  key={`${row.turmaIndex}-${matrix.days[i].day}`}
-                  className={`px-1 py-1 font-semibold ${
-                    print
-                      ? 'border border-neutral-300'
-                      : 'border border-[var(--color-line)]'
-                  } ${markCellClass(mark, print)} ${
-                    matrix.days[i].isWeekend ? 'opacity-95' : ''
-                  }`}
-                >
-                  {mark}
-                </td>
-              ))}
-            </tr>
-          ))}
+                  </td>
+                </tr>
+              ))
+            : null}
           <tr>
             <th
               scope="row"
@@ -472,13 +511,6 @@ function MonthlyCalendarGrid({
             >
               Total no dia
             </th>
-            <td
-              className={
-                print
-                  ? 'border border-neutral-300 bg-neutral-50'
-                  : 'border border-[var(--color-line)] bg-[var(--color-paper)]'
-              }
-            />
             {matrix.daily.map((d) => (
               <td
                 key={`tot-${d.day}`}
@@ -518,9 +550,9 @@ function MonthlyCalendarGrid({
       </table>
       {!print ? (
         <p className="mt-2 text-[11px] text-[var(--color-muted)]">
-          T = trabalha · F = folga. Sáb/Dom destacados. Vermelho no rodapé =
-          dia abaixo do mínimo do regime ({'SEG_SEX'} / {'SEG_SAB'} /{' '}
-          {'CONTINUO_7D'}). Sem nomes de pessoas (LGPD).
+          Trabalho vs Folga/DSR por pessoa/posto. Sáb/Dom destacados. Vermelho
+          no rodapé = dia abaixo do mínimo do regime. Nomes seguem o toggle
+          «Anonimizar nomes — LGPD».
         </p>
       ) : null}
     </div>
@@ -605,6 +637,8 @@ function CostCenterScheduleCard({
   mode,
   onModeChange,
   nestedUnderCc = false,
+  maskOn = DEFAULT_MASK_COLLABORATOR_NAMES,
+  payrollRows = null,
 }: {
   cc: CostCenterResult
   operatingHours: OperatingHours
@@ -616,6 +650,8 @@ function CostCenterScheduleCard({
   onModeChange?: (m: QuadroMode) => void
   /** When true, title is the horário (CC already shown as parent). */
   nestedUnderCc?: boolean
+  maskOn?: boolean
+  payrollRows?: PayrollRow[] | null
 }) {
   const print = variant === 'print'
   const dist =
@@ -704,6 +740,16 @@ function CostCenterScheduleCard({
       rotateWeekly: regime === 'CONTINUO_7D',
     })
   }, [mode, atualCrews, rows, year, month, regime, dist.dailyCoverageNeed])
+
+  const personSlots = useMemo(
+    () =>
+      expandMatrixToPersonRows(matrix, {
+        maskOn,
+        payrollRows,
+        centroCusto: cc.centroCusto,
+      }),
+    [matrix, maskOn, payrollRows, cc.centroCusto],
+  )
 
   const escalaLabel = cc.escalaAtual ?? '—'
   const cargaLabel =
@@ -835,6 +881,7 @@ function CostCenterScheduleCard({
           matrix={matrix}
           mode={mode}
           print={print}
+          personSlots={personSlots}
           editable={!print && mode === 'proposto'}
           onHeadcountChange={(turmaIndex, headcount) => {
             setRows((prev) =>
@@ -981,6 +1028,8 @@ export function ScheduleBuilderView({
   centroCustoFilter = null,
   cnpjFilter = null,
   embedded = false,
+  maskCollaboratorNames,
+  onMaskCollaboratorNamesChange,
 }: ScheduleBuilderViewProps) {
   const allCenters = centersFromResult(result)
   const allowCc = centroCustoFilter?.length
@@ -997,6 +1046,13 @@ export function ScheduleBuilderView({
   const [year, setYear] = useState(defaults.year)
   const [month, setMonth] = useState(defaults.month)
   const [mode, setMode] = useState<QuadroMode>('proposto')
+  const [localMask, setLocalMask] = useState(initialLgpdNameMask)
+  const maskOn = maskCollaboratorNames ?? localMask
+  const setMaskOn = onMaskCollaboratorNamesChange ?? setLocalMask
+  const payrollRows = result.input.payrollRows ?? null
+  const nameSamples = (payrollRows ?? [])
+    .map((r) => r.nome)
+    .filter((n): n is string => Boolean(n && n.trim()))
 
   useEffect(() => {
     const next = defaultReferencePeriod(result.input.scenarioId)
@@ -1008,6 +1064,12 @@ export function ScheduleBuilderView({
     (m, c) => Math.max(m, c.distribuicaoTurmas?.crewCount ?? 1),
     1,
   )
+
+  const excelOpts = {
+    year,
+    month,
+    maskCollaboratorNames: maskOn,
+  }
 
   return (
     <section
@@ -1033,15 +1095,15 @@ export function ScheduleBuilderView({
                   : 'mt-1 text-xs text-[var(--color-muted)]'
               }
             >
-              Projeção dia a dia (T/F) por turma (T1…T{maxCrews}) no período
-              selecionado, com total operacional vs mínimo do centro de custo.
+              Linhas individuais (pessoa/posto) no período selecionado — T1…T
+              {maxCrews} — com total operacional vs mínimo do centro de custo.
             </p>
           </div>
           {!print ? (
             <button
               type="button"
               onClick={() =>
-                downloadEscalasTurmasExcel(result, { year, month })
+                downloadEscalasTurmasExcel(result, excelOpts)
               }
               className="min-h-11 border border-[var(--color-line)] bg-white px-4 py-2 text-sm"
             >
@@ -1049,6 +1111,15 @@ export function ScheduleBuilderView({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {!print && !embedded && maskCollaboratorNames === undefined ? (
+        <LgpdNameMaskToggle
+          className="mt-3 max-w-lg"
+          maskOn={maskOn}
+          onChange={setMaskOn}
+          sampleNames={nameSamples}
+        />
       ) : null}
 
       <div
@@ -1069,9 +1140,7 @@ export function ScheduleBuilderView({
         {embedded && !print ? (
           <button
             type="button"
-            onClick={() =>
-              downloadEscalasTurmasExcel(result, { year, month })
-            }
+            onClick={() => downloadEscalasTurmasExcel(result, excelOpts)}
             className="min-h-11 border border-[var(--color-line)] bg-white px-3 py-2 text-xs"
           >
             Exportar Excel
@@ -1114,6 +1183,8 @@ export function ScheduleBuilderView({
                       month={month}
                       mode={m}
                       nestedUnderCc
+                      maskOn={maskOn}
+                      payrollRows={payrollRows}
                     />
                   ))}
                 </div>
@@ -1136,6 +1207,8 @@ export function ScheduleBuilderView({
               month={month}
               mode={mode}
               onModeChange={setMode}
+              maskOn={maskOn}
+              payrollRows={payrollRows}
             />
           ))}
         </div>
@@ -1159,6 +1232,8 @@ function CcSchedulePanel({
   month,
   mode,
   onModeChange,
+  maskOn,
+  payrollRows,
 }: {
   group: ReturnType<typeof nestCentersByCc>[number]
   asAccordion: boolean
@@ -1169,6 +1244,8 @@ function CcSchedulePanel({
   month: number
   mode: QuadroMode
   onModeChange: (m: QuadroMode) => void
+  maskOn: boolean
+  payrollRows: PayrollRow[] | null
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const cards = (
@@ -1185,6 +1262,8 @@ function CcSchedulePanel({
           mode={mode}
           onModeChange={onModeChange}
           nestedUnderCc
+          maskOn={maskOn}
+          payrollRows={payrollRows}
         />
       ))}
     </div>

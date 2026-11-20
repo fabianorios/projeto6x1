@@ -24,6 +24,8 @@ import { ScenarioWhyPanel } from './ScenarioWhyPanel'
 interface PrintableReportProps {
   result: SimulationResult
   basket?: ScenarioBasket | null
+  /** LGPD anonymize names in schedule calendar (default ON). */
+  maskCollaboratorNames?: boolean
 }
 
 function brl(n: number) {
@@ -60,6 +62,7 @@ function formatLineAmount(item: ResultLineItem): string {
 export function PrintableReport({
   result,
   basket = null,
+  maskCollaboratorNames = true,
 }: PrintableReportProps) {
   const template = getTemplate(result.input.sector)
   const {
@@ -222,7 +225,11 @@ export function PrintableReport({
         </p>
       </section>
 
-      <ScheduleBuilderView result={result} variant="print" />
+      <ScheduleBuilderView
+        result={result}
+        variant="print"
+        maskCollaboratorNames={maskCollaboratorNames}
+      />
 
       {excludedScheduleNotice ? (
         <section className="mt-6 rounded border border-amber-800/50 bg-amber-50 px-4 py-3 text-xs">

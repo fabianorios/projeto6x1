@@ -1181,6 +1181,8 @@ export function ResultsView({
                   scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
                   recorded={recorded}
                   onFeedback={recordFeedback}
+                  maskCollaboratorNames={lgpdMaskNames}
+                  onMaskCollaboratorNamesChange={setLgpdMaskNames}
                 />
               ))}
             </div>
@@ -1195,9 +1197,15 @@ export function ResultsView({
               recorded={recorded}
               onFeedback={recordFeedback}
               globalTurmasNote={distribuicaoTurmas.note}
+              maskCollaboratorNames={lgpdMaskNames}
+              onMaskCollaboratorNamesChange={setLgpdMaskNames}
             />
           ) : (
-            <ScheduleBuilderView result={result} />
+            <ScheduleBuilderView
+              result={result}
+              maskCollaboratorNames={lgpdMaskNames}
+              onMaskCollaboratorNamesChange={setLgpdMaskNames}
+            />
           )}
         </DossierSection>
 
@@ -1222,7 +1230,11 @@ export function ResultsView({
       </section>
 
       {printMounted ? (
-        <PrintableReport result={result} basket={basket} />
+        <PrintableReport
+          result={result}
+          basket={basket}
+          maskCollaboratorNames={lgpdMaskNames}
+        />
       ) : null}
     </>
   )
@@ -1286,6 +1298,8 @@ function OperacionalFilialPanel({
   scheduleSuggestionDisclaimer,
   recorded,
   onFeedback,
+  maskCollaboratorNames,
+  onMaskCollaboratorNamesChange,
 }: {
   group: OperacionalFilialGroup
   defaultOpen: boolean
@@ -1298,6 +1312,8 @@ function OperacionalFilialPanel({
     action: FeedbackAction,
     editedShifts?: EditedShiftFields[],
   ) => void
+  maskCollaboratorNames: boolean
+  onMaskCollaboratorNamesChange: (maskOn: boolean) => void
 }) {
   // Controlled open — bare `open={defaultOpen}` stuck the first panel open.
   const [open, setOpen] = useState(defaultOpen)
@@ -1345,6 +1361,8 @@ function OperacionalFilialPanel({
           scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
           recorded={recorded}
           onFeedback={onFeedback}
+          maskCollaboratorNames={maskCollaboratorNames}
+          onMaskCollaboratorNamesChange={onMaskCollaboratorNamesChange}
         />
       </div>
     </details>
@@ -1361,6 +1379,8 @@ function OperacionalFilialBody({
   recorded,
   onFeedback,
   globalTurmasNote,
+  maskCollaboratorNames,
+  onMaskCollaboratorNamesChange,
 }: {
   group: OperacionalFilialGroup
   result: SimulationResult
@@ -1369,6 +1389,8 @@ function OperacionalFilialBody({
   scheduleSuggestions: ScheduleSuggestion[]
   scheduleSuggestionDisclaimer: string
   recorded: Record<string, FeedbackAction>
+  maskCollaboratorNames?: boolean
+  onMaskCollaboratorNamesChange?: (maskOn: boolean) => void
   onFeedback: (
     suggestion: ScheduleSuggestion,
     action: FeedbackAction,
@@ -1405,6 +1427,8 @@ function OperacionalFilialBody({
         centroCustoFilter={group.centroCustos}
         cnpjFilter={group.key}
         embedded={embeddedSchedule}
+        maskCollaboratorNames={maskCollaboratorNames}
+        onMaskCollaboratorNamesChange={onMaskCollaboratorNamesChange}
       />
 
       <div className="border border-[var(--color-line)] bg-white/80 px-4 py-4">

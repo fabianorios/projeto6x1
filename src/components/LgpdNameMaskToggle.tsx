@@ -30,7 +30,7 @@ export function LgpdNameMaskToggle({
 
   return (
     <div
-      className={`rounded-md border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-sm ${className}`}
+      className={`quiet-panel px-3 py-2.5 text-sm ${className}`}
       data-testid="lgpd-name-mask-toggle"
     >
       <label className="flex cursor-pointer items-center gap-2 text-[var(--color-ink)]">
@@ -38,17 +38,18 @@ export function LgpdNameMaskToggle({
           type="checkbox"
           checked={maskOn}
           onChange={(e) => onChange(e.target.checked)}
-          className="size-4 accent-[var(--color-ink)]"
+          className="size-4 accent-[var(--color-green)]"
           aria-describedby="lgpd-name-mask-hint"
         />
-        <span className="font-medium">Mascarar nomes (LGPD)</span>
+        <span className="font-medium">Anonimizar nomes — LGPD</span>
       </label>
       <p
         id="lgpd-name-mask-hint"
         className="mt-1 text-xs text-[var(--color-muted)]"
       >
-        Padrão ligado. Desligue só na visão gerencial interna; handoff JSON não
-        exporta nomes sem máscara.
+        Padrão ligado. Na reunião, mantenha anonimizado; desligue só na visão
+        gerencial interna. PDF, Excel e JSON Handoff bloqueiam nomes sem máscara
+        enquanto estiver ligado.
       </p>
       {samples.length > 0 ? (
         <ul className="mt-2 space-y-0.5 text-xs text-[var(--color-ink)]">
@@ -62,7 +63,8 @@ export function LgpdNameMaskToggle({
       ) : (
         <p className="mt-2 text-xs text-[var(--color-muted)]">
           Sem nomes na folha agregada — o switch vale quando houver
-          identificação (ex. planilha com coluna nome).
+          identificação (ex. planilha com coluna nome). Postos ficam como
+          «Posto NN · Cargo».
         </p>
       )}
     </div>

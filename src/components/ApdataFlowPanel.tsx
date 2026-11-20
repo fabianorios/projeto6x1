@@ -94,6 +94,10 @@ import {
 } from '../types/sql-profile'
 import { logPerf, measurePerf } from '../utils/perfTelemetry'
 import {
+  ProcessingStageBelt,
+  SIMULATE_STAGE_BELT,
+} from './ProcessingStageBelt'
+import {
   applyBenefitOverrides,
   benefitsToPayrollScalars,
   collectUniqueBenefits,
@@ -1490,6 +1494,44 @@ export function ApdataFlowPanel({
                 <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
                   Carregando dados…
                 </h3>
+                <ProcessingStageBelt
+                  stages={[
+                    {
+                      id: 'extract',
+                      label: 'Ler origem',
+                      hint: 'Conexão ou arquivo',
+                    },
+                    {
+                      id: 'aggregate',
+                      label: 'Agregar folha',
+                      hint: 'Cargo × centro × escala',
+                    },
+                    {
+                      id: 'ready',
+                      label: 'Pronto para premissas',
+                      hint: 'Revise antes de simular',
+                    },
+                  ]}
+                  activeIndex={
+                    steps.some((s) => s.status === 'error')
+                      ? Math.max(
+                          0,
+                          steps.findIndex((s) => s.status === 'error'),
+                        )
+                      : steps.every((s) => s.status === 'done')
+                        ? 2
+                        : steps.some((s) => s.status === 'running')
+                          ? Math.min(
+                              1,
+                              Math.max(
+                                0,
+                                steps.findIndex((s) => s.status === 'running'),
+                              ),
+                            )
+                          : 0
+                  }
+                  statusLabel="Extraindo e agregando folha…"
+                />
                 <ProgressList steps={steps} />
               </section>
             )}
@@ -1536,22 +1578,26 @@ export function ApdataFlowPanel({
                   </div>
                 )}
 
-                <ExtractFiltersPanel
-                  value={extractFilters}
-                  onChange={setExtractFilters}
-                  situacoes={situacaoCatalog}
-                  regimes={regimeCatalog}
-                  categs={categCatalog}
-                />
+                {!manualMode ? (
+                  <ExtractFiltersPanel
+                    value={extractFilters}
+                    onChange={setExtractFilters}
+                    situacoes={situacaoCatalog}
+                    regimes={regimeCatalog}
+                    categs={categCatalog}
+                  />
+                ) : null}
 
                 <div className="space-y-2 border border-[var(--color-line)] bg-white/80 px-3 py-3">
                   <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                    VR / VA / Médico / Odonto — códigos e valores
+                    {manualMode
+                      ? 'Benefícios — valores da sessão'
+                      : 'VR / VA / Médico / Odonto — códigos e valores'}
                   </p>
                   <p className="text-xs text-[var(--color-muted)]">
-                    Valores editáveis nesta sessão. Códigos Apdata vêm do perfil
-                    SQL ativo (edite e salve no Studio SQL). Vale-combustível
-                    permanece no pipeline de VR.
+                    {manualMode
+                      ? 'Ajuste VR, VA, médico e odonto para esta simulação. Vale-combustível segue o mesmo fluxo de VR.'
+                      : 'Valores editáveis nesta sessão. Códigos vêm do perfil SQL ativo (edite e salve no Studio SQL). Vale-combustível permanece no pipeline de VR.'}
                   </p>
                   <BenefitSlotParamsFields
                     benefitParams={activeBenefitParams}
@@ -1565,20 +1611,22 @@ export function ApdataFlowPanel({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                    Mapeamento detalhado (TiposBeneficios / agg)
-                  </p>
-                  <BenefitMappingTable
-                    benefits={mappedBenefits}
-                    overrides={benefitOverrides}
-                    onOverrideChange={(key, patch: BenefitSessionOverride) =>
-                      setBenefitOverrides((prev) =>
-                        mergeBenefitSessionOverride(prev, key, patch),
-                      )
-                    }
-                  />
-                </div>
+                {!manualMode ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      Como classificar cada benefício?
+                    </p>
+                    <BenefitMappingTable
+                      benefits={mappedBenefits}
+                      overrides={benefitOverrides}
+                      onOverrideChange={(key, patch: BenefitSessionOverride) =>
+                        setBenefitOverrides((prev) =>
+                          mergeBenefitSessionOverride(prev, key, patch),
+                        )
+                      }
+                    />
+                  </div>
+                ) : null}
 
                 <OhScopeExceptionsSection
                   operatingHours={operatingHours}
@@ -1695,13 +1743,19 @@ export function ApdataFlowPanel({
                   <div className="grid gap-3 border-t border-[var(--color-line)] px-3 py-3 sm:grid-cols-2">
                     <label className="block text-sm sm:col-span-2">
                       <span className="text-[var(--color-muted)]">
-                        Nome do segmento (texto Apdata / livre)
+                        {manualMode
+                          ? 'Nome do segmento (livre)'
+                          : 'Nome do segmento'}
                       </span>
                       <input
                         className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
                         value={sectorLabel}
                         onChange={(e) => setSectorLabel(e.target.value)}
-                        placeholder="Descrição do ramo (RAE_D1s)"
+                        placeholder={
+                          manualMode
+                            ? 'Ex.: Varejo, Indústria, Serviços…'
+                            : 'Descrição do ramo'
+                        }
                       />
                     </label>
                     <label className="block text-sm">
@@ -1885,27 +1939,12 @@ function SimulateProgressBar({
   progress: SimulateProgressStage
 }) {
   return (
-    <div className="mt-3 space-y-2" role="status" aria-live="polite">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <p className="font-medium text-[var(--color-ink)]">{progress.label}</p>
-        <p className="shrink-0 text-xs text-[var(--color-muted)] tabular-nums">
-          Etapa {progress.step} de 3
-        </p>
-      </div>
-      <div
-        className="h-3.5 w-full overflow-hidden border border-[var(--color-line)] bg-[var(--color-accent-soft)]"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress.pct}
-        aria-label={progress.label}
-      >
-        <div
-          className="h-full bg-[var(--color-teal)] transition-[width] duration-300 ease-out"
-          style={{ width: `${progress.pct}%` }}
-        />
-      </div>
-    </div>
+    <ProcessingStageBelt
+      stages={SIMULATE_STAGE_BELT}
+      activeIndex={progress.step - 1}
+      pct={progress.pct}
+      statusLabel={progress.label}
+    />
   )
 }
 
