@@ -1,29 +1,27 @@
 @import 'tailwindcss';
 
 /*
- * Quiet Chrome — AHR Brasil commercial UI.
- * Palette: navy #0B2545 + corporate green; clean 1px dividers; generous space.
- * Product copy stays Turnocheck / Projeto 6×1; chrome shares the family look.
+ * AHR Brasil Premium Editorial — Turnocheck.
+ * Immersive navy login; clear #F8FAFC workspace; tabular finance.
  */
 :root {
-  /* AHR Brasil Quiet Chrome */
   --color-ink: #0b2545;
   --color-sidebar: #0b2545;
-  /* Cool paper */
-  --color-paper: #f3f6f9;
-  /* Primary CTAs = navy */
+  /* Cool editorial paper */
+  --color-paper: #f8fafc;
   --color-accent: #0b2545;
-  /* Soft green wash */
-  --color-accent-soft: #e4f0ea;
-  /* Corporate green (sober) */
+  --color-accent-soft: #e8f2ec;
   --color-green: #1f6b4a;
   --color-teal: #1f6b4a;
   --color-success: #1f6b4a;
   --color-muted: #5a6b7c;
-  --color-line: #d5dde6;
+  --color-line: #e2e8f0;
   --color-surface: #ffffff;
   --radius: 0.5rem;
-  --space-section: 1.5rem;
+  --space-section: 1.75rem;
+  --font-display: 'Source Serif 4', 'Iowan Old Style', 'Palatino Linotype',
+    Georgia, serif;
+  --font-ui: 'Source Sans 3', 'Segoe UI', ui-sans-serif, sans-serif;
 }
 
 html,
@@ -36,20 +34,85 @@ body {
   margin: 0;
   color: var(--color-ink);
   background:
-    radial-gradient(ellipse 110% 70% at 6% -8%, #dce8f2 0%, transparent 52%),
-    radial-gradient(ellipse 80% 50% at 100% 0%, #ddeee6 0%, transparent 46%),
+    radial-gradient(ellipse 90% 55% at 4% -6%, #e8eef5 0%, transparent 55%),
+    radial-gradient(ellipse 70% 45% at 100% 0%, #e6f0ea 0%, transparent 48%),
     var(--color-paper);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    'Segoe UI',
-    Arial,
-    sans-serif;
+  font-family: var(--font-ui);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
 }
 
-/* Shared AHR Quiet Chrome — top bar */
+/* Immersive login */
+.login-immersive {
+  background: var(--color-ink);
+}
+
+.login-immersive-mesh {
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 18% 22%,
+      rgba(31, 107, 74, 0.45) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 88% 78%,
+      rgba(16, 185, 129, 0.18) 0%,
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse 40% 35% at 70% 12%,
+      rgba(255, 255, 255, 0.06) 0%,
+      transparent 60%
+    ),
+    linear-gradient(165deg, #0b2545 0%, #0a1f38 48%, #0c2d4a 100%);
+  animation: login-mesh-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes login-mesh-drift {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.92;
+    transform: scale(1.04);
+  }
+}
+
+.login-glass {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0.85rem;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.login-card {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow:
+    0 24px 60px rgba(5, 20, 40, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+  color: var(--color-ink);
+  animation: login-card-rise 0.55s ease-out;
+}
+
+@keyframes login-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.login-brand {
+  font-family: var(--font-display);
+}
+
+/* Shared AHR chrome — top bar */
 .app-chrome {
   background: var(--color-sidebar);
   color: #fff;
@@ -69,6 +132,11 @@ body {
   letter-spacing: 0.08em;
 }
 
+/* Editorial workspace shell */
+.workspace-editorial {
+  background: transparent;
+}
+
 .btn-primary {
   background: var(--color-accent);
   color: #fff;
@@ -81,7 +149,7 @@ body {
 
 .btn-secondary {
   border: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  background: var(--color-surface);
   color: var(--color-ink);
   border-radius: var(--radius);
 }
@@ -92,19 +160,121 @@ body {
 
 .surface-card {
   border: 1px solid var(--color-line);
-  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  background: var(--color-surface);
   border-radius: var(--radius);
 }
 
-/* Quiet surfaces: 1px dividers, no heavy shadows */
+/* Quiet / editorial panels — prefer single surface, not nested boxes */
 .quiet-panel {
   border: 1px solid var(--color-line);
   background: var(--color-surface);
   border-radius: var(--radius);
 }
 
+.editorial-decision-card {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  border-radius: 0.65rem;
+  padding: 1rem 1.1rem;
+}
+
+.editorial-decision-card + .editorial-decision-card {
+  margin-top: 0.85rem;
+}
+
+.editorial-decision-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.editorial-decision-kicker {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-green);
+}
+
+.lumen-tip {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  border-left: 2px solid color-mix(in srgb, var(--color-green) 55%, transparent);
+  padding: 0.35rem 0 0.35rem 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.lumen-tip strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
 .tabular-finance {
   font-variant-numeric: tabular-nums;
+}
+
+/* Centralized processing center */
+.processing-center {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(
+      ellipse 80% 70% at 50% 0%,
+      color-mix(in srgb, var(--color-accent-soft) 85%, white) 0%,
+      transparent 70%
+    ),
+    var(--color-surface);
+  padding: 1.15rem 1.1rem 1rem;
+  box-shadow: 0 8px 28px rgba(11, 37, 69, 0.06);
+  animation: processing-center-in 0.35s ease-out;
+}
+
+@keyframes processing-center-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.processing-center-lumen {
+  margin-top: 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+}
+
+.processing-center-lumen span {
+  font-weight: 600;
+  color: var(--color-green);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.empty-state-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.75rem 1rem;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.empty-state-art svg {
+  opacity: 0.55;
 }
 
 button,
@@ -113,6 +283,14 @@ select,
 textarea,
 fieldset {
   border-radius: var(--radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-immersive-mesh,
+  .login-card,
+  .processing-center {
+    animation: none;
+  }
 }
 
 @media print {
@@ -147,9 +325,4 @@ fieldset {
 
 .print-only {
   display: none;
-}
-
-/* Sticky results CTAs sit over the paper gradient without looking flat. */
-.results-sticky-actions {
-  background: color-mix(in srgb, var(--color-paper) 92%, transparent);
 }

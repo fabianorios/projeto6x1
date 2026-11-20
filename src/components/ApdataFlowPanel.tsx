@@ -93,7 +93,9 @@ import {
   type SqlProfile,
 } from '../types/sql-profile'
 import { logPerf, measurePerf } from '../utils/perfTelemetry'
+import { LumenTip } from './LumenTip'
 import {
+  EXTRACT_STAGE_BELT,
   ProcessingStageBelt,
   SIMULATE_STAGE_BELT,
 } from './ProcessingStageBelt'
@@ -1037,17 +1039,21 @@ export function ApdataFlowPanel({
           </div>
         )}
         {embedded && (
-          <div className="mb-2">
+          <div className="mb-3">
             <h2
               id="apdata-flow-title"
               className="text-2xl font-semibold tracking-tight text-[var(--color-ink)] sm:text-3xl"
+              style={{ fontFamily: 'var(--font-display)' }}
             >
               Simulador de impacto PEC
             </h2>
             <p className="mt-2 max-w-xl text-sm text-[var(--color-muted)] sm:text-base">
-              Wizard linear em 5 passos. Números são heurísticas versionadas —
-              não parecer jurídico. LGPD: sem nomes de pessoas.
+              Workspace editorial em 5 passos. Números são heurísticas
+              versionadas — não parecer jurídico. LGPD ativa por padrão.
             </p>
+            <LumenTip className="mt-3">
+              Comece pelo segmento; a origem e as premissas vêm em seguida.
+            </LumenTip>
           </div>
         )}
 
@@ -1491,27 +1497,14 @@ export function ApdataFlowPanel({
 
             {phase === 'running' && (
               <section className="mt-5" aria-live="polite">
-                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  Carregando dados…
+                <h3
+                  className="editorial-decision-title text-lg"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Processando folha
                 </h3>
                 <ProcessingStageBelt
-                  stages={[
-                    {
-                      id: 'extract',
-                      label: 'Ler origem',
-                      hint: 'Conexão ou arquivo',
-                    },
-                    {
-                      id: 'aggregate',
-                      label: 'Agregar folha',
-                      hint: 'Cargo × centro × escala',
-                    },
-                    {
-                      id: 'ready',
-                      label: 'Pronto para premissas',
-                      hint: 'Revise antes de simular',
-                    },
-                  ]}
+                  stages={EXTRACT_STAGE_BELT}
                   activeIndex={
                     steps.some((s) => s.status === 'error')
                       ? Math.max(
@@ -1531,6 +1524,7 @@ export function ApdataFlowPanel({
                           : 0
                   }
                   statusLabel="Extraindo e agregando folha…"
+                  lumenTip="A esteira acompanha leitura, agregação e preparo das premissas — sem spinner genérico."
                 />
                 <ProgressList steps={steps} />
               </section>
@@ -1538,20 +1532,36 @@ export function ApdataFlowPanel({
 
             {phase === 'premissas' && (
               <section className="mt-5 space-y-4">
-                <h3 className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-                  {embedded ? 'Passo 4' : 'Passo 3'} — Premissas, Encargos & Benefícios
-                </h3>
+                <div>
+                  <p className="editorial-decision-kicker">
+                    {embedded ? 'Passo 4' : 'Passo 3'} · Três decisões
+                  </p>
+                  <h3
+                    className="editorial-decision-title mt-1"
+                    style={{ fontFamily: 'var(--font-display)' }}
+                  >
+                    Premissas da simulação
+                  </h3>
+                  <LumenTip className="mt-2">
+                    Ajuste ritmo, custos e exceções — depois gere o dossiê.
+                  </LumenTip>
+                </div>
                 {exported && (
-                  <p className="text-sm text-[var(--color-muted)]">
+                  <p className="text-sm text-[var(--color-muted)] tabular-nums">
                     {exported.stats.contratadosAtivos} vínculos ·{' '}
                     {exported.stats.estabelecimentosFiltrados} CNPJ ·{' '}
                     {exported.stats.linhasAgregadas} linhas agregadas
                   </p>
                 )}
                 {manualMode && (
-                  <div className="space-y-2 border border-[var(--color-line)] bg-white/80 px-3 py-3">
-                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                      Importação planilha / manual
+                  <div className="editorial-decision-card space-y-2">
+                    <p className="editorial-decision-kicker">Entrada</p>
+                    <p className="editorial-decision-title text-base">
+                      Planilha / manual
+                    </p>
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Importe a folha ou ajuste valores à mão — sem termos de
+                      ERP.
                     </p>
                     <PayrollImport
                       rows={exported?.rows ?? []}
@@ -1578,125 +1588,22 @@ export function ApdataFlowPanel({
                   </div>
                 )}
 
-                {!manualMode ? (
-                  <ExtractFiltersPanel
-                    value={extractFilters}
-                    onChange={setExtractFilters}
-                    situacoes={situacaoCatalog}
-                    regimes={regimeCatalog}
-                    categs={categCatalog}
-                  />
-                ) : null}
-
-                <div className="space-y-2 border border-[var(--color-line)] bg-white/80 px-3 py-3">
-                  <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                    {manualMode
-                      ? 'Benefícios — valores da sessão'
-                      : 'VR / VA / Médico / Odonto — códigos e valores'}
-                  </p>
-                  <p className="text-xs text-[var(--color-muted)]">
-                    {manualMode
-                      ? 'Ajuste VR, VA, médico e odonto para esta simulação. Vale-combustível segue o mesmo fluxo de VR.'
-                      : 'Valores editáveis nesta sessão. Códigos vêm do perfil SQL ativo (edite e salve no Studio SQL). Vale-combustível permanece no pipeline de VR.'}
-                  </p>
-                  <BenefitSlotParamsFields
-                    benefitParams={activeBenefitParams}
-                    onBenefitParamsChange={() => {
-                      /* codes persist only via Studio SQL profile */
-                    }}
-                    persistAmountsOnProfile={false}
-                    sessionAmounts={slotAmounts}
-                    onSessionAmountsChange={setSlotAmounts}
-                    codesReadOnly
-                  />
-                </div>
-
-                {!manualMode ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                      Como classificar cada benefício?
-                    </p>
-                    <BenefitMappingTable
-                      benefits={mappedBenefits}
-                      overrides={benefitOverrides}
-                      onOverrideChange={(key, patch: BenefitSessionOverride) =>
-                        setBenefitOverrides((prev) =>
-                          mergeBenefitSessionOverride(prev, key, patch),
-                        )
-                      }
-                    />
-                  </div>
-                ) : null}
-
-                <OhScopeExceptionsSection
-                  operatingHours={operatingHours}
-                  onOperatingHoursChange={(next) => {
-                    setOperatingHours(next)
-                    if (ohScopeRules.length > 0) {
-                      setOhScopeRules(
-                        syncOhScopeRulesWithGlobalHours(ohScopeRules, next),
-                      )
-                    }
-                  }}
-                  ohScopeRules={ohScopeRules}
-                  onOhScopeRulesChange={setOhScopeRules}
-                  payrollRows={exported?.rows}
-                />
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">
-                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                      Encargos por CNPJ
-                    </p>
+                {/* 1 — Ritmo da Operação */}
+                <div
+                  className="editorial-decision-card space-y-3"
+                  data-testid="passo4-ritmo"
+                >
+                  <div>
+                    <p className="editorial-decision-kicker">Decisão 1</p>
+                    <h4 className="editorial-decision-title mt-0.5">
+                      Ritmo da Operação
+                    </h4>
                     <p className="mt-1 text-xs text-[var(--color-muted)]">
-                      Pré-preenchido do slot Índices (quando disponível) ou
-                      preset editável.
+                      Cenário normativo, funcionamento e horário global.
                     </p>
-                    <label className="mt-2 block text-sm">
-                      <span className="text-[var(--color-muted)]">Regime tributário</span>
-                      <select
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={defaultTaxRegime}
-                        onChange={(e) =>
-                          setDefaultTaxRegime(e.target.value as TaxRegime)
-                        }
-                      >
-                        <option value="SIMPLES">Simples</option>
-                        <option value="LUCRO_PRESUMIDO">Lucro Presumido</option>
-                        <option value="LUCRO_REAL">Lucro Real</option>
-                      </select>
-                    </label>
                   </div>
 
-                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3">
-                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                      Regime de funcionamento por CC
-                    </p>
-                    <label className="mt-2 block text-sm">
-                      <span className="text-[var(--color-muted)]">Padrão</span>
-                      <select
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={defaultRegime}
-                        onChange={(e) =>
-                          setDefaultRegime(
-                            e.target.value as RegimeFuncionamento,
-                          )
-                        }
-                      >
-                        {(
-                          Object.keys(
-                            REGIME_FUNCIONAMENTO_LABELS,
-                          ) as RegimeFuncionamento[]
-                        ).map((id) => (
-                          <option key={id} value={id}>
-                            {REGIME_FUNCIONAMENTO_LABELS[id]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="border border-[var(--color-line)] bg-white/80 px-3 py-3 sm:col-span-2">
+                  <div>
                     <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
                       Cenário alvo
                     </p>
@@ -1728,105 +1635,168 @@ export function ApdataFlowPanel({
                       {RULE_VERSIONS[scenarioId].label}
                     </p>
                   </div>
+
+                  <label className="block text-sm">
+                    <span className="text-[var(--color-muted)]">
+                      Regime de funcionamento
+                    </span>
+                    <select
+                      className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                      value={defaultRegime}
+                      onChange={(e) =>
+                        setDefaultRegime(e.target.value as RegimeFuncionamento)
+                      }
+                    >
+                      {(
+                        Object.keys(
+                          REGIME_FUNCIONAMENTO_LABELS,
+                        ) as RegimeFuncionamento[]
+                      ).map((id) => (
+                        <option key={id} value={id}>
+                          {REGIME_FUNCIONAMENTO_LABELS[id]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block text-sm">
+                    <span className="text-[var(--color-muted)]">
+                      % Buffer / Absenteísmo
+                    </span>
+                    <input
+                      className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 tabular-nums"
+                      type="number"
+                      min={0}
+                      max={50}
+                      step={0.5}
+                      value={sectorBufferPct}
+                      onChange={(e) =>
+                        setSectorBufferPct(Number(e.target.value) || 0)
+                      }
+                    />
+                  </label>
+
+                  <OhScopeExceptionsSection
+                    operatingHours={operatingHours}
+                    onOperatingHoursChange={(next) => {
+                      setOperatingHours(next)
+                      if (ohScopeRules.length > 0) {
+                        setOhScopeRules(
+                          syncOhScopeRulesWithGlobalHours(ohScopeRules, next),
+                        )
+                      }
+                    }}
+                    ohScopeRules={ohScopeRules}
+                    onOhScopeRulesChange={setOhScopeRules}
+                    payrollRows={exported?.rows}
+                    showExceptions={false}
+                  />
                 </div>
 
-                <details
-                  className="border border-[var(--color-line)] bg-white/60"
-                  open={overridesOpen}
-                  onToggle={(e) =>
-                    setOverridesOpen((e.target as HTMLDetailsElement).open)
-                  }
+                {/* 2 — Regras de Custo e Benefícios */}
+                <div
+                  className="editorial-decision-card space-y-3"
+                  data-testid="passo4-custos"
                 >
-                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-                    Overrides (salário / VR / VT / setor)
-                  </summary>
-                  <div className="grid gap-3 border-t border-[var(--color-line)] px-3 py-3 sm:grid-cols-2">
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="text-[var(--color-muted)]">
-                        {manualMode
-                          ? 'Nome do segmento (livre)'
-                          : 'Nome do segmento'}
-                      </span>
-                      <input
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={sectorLabel}
-                        onChange={(e) => setSectorLabel(e.target.value)}
-                        placeholder={
-                          manualMode
-                            ? 'Ex.: Varejo, Indústria, Serviços…'
-                            : 'Descrição do ramo'
+                  <div>
+                    <p className="editorial-decision-kicker">Decisão 2</p>
+                    <h4 className="editorial-decision-title mt-0.5">
+                      Regras de Custo e Benefícios
+                    </h4>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      Encargos, VR/VA/médico/odonto e classificação de impacto.
+                    </p>
+                  </div>
+
+                  <label className="block text-sm">
+                    <span className="text-[var(--color-muted)]">
+                      Regime tributário
+                    </span>
+                    <select
+                      className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                      value={defaultTaxRegime}
+                      onChange={(e) =>
+                        setDefaultTaxRegime(e.target.value as TaxRegime)
+                      }
+                    >
+                      <option value="SIMPLES">Simples</option>
+                      <option value="LUCRO_PRESUMIDO">Lucro Presumido</option>
+                      <option value="LUCRO_REAL">Lucro Real</option>
+                    </select>
+                  </label>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      {manualMode
+                        ? 'Benefícios — valores da sessão'
+                        : 'VR / VA / Médico / Odonto'}
+                    </p>
+                    <p className="text-xs text-[var(--color-muted)]">
+                      {manualMode
+                        ? 'Ajuste VR, VA, médico e odonto para esta simulação. Vale-combustível segue o mesmo fluxo de VR.'
+                        : 'Valores editáveis nesta sessão. Códigos vêm do perfil SQL (Studio). Vale-combustível permanece no pipeline de VR.'}
+                    </p>
+                    <BenefitSlotParamsFields
+                      benefitParams={activeBenefitParams}
+                      onBenefitParamsChange={() => {
+                        /* codes persist only via Studio SQL profile */
+                      }}
+                      persistAmountsOnProfile={false}
+                      sessionAmounts={slotAmounts}
+                      onSessionAmountsChange={setSlotAmounts}
+                      codesReadOnly
+                    />
+                  </div>
+
+                  {!manualMode ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                        Como classificar cada benefício?
+                      </p>
+                      <BenefitMappingTable
+                        benefits={mappedBenefits}
+                        overrides={benefitOverrides}
+                        onOverrideChange={(
+                          key,
+                          patch: BenefitSessionOverride,
+                        ) =>
+                          setBenefitOverrides((prev) =>
+                            mergeBenefitSessionOverride(prev, key, patch),
+                          )
                         }
                       />
-                    </label>
-                    <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">
-                        Preset de calibração
-                      </span>
-                      <select
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        value={
-                          PILOT_TEMPLATES.some((t) => t.id === sector)
-                            ? sector
-                            : CUSTOM_SECTOR_ID
-                        }
-                        onChange={(e) => {
-                          const next = e.target.value as SectorId
-                          const preset = resolveSectorPreset(next)
-                          setSector(next)
-                          setSectorBufferPct(preset.defaultBufferPct)
-                          setDefaultRegime(preset.defaultRegime)
-                          if (next !== CUSTOM_SECTOR_ID && !sectorLabel.trim()) {
-                            setSectorLabel(preset.label)
-                          }
-                        }}
-                      >
-                        {PILOT_TEMPLATES.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">
-                        % Buffer / Absenteísmo
-                      </span>
-                      <input
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
-                        type="number"
-                        min={0}
-                        max={50}
-                        step={0.5}
-                        value={sectorBufferPct}
-                        onChange={(e) =>
-                          setSectorBufferPct(Number(e.target.value) || 0)
-                        }
-                      />
-                    </label>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <label className="block text-sm">
                       <span className="text-[var(--color-muted)]">
                         Salário padrão
                       </span>
                       <input
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 tabular-nums"
                         value={defaultSalario}
                         onChange={(e) => setDefaultSalario(e.target.value)}
                         inputMode="decimal"
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">VR R$/dia</span>
+                      <span className="text-[var(--color-muted)]">
+                        VR R$/dia
+                      </span>
                       <input
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 tabular-nums"
                         value={vrValorDia}
                         onChange={(e) => setVrValorDia(e.target.value)}
                         inputMode="decimal"
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="text-[var(--color-muted)]">VT R$/dia</span>
+                      <span className="text-[var(--color-muted)]">
+                        VT R$/dia
+                      </span>
                       <input
-                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                        className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5 tabular-nums"
                         value={vtValorDia}
                         onChange={(e) => setVtValorDia(e.target.value)}
                         inputMode="decimal"
@@ -1834,9 +1804,113 @@ export function ApdataFlowPanel({
                       />
                     </label>
                   </div>
-                </details>
+                </div>
 
-                <div className="flex flex-wrap gap-2">
+                {/* 3 — Exceções por Setor/Escopo */}
+                <div
+                  className="editorial-decision-card space-y-3"
+                  data-testid="passo4-excecoes"
+                >
+                  <div>
+                    <p className="editorial-decision-kicker">Decisão 3</p>
+                    <h4 className="editorial-decision-title mt-0.5">
+                      Exceções por Setor / Escopo
+                    </h4>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                      Horários especiais, segmento e filtros de população.
+                    </p>
+                  </div>
+
+                  <OhScopeExceptionsSection
+                    operatingHours={operatingHours}
+                    onOperatingHoursChange={(next) => {
+                      setOperatingHours(next)
+                      if (ohScopeRules.length > 0) {
+                        setOhScopeRules(
+                          syncOhScopeRulesWithGlobalHours(ohScopeRules, next),
+                        )
+                      }
+                    }}
+                    ohScopeRules={ohScopeRules}
+                    onOhScopeRulesChange={setOhScopeRules}
+                    payrollRows={exported?.rows}
+                    showGlobalHours={false}
+                  />
+
+                  {!manualMode ? (
+                    <ExtractFiltersPanel
+                      value={extractFilters}
+                      onChange={setExtractFilters}
+                      situacoes={situacaoCatalog}
+                      regimes={regimeCatalog}
+                      categs={categCatalog}
+                    />
+                  ) : null}
+
+                  <details
+                    open={overridesOpen}
+                    onToggle={(e) =>
+                      setOverridesOpen((e.target as HTMLDetailsElement).open)
+                    }
+                  >
+                    <summary className="cursor-pointer text-sm font-medium text-[var(--color-ink)]">
+                      Segmento e calibração
+                    </summary>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="block text-sm sm:col-span-2">
+                        <span className="text-[var(--color-muted)]">
+                          {manualMode
+                            ? 'Nome do segmento (livre)'
+                            : 'Nome do segmento'}
+                        </span>
+                        <input
+                          className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                          value={sectorLabel}
+                          onChange={(e) => setSectorLabel(e.target.value)}
+                          placeholder={
+                            manualMode
+                              ? 'Ex.: Varejo, Indústria, Serviços…'
+                              : 'Descrição do ramo'
+                          }
+                        />
+                      </label>
+                      <label className="block text-sm sm:col-span-2">
+                        <span className="text-[var(--color-muted)]">
+                          Preset de calibração
+                        </span>
+                        <select
+                          className="mt-1 w-full border border-[var(--color-line)] bg-white px-2 py-1.5"
+                          value={
+                            PILOT_TEMPLATES.some((t) => t.id === sector)
+                              ? sector
+                              : CUSTOM_SECTOR_ID
+                          }
+                          onChange={(e) => {
+                            const next = e.target.value as SectorId
+                            const preset = resolveSectorPreset(next)
+                            setSector(next)
+                            setSectorBufferPct(preset.defaultBufferPct)
+                            setDefaultRegime(preset.defaultRegime)
+                            if (
+                              next !== CUSTOM_SECTOR_ID &&
+                              !sectorLabel.trim()
+                            ) {
+                              setSectorLabel(preset.label)
+                            }
+                          }}
+                        >
+                          {PILOT_TEMPLATES.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </details>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() =>
@@ -1846,7 +1920,7 @@ export function ApdataFlowPanel({
                           : 'escopo',
                       )
                     }
-                    className="border border-[var(--color-line)] px-3 py-2 text-sm"
+                    className="border border-[var(--color-line)] bg-white px-3 py-2 text-sm"
                     disabled={simulating}
                   >
                     Voltar
