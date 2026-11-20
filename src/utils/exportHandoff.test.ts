@@ -4,18 +4,16 @@ import {
   DEFAULT_MASK_COLLABORATOR_NAMES,
   scrubNomeForHandoffExport,
 } from '../apdata/lgpdNameMask'
-import {
-  DEFAULT_OPERATING_HOURS,
-  emptyPayrollExtras,
-  simulate,
-} from '../engine'
+import { emptyPayrollExtras } from '../engine/payroll'
+import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
+import { simulate } from '../engine/simulate'
 import {
   AHR_HANDOFF_SCHEMA_VERSION,
   buildAhrHandoff,
 } from './exportHandoff'
 
 describe('exportHandoff AHR JSON', () => {
-  it('builds schema without PII fields and includes Apdata hierarchy', () => {
+  it('builds full Apdata hierarchy from SimulationResult (no UI accordion required)', () => {
     const result = simulate({
       sector: 'varejo',
       headcount: 20,

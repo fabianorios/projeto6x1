@@ -1,3 +1,6 @@
+/** Display/structure helpers for SPA Passo 5 (no simulate heuristics). */
+export * as display from './display'
+
 export {
   DEFAULT_DISCLAIMER,
   getRuleVersion,
@@ -24,7 +27,11 @@ export {
 } from './sectors'
 export type { SectorPreset, SectorPresetId } from './sectors'
 export { parseScale } from './scale'
-export { simulate } from './simulate'
+/**
+ * `simulate` is intentionally NOT re-exported here so the SPA eager graph can
+ * tree-shake heuristics. Import from `./simulate` (tests/server) or dynamic
+ * `import('../engine/simulate')` for local API-fallback only.
+ */
 export {
   PAYROLL_CSV_HEADERS,
   aggregateByCostCenter,

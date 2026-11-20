@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { DEFAULT_OPERATING_HOURS, buildApdataHierarchy, simulate } from '../engine'
+import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
+import { buildApdataHierarchy } from '../engine/apdata-hierarchy'
+import { simulate } from '../engine/simulate'
 import {
   JORNADAS_1215_CAMPOS,
   JORNADAS_ITENS_1215_CAMPOS,

@@ -31,7 +31,7 @@ import {
   type ScenarioId,
   type ScheduleSuggestion,
   type SimulationResult,
-} from '../engine'
+} from '../engine/display'
 import { getTemplate } from '../templates'
 import {
   EXECUTIVE_KPI_CARD_HERO_CLASS,
@@ -46,6 +46,7 @@ import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
 import { logPerf } from '../utils/perfTelemetry'
 import {
   DEFAULT_DOSSIER_OPEN,
+  FILIAL_DETAIL_DEFAULT_OPEN,
   collapseAllDossier,
   dossierCentroCustoOptions,
   dossierEstablishmentOptions,
@@ -325,7 +326,10 @@ export function ResultsView({
     defaultApdataDataInicio(result.ruleVersion.params.scenarioId),
   )
   const [dossier, setDossier] = useState<DossierOpenState>(DEFAULT_DOSSIER_OPEN)
-  /** Print tree stays unmounted until Imprimir / Ctrl+P (P0 — evita DOM ×2). */
+  /**
+   * Print tree mounts on Imprimir / Ctrl+P from SimulationResult (not from
+   * expanded screen accordions). Excel/JSON handoff likewise read `result`.
+   */
   const [printMounted, setPrintMounted] = useState(false)
   const printPendingRef = useRef(false)
   const passo5MountLoggedRef = useRef(false)
@@ -1146,55 +1150,55 @@ export function ResultsView({
               : `${REGIME_FUNCIONAMENTO_LABELS[distribuicaoTurmas.regime]} · ${distribuicaoTurmas.crewCount} turma(s) · HC ${distribuicaoTurmas.totalHeadcount}`
           }
         >
-          {/* Unmount operacional calendars when the dossier section is closed (P0). */}
-          {dossier.operacional ? (
-            <>
-              {filialAccordion ? (
-                <p className="text-xs text-[var(--color-muted)]">
-                  Horários, jornadas e escalas por Filial/CNPJ
-                  {multiFilial
-                    ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
-                    : ''}
-                  . Cada filial abre/recolhe no acordeão abaixo.
-                </p>
-              ) : null}
+          {/*
+            Eager mount: keep calendars/turnos in memory even when this section
+            is visually collapsed (DossierSection uses CSS `hidden`). Exports
+            (PDF/Excel/JSON) read SimulationResult — not expanded DOM.
+          */}
+          {filialAccordion ? (
+            <p className="text-xs text-[var(--color-muted)]">
+              Horários, jornadas e escalas por Filial/CNPJ
+              {multiFilial
+                ? ` (${operacionalGroups.filter((g) => g.key !== OPERACIONAL_SEM_CNPJ_KEY).length} estabelecimentos)`
+                : ''}
+              . Cada filial abre/recolhe no acordeão abaixo (cálculo já pronto).
+            </p>
+          ) : null}
 
-              {excludedScheduleNotice ? (
-                <ExcludedScheduleNotice notice={excludedScheduleNotice} />
-              ) : null}
+          {excludedScheduleNotice ? (
+            <ExcludedScheduleNotice notice={excludedScheduleNotice} />
+          ) : null}
 
-              {filialAccordion ? (
-                <div className="space-y-3">
-                  {operacionalGroups.map((group, idx) => (
-                    <OperacionalFilialPanel
-                      key={group.key}
-                      group={group}
-                      defaultOpen={idx === 0}
-                      result={result}
-                      scheduleSuggestions={scheduleSuggestions}
-                      scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
-                      recorded={recorded}
-                      onFeedback={recordFeedback}
-                    />
-                  ))}
-                </div>
-              ) : operacionalGroups[0] ? (
-                <OperacionalFilialBody
-                  group={operacionalGroups[0]}
+          {filialAccordion ? (
+            <div className="space-y-3">
+              {operacionalGroups.map((group) => (
+                <OperacionalFilialPanel
+                  key={group.key}
+                  group={group}
+                  defaultOpen={FILIAL_DETAIL_DEFAULT_OPEN}
                   result={result}
-                  embeddedSchedule={false}
-                  showFilialHeader={false}
                   scheduleSuggestions={scheduleSuggestions}
                   scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
                   recorded={recorded}
                   onFeedback={recordFeedback}
-                  globalTurmasNote={distribuicaoTurmas.note}
                 />
-              ) : (
-                <ScheduleBuilderView result={result} />
-              )}
-            </>
-          ) : null}
+              ))}
+            </div>
+          ) : operacionalGroups[0] ? (
+            <OperacionalFilialBody
+              group={operacionalGroups[0]}
+              result={result}
+              embeddedSchedule={false}
+              showFilialHeader={false}
+              scheduleSuggestions={scheduleSuggestions}
+              scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+              recorded={recorded}
+              onFeedback={recordFeedback}
+              globalTurmasNote={distribuicaoTurmas.note}
+            />
+          ) : (
+            <ScheduleBuilderView result={result} />
+          )}
         </DossierSection>
 
         <DossierSection
@@ -1323,21 +1327,26 @@ function OperacionalFilialPanel({
           </span>
         </div>
       </summary>
-      {/* Lazy-mount: closed <details> alone still kept React trees alive (P0). */}
-      {open ? (
-        <div className="space-y-4 border-t border-[var(--color-line)] px-4 py-4">
-          <OperacionalFilialBody
-            group={group}
-            result={result}
-            embeddedSchedule
-            showFilialHeader={false}
-            scheduleSuggestions={scheduleSuggestions}
-            scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
-            recorded={recorded}
-            onFeedback={onFeedback}
-          />
-        </div>
-      ) : null}
+      {/* Eager: keep body mounted; collapse is visual-only (CSS hidden). */}
+      <div
+        className={
+          open
+            ? 'space-y-4 border-t border-[var(--color-line)] px-4 py-4'
+            : 'hidden'
+        }
+        aria-hidden={!open}
+      >
+        <OperacionalFilialBody
+          group={group}
+          result={result}
+          embeddedSchedule
+          showFilialHeader={false}
+          scheduleSuggestions={scheduleSuggestions}
+          scheduleSuggestionDisclaimer={scheduleSuggestionDisclaimer}
+          recorded={recorded}
+          onFeedback={onFeedback}
+        />
+      </div>
     </details>
   )
 }

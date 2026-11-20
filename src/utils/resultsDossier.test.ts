@@ -4,6 +4,7 @@ import { emptyPayrollExtras, type PayrollRow } from '../engine/payroll'
 import {
   collapseAllDossier,
   DEFAULT_DOSSIER_OPEN,
+  FILIAL_DETAIL_DEFAULT_OPEN,
   centroCustoMatchesSearch,
   dossierCentroCustoKeys,
   dossierCentroCustoOptions,
@@ -43,12 +44,13 @@ function row(partial: Partial<PayrollRow>): PayrollRow {
 }
 
 describe('resultsDossier helpers', () => {
-  it('defaults: executivo+operacional open, cadastral collapsed', () => {
+  it('defaults: executivo+operacional open, cadastral + filial details collapsed', () => {
     assert.deepEqual(DEFAULT_DOSSIER_OPEN, {
       executivo: true,
       operacional: true,
       cadastral: false,
     })
+    assert.equal(FILIAL_DETAIL_DEFAULT_OPEN, false)
     assert.equal(expandAllDossier().cadastral, true)
     assert.equal(collapseAllDossier().executivo, false)
   })

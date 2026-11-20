@@ -8,12 +8,12 @@ import {
   DEFAULT_MASK_COLLABORATOR_NAMES,
   scrubNomeForHandoffExport,
 } from '../apdata/lgpdNameMask'
-import {
-  buildApdataHierarchy,
-  type ApdataHierarchyTree,
-  type SimulationResult,
-} from '../engine'
+import type {
+  ApdataHierarchyTree,
+  SimulationResult,
+} from '../engine/display'
 import type { EstrategiaAbsorcao, RegimeFuncionamento, TaxRegime } from '../types'
+import { resolveApdataHierarchy } from './resolveApdataHierarchy'
 
 export const AHR_HANDOFF_SCHEMA_VERSION = 'turnocheck-ahr-handoff-v2'
 
@@ -119,7 +119,7 @@ export function buildAhrHandoff(
     input.defaultRegimeFuncionamento ??
     result.distribuicaoTurmas.regime
 
-  const apdataHierarchy = buildApdataHierarchy(result, {
+  const apdataHierarchy = resolveApdataHierarchy(result, {
     dataInicio: options.dataInicio,
     includeLunchJornada: options.includeLunchJornada,
     selectedHorarioIds: options.selectedHorarioIds,

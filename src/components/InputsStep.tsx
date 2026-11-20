@@ -1,19 +1,19 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   REGIME_FUNCIONAMENTO_LABELS,
-  RULE_VERSIONS,
-  checkScheduleExclusion,
   formatShiftRange,
-  loadScenarioBasket,
-  simulate,
-  syncOhScopeRulesWithGlobalHours,
   type EstrategiaAbsorcao,
   type PayrollParseIssue,
   type PayrollRow,
   type RegimeFuncionamento,
   type ScenarioId,
+  type SimulationResult,
   type TaxRegime,
-} from '../engine'
+} from '../engine/display'
+import { checkScheduleExclusion } from '../engine/schedule-policy'
+import { RULE_VERSIONS } from '../engine/rules'
+import { loadScenarioBasket } from '../engine/scenario-basket'
+import { syncOhScopeRulesWithGlobalHours } from '../engine/operating-hours'
 import { getTemplate } from '../templates'
 import type { WizardFormState } from './WizardShell'
 import { EphemeralConnectPanel } from './EphemeralConnectPanel'
@@ -67,38 +67,56 @@ export function InputsStep({
   // Re-read each render so returning from Resultados shows the latest cesta.
   const basketSnapshot = loadScenarioBasket()
 
-  const preview = useMemo(() => {
-    if (!form.sectorId) return null
-    try {
-      return simulate({
-        sector: form.sectorId,
-        sectorLabel: form.sectorLabel.trim() || undefined,
-        sectorBufferPct: form.sectorBufferPct,
-        headcount: form.headcount,
-        currentScale: form.currentScale,
-        averageMonthlySalary: form.averageMonthlySalary,
-        units: form.units,
-        shiftsPerDay: form.shiftsPerDay,
-        operatingHours: form.operatingHours,
-        ohScopeRules:
-          form.ohScopeRules.length > 0 ? form.ohScopeRules : undefined,
-        scenarioId: form.scenarioId,
-        payrollRows:
-          form.payrollRows.length > 0 ? form.payrollRows : undefined,
-        defaultTaxRegime: form.defaultTaxRegime,
-        taxRegimeByCnpj:
-          Object.keys(form.taxRegimeByCnpj).length > 0
-            ? form.taxRegimeByCnpj
-            : undefined,
-        estrategiaAbsorcao: form.estrategiaAbsorcao,
-        defaultRegimeFuncionamento: form.defaultRegimeFuncionamento,
-        regimeFuncionamentoByCc:
-          Object.keys(form.regimeFuncionamentoByCc).length > 0
-            ? form.regimeFuncionamentoByCc
-            : undefined,
+  /** Local preview via lazy engine chunk — heuristics stay out of eager graph. */
+  const [preview, setPreview] = useState<SimulationResult | null>(null)
+  useEffect(() => {
+    if (!form.sectorId) {
+      setPreview(null)
+      return
+    }
+    let cancelled = false
+    void import('../engine/simulate')
+      .then(({ simulate }) => {
+        if (cancelled) return
+        try {
+          setPreview(
+            simulate({
+              sector: form.sectorId!,
+              sectorLabel: form.sectorLabel.trim() || undefined,
+              sectorBufferPct: form.sectorBufferPct,
+              headcount: form.headcount,
+              currentScale: form.currentScale,
+              averageMonthlySalary: form.averageMonthlySalary,
+              units: form.units,
+              shiftsPerDay: form.shiftsPerDay,
+              operatingHours: form.operatingHours,
+              ohScopeRules:
+                form.ohScopeRules.length > 0 ? form.ohScopeRules : undefined,
+              scenarioId: form.scenarioId,
+              payrollRows:
+                form.payrollRows.length > 0 ? form.payrollRows : undefined,
+              defaultTaxRegime: form.defaultTaxRegime,
+              taxRegimeByCnpj:
+                Object.keys(form.taxRegimeByCnpj).length > 0
+                  ? form.taxRegimeByCnpj
+                  : undefined,
+              estrategiaAbsorcao: form.estrategiaAbsorcao,
+              defaultRegimeFuncionamento: form.defaultRegimeFuncionamento,
+              regimeFuncionamentoByCc:
+                Object.keys(form.regimeFuncionamentoByCc).length > 0
+                  ? form.regimeFuncionamentoByCc
+                  : undefined,
+            }),
+          )
+        } catch {
+          setPreview(null)
+        }
       })
-    } catch {
-      return null
+      .catch(() => {
+        if (!cancelled) setPreview(null)
+      })
+    return () => {
+      cancelled = true
     }
   }, [form])
 

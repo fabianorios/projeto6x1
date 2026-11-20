@@ -9,19 +9,20 @@
 import {
   MONTH_LABELS_PT,
   applyTurmaHourLabels,
-  buildApdataHierarchy,
   buildMonthCalendarMatrix,
   baselineCrewsForCalendar,
+  distributeCrews,
+  deriveCoberturaAtualPorDia,
+  DEFAULT_OPERATING_HOURS,
+  parseScale,
   resolveBaselineShiftWindows,
   resolveShiftWindows,
   type ApdataHierarchyTree,
+  type CostCenterResult,
   type MonthCalendarMatrix,
-} from '../engine'
-import { distributeCrews } from '../engine/crew-distribution'
-import type { CostCenterResult, SimulationResult } from '../engine/types'
-import { parseScale } from '../engine/scale'
-import { deriveCoberturaAtualPorDia } from '../engine/coverage-days'
-import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
+  type SimulationResult,
+} from '../engine/display'
+import { resolveApdataHierarchy } from './resolveApdataHierarchy'
 
 export interface EscalasExcelExportOptions {
   /** Data Início for Ciclos (YYYY-MM-DD). */
@@ -414,7 +415,7 @@ export function buildEscalasTurmasSpreadsheetXml(
     body.push(...matrixToBlock('Quadro Proposto (Nova Escala)', propostoMatrix))
   }
 
-  const tree = buildApdataHierarchy(result, {
+  const tree = resolveApdataHierarchy(result, {
     dataInicio: options.dataInicio,
   })
   const hierarchyBody = hierarchySheetRows(tree)

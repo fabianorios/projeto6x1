@@ -16,12 +16,12 @@
  * Não inventar INSERT SQL. Não grava no ERP.
  */
 
-import {
-  buildApdataHierarchy,
-  type ApdataJornada,
-  type ApdataWorkPeriod,
-  type SimulationResult,
-} from '../engine'
+import type {
+  ApdataJornada,
+  ApdataWorkPeriod,
+  SimulationResult,
+} from '../engine/display'
+import { resolveApdataHierarchy } from './resolveApdataHierarchy'
 
 /** Rotina Apdata «Importação de Dados (Interface)». */
 export const ROTINA_1215 = 1215 as const
@@ -370,7 +370,7 @@ export function buildRotina1215JornadasFromResult(
   result: SimulationResult,
   options: Rotina1215JornadasExportOptions = {},
 ): string {
-  const tree = buildApdataHierarchy(result, {
+  const tree = resolveApdataHierarchy(result, {
     dataInicio: options.dataInicio,
     includeLunchJornada: options.includeLunchJornada,
     selectedHorarioIds: options.selectedHorarioIds,

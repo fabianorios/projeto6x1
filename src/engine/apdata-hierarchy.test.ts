@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { DEFAULT_OPERATING_HOURS, simulate } from './index'
+import { DEFAULT_OPERATING_HOURS } from './operating-hours'
+import { simulate } from './simulate'
 import {
   APDATA_HIERARCHY_SCHEMA_VERSION,
   applyTurmaHourLabels,

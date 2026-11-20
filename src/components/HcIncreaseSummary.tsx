@@ -1,6 +1,6 @@
 /** Passo 5 — PT-BR summary of where HC sobe (Filial → CC → cargo). */
 
-import { centroCustoDisplayLabel } from '../engine'
+import { centroCustoDisplayLabel } from '../engine/display'
 import {
   formatHcTriple,
   type HcIncreaseSummary as HcIncreaseSummaryData,

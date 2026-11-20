@@ -13,11 +13,21 @@ export type DossierSectionId = 'executivo' | 'operacional' | 'cadastral'
 
 export type DossierOpenState = Record<DossierSectionId, boolean>
 
+/**
+ * Passo 5 dossier defaults.
+ * - Executivo/Operacional open for the C-level summary.
+ * - Cadastral (Fiel da Balança / Estrutura Apdata) starts collapsed.
+ * Filial/CC detail accordions inside Operacional also start collapsed
+ * ({@link FILIAL_DETAIL_DEFAULT_OPEN}); panels stay mounted (CSS hide only).
+ */
 export const DEFAULT_DOSSIER_OPEN: DossierOpenState = {
   executivo: true,
   operacional: true,
   cadastral: false,
 }
+
+/** Filial / CC detail accordions: collapsed by default; data stays eager. */
+export const FILIAL_DETAIL_DEFAULT_OPEN = false
 
 export function expandAllDossier(): DossierOpenState {
   return { executivo: true, operacional: true, cadastral: true }

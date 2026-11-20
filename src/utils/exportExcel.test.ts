@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { DEFAULT_OPERATING_HOURS, simulate } from '../engine'
+import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
+import { simulate } from '../engine/simulate'
 import { buildEscalasTurmasSpreadsheetXml } from './exportExcel'
 
 describe('buildEscalasTurmasSpreadsheetXml', () => {
-  it('emits Escalas e Turmas + Apdata Hierarquia sheets', () => {
+  it('emits full Escalas + Apdata sheets from SimulationResult (collapsed UI irrelevant)', () => {
     const result = simulate({
       sector: 'varejo',
       headcount: 35,

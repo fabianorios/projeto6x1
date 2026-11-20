@@ -29,9 +29,10 @@ import {
   type OperatingHours,
   type SimulationResult,
   type TurmaCrew,
-} from '../engine'
+} from '../engine/display'
 import { downloadEscalasTurmasExcel } from '../utils/exportExcel'
 import {
+  FILIAL_DETAIL_DEFAULT_OPEN,
   OPERACIONAL_SEM_CNPJ_KEY,
   nestCentersByCc,
 } from '../utils/resultsDossier'
@@ -1122,12 +1123,13 @@ export function ScheduleBuilderView({
         </div>
       ) : (
         <div className="mt-3 space-y-4">
-          {ccGroups.map((group, idx) => (
-            <LazyCcSchedulePanel
+          {ccGroups.map((group) => (
+            <CcSchedulePanel
               key={group.centroCusto}
               group={group}
-              defaultOpen={idx === 0 || ccGroups.length === 1}
-              lazyMount={ccGroups.length > 1}
+              /** Multi-CC: accordion UI, collapsed by default; calendars stay mounted. */
+              asAccordion={ccGroups.length > 1}
+              defaultOpen={FILIAL_DETAIL_DEFAULT_OPEN}
               operatingHours={result.input.operatingHours}
               shiftsPerDay={result.input.shiftsPerDay}
               year={year}
@@ -1142,11 +1144,15 @@ export function ScheduleBuilderView({
   )
 }
 
-/** Interactive CC block — lazy-mount calendars when several CCs share a filial (P0). */
-function LazyCcSchedulePanel({
+/**
+ * Interactive CC block. When several CCs share a filial, use an accordion
+ * that starts collapsed — but calendars stay mounted (CSS `hidden` only).
+ * No lazy calculation gated on expand.
+ */
+function CcSchedulePanel({
   group,
+  asAccordion,
   defaultOpen,
-  lazyMount,
   operatingHours,
   shiftsPerDay,
   year,
@@ -1155,8 +1161,8 @@ function LazyCcSchedulePanel({
   onModeChange,
 }: {
   group: ReturnType<typeof nestCentersByCc>[number]
+  asAccordion: boolean
   defaultOpen: boolean
-  lazyMount: boolean
   operatingHours: OperatingHours
   shiftsPerDay: number
   year: number
@@ -1184,7 +1190,7 @@ function LazyCcSchedulePanel({
     </div>
   )
 
-  if (!lazyMount) {
+  if (!asAccordion) {
     return (
       <div className="space-y-3 border border-[var(--color-line)] bg-[var(--color-surface)]/60 px-3 py-3">
         <header>
@@ -1224,7 +1230,16 @@ function LazyCcSchedulePanel({
           </span>
         </div>
       </summary>
-      {open ? <div className="space-y-3 border-t border-[var(--color-line)] px-3 py-3">{cards}</div> : null}
+      <div
+        className={
+          open
+            ? 'space-y-3 border-t border-[var(--color-line)] px-3 py-3'
+            : 'hidden'
+        }
+        aria-hidden={!open}
+      >
+        {cards}
+      </div>
     </details>
   )
 }
