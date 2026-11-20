@@ -14,7 +14,7 @@ export default function App() {
   if (!session.open) {
     return (
       <LoginScreen
-        onContinueWithoutLogin={() => setSession(openSessionWithoutLogin())}
+        onEnterDemo={() => setSession(openSessionWithoutLogin())}
         onLoginSuccess={(email) => {
           const next = openSessionFromLogin(email ?? '')
           if (next.open) setSession(next)
