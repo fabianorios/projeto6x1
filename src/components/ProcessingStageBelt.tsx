@@ -1,6 +1,6 @@
 /**
- * Quiet Chrome — visual stage belt for extraction / simulate processing.
- * Discrete steps instead of a generic spinner.
+ * Premium Editorial — centralized live processing panel.
+ * Soft backdrop + Lumen whisper; discrete 3-step belt (not a generic spinner).
  */
 
 export type ProcessingStageItem = {
@@ -19,7 +19,14 @@ export type ProcessingStageBeltProps = {
   className?: string
   /** Accessible live status label. */
   statusLabel?: string
+  /** Optional Lumen tip under the belt (defaults to a short editorial line). */
+  lumenTip?: string
+  /** When true (default), wrap in the soft processing-center panel. */
+  centered?: boolean
 }
+
+const DEFAULT_LUMEN =
+  'Enquanto calculamos, revise mentalmente o ritmo e as exceções — o dossiê chega em seguida.'
 
 export function ProcessingStageBelt({
   stages,
@@ -27,17 +34,14 @@ export function ProcessingStageBelt({
   pct,
   className = '',
   statusLabel,
+  lumenTip = DEFAULT_LUMEN,
+  centered = true,
 }: ProcessingStageBeltProps) {
   const safeIndex = Math.max(0, Math.min(activeIndex, stages.length - 1))
   const live = statusLabel ?? stages[safeIndex]?.label ?? 'Processando…'
 
-  return (
-    <div
-      className={`mt-3 space-y-3 ${className}`}
-      role="status"
-      aria-live="polite"
-      data-testid="processing-stage-belt"
-    >
+  const inner = (
+    <>
       <ol className="flex flex-wrap items-stretch gap-0">
         {stages.map((stage, i) => {
           const done = i < safeIndex
@@ -50,12 +54,13 @@ export function ProcessingStageBelt({
               <div
                 className={[
                   'flex w-full flex-col border px-3 py-2.5',
-                  i === 0 ? '' : 'border-l-0',
+                  i === 0 ? 'rounded-l-md' : 'border-l-0',
+                  i === stages.length - 1 ? 'rounded-r-md' : '',
                   done
                     ? 'border-[var(--color-line)] bg-[var(--color-accent-soft)]'
                     : active
-                      ? 'border-[var(--color-green)] bg-[var(--color-surface)]'
-                      : 'border-[var(--color-line)] bg-[var(--color-surface)]/70 opacity-70',
+                      ? 'border-[var(--color-green)] bg-white'
+                      : 'border-[var(--color-line)] bg-white/70 opacity-70',
                 ].join(' ')}
               >
                 <span
@@ -91,7 +96,7 @@ export function ProcessingStageBelt({
       </ol>
       {pct != null ? (
         <div
-          className="h-1.5 w-full overflow-hidden border border-[var(--color-line)] bg-[var(--color-paper)]"
+          className="h-1.5 w-full overflow-hidden rounded-full border border-[var(--color-line)] bg-[var(--color-paper)]"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -105,6 +110,36 @@ export function ProcessingStageBelt({
         </div>
       ) : null}
       <p className="text-xs text-[var(--color-muted)] tabular-nums">{live}</p>
+      {lumenTip ? (
+        <p className="processing-center-lumen">
+          <span>Lumen</span> · {lumenTip}
+        </p>
+      ) : null}
+    </>
+  )
+
+  if (centered) {
+    return (
+      <div
+        className={`processing-center mt-4 space-y-3 ${className}`}
+        role="status"
+        aria-live="polite"
+        data-testid="processing-stage-belt"
+        data-processing-center="true"
+      >
+        {inner}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`mt-3 space-y-3 ${className}`}
+      role="status"
+      aria-live="polite"
+      data-testid="processing-stage-belt"
+    >
+      {inner}
     </div>
   )
 }

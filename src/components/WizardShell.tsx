@@ -110,7 +110,7 @@ export function WizardShell() {
   const studio = mode === 'studio'
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="workspace-editorial flex min-h-screen flex-col">
       <header className="app-chrome no-print sticky top-0 z-30 border-b border-white/10">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
@@ -132,7 +132,10 @@ export function WizardShell() {
               </svg>
             </div>
             <div className="min-w-0 leading-tight">
-              <p className="truncate text-sm font-bold tracking-tight text-white uppercase">
+              <p
+                className="truncate text-sm font-semibold tracking-tight text-white"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
                 Turnocheck
               </p>
               <p className="app-chrome-privacy truncate text-[10px] leading-none text-white/85">

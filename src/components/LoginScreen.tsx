@@ -1,6 +1,6 @@
 /**
- * Soft first-paint gate — Quiet Chrome / AHR palette.
- * No real IdP: email opens an ephemeral client session; password is UI-only.
+ * Soft first-paint gate — AHR Brasil Premium Editorial.
+ * Immersive navy + emerald mesh; demo without IdP.
  */
 import { useState, type FormEvent } from 'react'
 
@@ -14,8 +14,8 @@ function BrandMark({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="18"
-      height="18"
+      width="20"
+      height="20"
       viewBox="0 0 32 32"
       fill="none"
       aria-hidden
@@ -37,7 +37,7 @@ function CalendarGlyph({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -58,7 +58,7 @@ function SparklesGlyph({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -110,25 +110,21 @@ export function LoginScreen({
   }
 
   return (
-    <div
-      className="relative flex min-h-screen flex-col justify-between overflow-hidden px-5 py-7 sm:px-10"
-      style={{
-        color: 'var(--color-ink)',
-        background:
-          'radial-gradient(circle at 12% 18%, rgba(31, 107, 74, 0.12), transparent 42%), radial-gradient(circle at 88% 82%, rgba(11, 37, 69, 0.12), transparent 45%), linear-gradient(180deg, #f4f8fb 0%, #eaf2f8 100%)',
-      }}
-    >
+    <div className="login-immersive relative flex min-h-screen flex-col justify-between overflow-hidden px-5 py-7 text-white sm:px-10">
+      <div className="login-immersive-mesh pointer-events-none absolute inset-0" aria-hidden />
+
+      {/* Scale hint — left glass */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-1/2 left-10 hidden w-72 -translate-y-1/2 flex-col gap-3 opacity-85 select-none lg:flex"
+        className="pointer-events-none absolute top-1/2 left-8 hidden w-72 -translate-y-1/2 flex-col gap-3 select-none lg:flex"
       >
-        <div className="rounded-2xl border border-[var(--color-line)] bg-white/80 p-4 shadow-xs backdrop-blur-md">
-          <div className="mb-2.5 flex items-center justify-between text-xs font-semibold text-[var(--color-ink)]">
+        <div className="login-glass scale-[0.98] p-4 opacity-90 transition-transform duration-700">
+          <div className="mb-2.5 flex items-center justify-between text-xs font-semibold text-white/95">
             <span className="flex items-center gap-1.5">
-              <CalendarGlyph className="text-[var(--color-green)]" />
+              <CalendarGlyph className="text-emerald-300" />
               Ritmo de Escala
             </span>
-            <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 text-[var(--color-green)]">
+            <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] tracking-wide text-emerald-200">
               6×1 → 5×2
             </span>
           </div>
@@ -138,8 +134,8 @@ export function LoginScreen({
                 key={`${d}-${idx}`}
                 className={
                   idx >= 5
-                    ? 'rounded-lg bg-[var(--color-accent-soft)] py-1.5 text-[var(--color-green)]'
-                    : 'rounded-lg bg-[var(--color-ink)]/8 py-1.5 text-[var(--color-ink)]'
+                    ? 'rounded-md bg-emerald-400/25 py-1.5 text-emerald-100'
+                    : 'rounded-md bg-white/10 py-1.5 text-white/85'
                 }
               >
                 {d}
@@ -148,30 +144,48 @@ export function LoginScreen({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-2xl bg-[var(--color-ink)] p-3.5 text-white shadow-sm">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-400/30 bg-emerald-500/20">
-            <SparklesGlyph className="text-emerald-300" />
+        <div className="login-glass flex items-center gap-3 p-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-400/35 bg-emerald-500/20">
+            <SparklesGlyph className="text-emerald-200" />
           </div>
           <div className="text-xs leading-snug">
-            <p className="font-semibold text-white">Simulação viva</p>
-            <p className="mt-0.5 text-slate-300">
+            <p className="font-semibold text-white">Lumen</p>
+            <p className="mt-0.5 text-white/65">
               Turnos, folgas e impacto em um só olhar.
             </p>
           </div>
         </div>
       </div>
 
+      {/* Scale hint — right glass */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-[42%] right-8 hidden w-64 translate-y-2 flex-col gap-3 select-none xl:flex"
+      >
+        <div className="login-glass scale-[0.96] p-4 opacity-80">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-emerald-200/90 uppercase">
+            Preview consultivo
+          </p>
+          <p className="mt-2 text-sm font-medium text-white">
+            HC · Folha · Benefícios
+          </p>
+          <p className="mt-1 text-[11px] text-white/60">
+            Dossiê pronto para a reunião — sem PII no export padrão.
+          </p>
+        </div>
+      </div>
+
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="app-chrome-mark flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-xs">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-green)] text-white shadow-sm">
             <BrandMark />
           </div>
           <div>
-            <span className="block text-sm font-bold tracking-tight text-[var(--color-ink)]">
+            <span className="login-brand block text-base font-semibold tracking-tight text-white">
               Turnocheck
             </span>
-            <span className="block text-[11px] text-[var(--color-muted)]">
-              AHR Brasil
+            <span className="block text-[11px] text-white/55">
+              AHR Brasil · Projeto 6×1
             </span>
           </div>
         </div>
@@ -180,21 +194,25 @@ export function LoginScreen({
           <button
             type="button"
             onClick={onContinueWithoutLogin}
-            className="cursor-pointer rounded-full border border-[var(--color-line)] bg-white/80 px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-white hover:text-[var(--color-green)]"
+            className="cursor-pointer rounded-lg border border-white/25 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white/95 backdrop-blur-sm transition hover:border-emerald-300/50 hover:bg-white/15"
+            data-testid="login-explorar-simulador"
           >
-            Entrar sem login
+            Explorar Simulador
           </button>
         ) : null}
       </header>
 
-      <main className="relative z-10 my-auto flex justify-center py-8">
-        <div className="w-full max-w-sm space-y-5 rounded-3xl border border-[var(--color-line)] bg-white/95 p-7 shadow-md backdrop-blur-sm">
-          <div className="space-y-1 text-center">
-            <h1 className="text-xl font-bold text-[var(--color-ink)]">
+      <main className="relative z-10 my-auto flex justify-center py-10">
+        <div className="login-card w-full max-w-sm space-y-5 p-7 sm:p-8">
+          <div className="space-y-1.5 text-center">
+            <p className="text-[10px] font-semibold tracking-[0.16em] text-[var(--color-green)] uppercase">
+              Acesso Consultivo
+            </p>
+            <h1 className="login-brand text-xl font-semibold text-[var(--color-ink)] sm:text-2xl">
               Bem-vindo ao Turnocheck
             </h1>
-            <p className="text-xs text-[var(--color-muted)]">
-              Planeje escalas e veja o impacto com mais clareza.
+            <p className="text-xs leading-relaxed text-[var(--color-muted)]">
+              Planeje escalas e veja o impacto com clareza editorial.
             </p>
           </div>
 
@@ -209,7 +227,7 @@ export function LoginScreen({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="voce@empresa.com.br"
                 autoComplete="username"
-                className="w-full rounded-xl border border-[var(--color-line)] bg-slate-50/60 px-3.5 py-2.5 text-sm transition focus:border-[var(--color-green)] focus:bg-white focus:ring-2 focus:ring-[var(--color-green)]/30 focus:outline-none"
+                className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-paper)] px-3.5 py-2.5 text-sm text-[var(--color-ink)] transition focus:border-[var(--color-green)] focus:bg-white focus:ring-2 focus:ring-[var(--color-green)]/25 focus:outline-none"
               />
             </div>
 
@@ -223,29 +241,42 @@ export function LoginScreen({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="current-password"
-                className="w-full rounded-xl border border-[var(--color-line)] bg-slate-50/60 px-3.5 py-2.5 text-sm transition focus:border-[var(--color-green)] focus:bg-white focus:ring-2 focus:ring-[var(--color-green)]/30 focus:outline-none"
+                className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-paper)] px-3.5 py-2.5 text-sm text-[var(--color-ink)] transition focus:border-[var(--color-green)] focus:bg-white focus:ring-2 focus:ring-[var(--color-green)]/25 focus:outline-none"
               />
             </div>
 
             {message ? (
-              <p className="rounded-xl border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              <p className="rounded-lg border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
                 {message}
               </p>
             ) : null}
 
             <button
               type="submit"
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[var(--color-ink)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-green)]"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-green)]"
+              data-testid="login-acesso-consultivo"
             >
-              <span>Acessar</span>
+              <span>Acesso Consultivo</span>
               <ArrowGlyph />
             </button>
           </form>
+
+          {onContinueWithoutLogin ? (
+            <div className="border-t border-[var(--color-line)] pt-4 text-center">
+              <button
+                type="button"
+                onClick={onContinueWithoutLogin}
+                className="text-xs font-medium text-[var(--color-muted)] underline-offset-2 transition hover:text-[var(--color-green)] hover:underline"
+              >
+                Explorar Simulador sem login
+              </button>
+            </div>
+          ) : null}
         </div>
       </main>
 
-      <footer className="relative z-10 mx-auto w-full max-w-6xl text-center text-[11px] text-[var(--color-muted)]">
-        AHR Brasil · Simulador de escalas e turnos
+      <footer className="relative z-10 mx-auto w-full max-w-6xl text-center text-[11px] text-white/45">
+        AHR Brasil · Simulador consultivo de escalas e turnos · Proteção LGPD
       </footer>
     </div>
   )
