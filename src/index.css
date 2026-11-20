@@ -41,31 +41,192 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
 }
 
-/* Immersive login — navy/emerald executive (inline bg + perspective mesh) */
-.login-immersive {
-  background: #0b2545;
+/* Login exact — pixel-faithful to login-reference-exact.png
+ * Aspect-locked 1024×572 stage = reference art; interactive hits only.
+ */
+.login-exact {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: #fff;
+  background: #021229;
+  font-family: var(--font-ui);
 }
 
-.login-card {
-  border: 1px solid rgba(226, 232, 240, 0.95);
+.login-stage-frame {
+  position: relative;
+  width: min(100vw, calc(100dvh * 1024 / 572));
+  height: min(100dvh, calc(100vw * 572 / 1024));
+  aspect-ratio: 1024 / 572;
+  overflow: hidden;
+}
+
+.login-stage-photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.login-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Cover painted Entrar pill — keep transparent so art shows */
+.login-ghost-hit {
+  position: absolute;
+  z-index: 40;
+  top: 3.32%;
+  left: 76.07%;
+  width: 8.2%;
+  height: 3.5%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: transparent;
+  font-size: 1px;
+  overflow: hidden;
+}
+
+.login-ghost-hit:hover,
+.login-ghost-hit:focus-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+/* Contiguous white panel on reference: 384,156 → 639,422 (256×267) */
+.login-card-hit {
+  position: absolute;
+  z-index: 30;
+  top: 27.2727%;
+  left: 37.5%;
+  width: 25%;
+  height: 46.6783%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.login-hit-email,
+.login-hit-password {
+  position: absolute;
+  left: 7.8%;
+  width: 84.4%;
+  max-width: 84.4%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #011935;
+  caret-color: #011935;
+  font: inherit;
+  font-size: clamp(11px, 1.35cqw, 14px);
+  line-height: 1.2;
+  outline: none;
+  padding: 0 0.7rem;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.login-hit-email {
+  top: 48.7%;
+  height: 10.1%;
+}
+
+.login-hit-password {
+  top: 67.8%;
+  height: 10.9%;
+}
+
+/* Hide our placeholder — painted art already shows it */
+.login-hit-email::placeholder,
+.login-hit-password::placeholder {
+  color: transparent;
+  opacity: 0;
+}
+
+.login-hit-email:focus,
+.login-hit-password:focus,
+.login-hit-email:not(:placeholder-shown),
+.login-hit-password:not(:placeholder-shown) {
+  border-color: #d0d9e0;
+  background: #ebf1f4;
+}
+
+.login-hit-email:focus,
+.login-hit-password:focus {
+  border-color: #1ec88c;
   background: #fff;
-  color: var(--color-ink);
-  animation: login-card-rise 0.55s ease-out;
+  box-shadow: 0 0 0 2px rgba(30, 200, 140, 0.18);
 }
 
-@keyframes login-card-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.login-hit-submit {
+  position: absolute;
+  left: 7.8%;
+  top: 82.8%;
+  width: 84.4%;
+  max-width: 84.4%;
+  height: 10.1%;
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  font-size: clamp(11px, 1.4cqw, 14px);
+  font-weight: 700;
+  line-height: 1;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.login-brand {
-  font-family: var(--font-display);
+.login-hit-submit:hover,
+.login-hit-submit:focus-visible {
+  background: rgba(1, 25, 53, 0.08);
+  outline: none;
+}
+
+.login-hit-status {
+  position: absolute;
+  left: 5.6%;
+  right: 5.6%;
+  top: 79%;
+  z-index: 1;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+  background: #ecfdf5;
+  padding: 0.2rem 0.4rem;
+  color: #065f46;
+  font-size: clamp(9px, 1.1cqw, 11px);
+  line-height: 1.2;
+  transform: translateY(-110%);
 }
 
 /* Shared AHR chrome — top bar */
@@ -242,8 +403,6 @@ fieldset {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-card,
-  .login-perspective-mesh,
   .processing-center {
     animation: none;
     transform: none !important;
