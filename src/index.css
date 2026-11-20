@@ -41,58 +41,14 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
 }
 
-/* Immersive login */
+/* Immersive login — navy/emerald executive (inline bg + perspective mesh) */
 .login-immersive {
-  background: var(--color-ink);
-}
-
-.login-immersive-mesh {
-  background:
-    radial-gradient(
-      ellipse 70% 55% at 18% 22%,
-      rgba(31, 107, 74, 0.45) 0%,
-      transparent 58%
-    ),
-    radial-gradient(
-      ellipse 55% 45% at 88% 78%,
-      rgba(16, 185, 129, 0.18) 0%,
-      transparent 52%
-    ),
-    radial-gradient(
-      ellipse 40% 35% at 70% 12%,
-      rgba(255, 255, 255, 0.06) 0%,
-      transparent 60%
-    ),
-    linear-gradient(165deg, #0b2545 0%, #0a1f38 48%, #0c2d4a 100%);
-  animation: login-mesh-drift 18s ease-in-out infinite alternate;
-}
-
-@keyframes login-mesh-drift {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0.92;
-    transform: scale(1.04);
-  }
-}
-
-.login-glass {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 0.85rem;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  background: #0b2545;
 }
 
 .login-card {
   border: 1px solid rgba(226, 232, 240, 0.95);
   background: #fff;
-  border-radius: 1rem;
-  box-shadow:
-    0 24px 60px rgba(5, 20, 40, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.4) inset;
   color: var(--color-ink);
   animation: login-card-rise 0.55s ease-out;
 }
@@ -286,10 +242,11 @@ fieldset {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-immersive-mesh,
   .login-card,
+  .login-perspective-mesh,
   .processing-center {
     animation: none;
+    transform: none !important;
   }
 }
 
