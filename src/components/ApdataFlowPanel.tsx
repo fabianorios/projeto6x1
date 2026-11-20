@@ -50,12 +50,7 @@ import {
   type ExportProgressStep,
   type ExportResult,
 } from '../apdata/exportPayroll'
-import {
-  segmentLabelFromSelectedRamos,
-  sectorFromSelectedRamos,
-  suggestedBufferPctFromSelectedRamos,
-  type RamoAtividade,
-} from '../apdata/ramos'
+import { type RamoAtividade } from '../apdata/ramos'
 import {
   DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
@@ -301,7 +296,7 @@ export function ApdataFlowPanel({
   const [sqlProfileId, setSqlProfileId] = useState<string | null>(null)
 
   const [sector, setSector] = useState<SectorId>('varejo')
-  const [sectorLabel, setSectorLabel] = useState('Varejo')
+  const [sectorLabel, setSectorLabel] = useState('Comércio, Varejo & Atendimento')
   const [sectorBufferPct, setSectorBufferPct] = useState(5)
   const [scenarioId, setScenarioId] = useState<ScenarioId>(
     'fase1_2026_42h',
@@ -375,18 +370,9 @@ export function ApdataFlowPanel({
       setEstablishments(list)
       setSelectedCnpjKeys(list.map((e) => e.key))
       setRamos(ramoList)
-      const ramoIds = ramoList.map((r) => r.id)
-      setSelectedRamoIds(ramoIds)
-      if (ramoIds.length > 0) {
-        const mapped = sectorFromSelectedRamos(ramoList, ramoIds)
-        const dbLabel = segmentLabelFromSelectedRamos(ramoList, ramoIds)
-        const preset = resolveSectorPreset(mapped)
-        setSector(mapped)
-        // Always keep the real Apdata ramo description as the segment name.
-        setSectorLabel(dbLabel || preset.label)
-        setSectorBufferPct(suggestedBufferPctFromSelectedRamos(ramoList, ramoIds))
-        setDefaultRegime(preset.defaultRegime)
-      }
+      // Keep all atividades selected for extract filters only —
+      // do not overwrite Passo 1 grupo / CNAE / buffer / regime.
+      setSelectedRamoIds(ramoList.map((r) => r.id))
     },
     [],
   )
@@ -574,24 +560,6 @@ export function ApdataFlowPanel({
     )
   }
 
-  function toggleRamo(id: number) {
-    setSelectedRamoIds((prev) => {
-      const next = prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
-      if (next.length > 0) {
-        const mapped = sectorFromSelectedRamos(ramos, next)
-        const dbLabel = segmentLabelFromSelectedRamos(ramos, next)
-        const preset = resolveSectorPreset(mapped)
-        setSector(mapped)
-        setSectorLabel(dbLabel || preset.label)
-        setSectorBufferPct(suggestedBufferPctFromSelectedRamos(ramos, next))
-        setDefaultRegime(preset.defaultRegime)
-      }
-      return next
-    })
-  }
-
   async function handleRun() {
     setError(null)
     setExported(null)
@@ -601,7 +569,7 @@ export function ApdataFlowPanel({
       return
     }
     if (ramos.length > 0 && selectedRamoIds.length === 0) {
-      setError('Selecione ao menos um ramo de serviço.')
+      setError('Selecione ao menos uma atividade econômica no catálogo.')
       return
     }
     setPhase('running')
@@ -1130,19 +1098,12 @@ export function ApdataFlowPanel({
             {phase === 'segment' && (
               <section className="mt-5">
                 <SectorStep
-                  templates={PILOT_TEMPLATES}
                   selectedId={sector}
                   sectorLabel={sectorLabel}
                   sectorBufferPct={sectorBufferPct}
                   defaultRegime={defaultRegime}
                   onSelect={(id) => {
-                    const preset = resolveSectorPreset(id)
                     setSector(id)
-                    if (id !== CUSTOM_SECTOR_ID) {
-                      setSectorLabel(preset.label)
-                    }
-                    setSectorBufferPct(preset.defaultBufferPct)
-                    setDefaultRegime(preset.defaultRegime)
                   }}
                   onSectorMetaChange={(meta) => {
                     if (meta.sectorLabel != null) setSectorLabel(meta.sectorLabel)
@@ -1442,30 +1403,8 @@ export function ApdataFlowPanel({
                     </tbody>
                   </table>
                 </div>
-                {ramos.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-[var(--color-muted)] uppercase">
-                      Ramos de serviço
-                    </p>
-                    <ul className="max-h-32 overflow-y-auto border border-[var(--color-line)] bg-white/60">
-                      {ramos.map((ramo) => (
-                        <li
-                          key={ramo.id}
-                          className="border-b border-[var(--color-line)]/60 last:border-b-0"
-                        >
-                          <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={selectedRamoIds.includes(ramo.id)}
-                              onChange={() => toggleRamo(ramo.id)}
-                            />
-                            <span>{ramo.label}</span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {/* RamosAtividadesEmpresas kept in state for extract filters;
+                    Passo 1 uses CNAE / grupos — hide Ramos jargon from main UI. */}
                 <ExtractFiltersPanel
                   value={extractFilters}
                   onChange={setExtractFilters}
@@ -1870,7 +1809,7 @@ export function ApdataFlowPanel({
                           placeholder={
                             manualMode
                               ? 'Ex.: Varejo, Indústria, Serviços…'
-                              : 'Descrição do ramo'
+                              : 'Nome do segmento / CNAE fiscal'
                           }
                         />
                       </label>
