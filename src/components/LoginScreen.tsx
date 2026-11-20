@@ -1,6 +1,6 @@
 /**
- * Soft first-paint gate — immersive navy / emerald (executive).
- * Glass widgets, perspective mesh, Lumen orb, white central card.
+ * Soft first-paint gate — pixel-faithful to media/login-reference-exact.png.
+ * Glass widgets, neon topo mesh, Lumen orb, white chrome card.
  * Soft gate only — no IdP; does not touch the simulate engine.
  */
 import { useState, type FormEvent } from 'react'
@@ -13,13 +13,15 @@ export interface LoginScreenProps {
   onContinueWithoutLogin?: () => void
 }
 
+const DAYS = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'] as const
+
 /** Official 6×1 mark (same path as chrome / favicon). */
-function BrandMark({ className }: { className?: string }) {
+function BrandMark({ className, size = 20 }: { className?: string; size?: number }) {
   return (
     <svg
       className={className}
-      width="20"
-      height="20"
+      width={size}
+      height={size}
       viewBox="0 0 32 32"
       fill="none"
       aria-hidden
@@ -36,8 +38,8 @@ function CalendarGlyph({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -48,17 +50,16 @@ function CalendarGlyph({ className }: { className?: string }) {
     >
       <rect x="3" y="4" width="18" height="18" rx="2" />
       <path d="M16 2v4M8 2v4M3 10h18" />
-      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
     </svg>
   )
 }
 
-function MailGlyph({ className }: { className?: string }) {
+function SparkGlyph({ className }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -67,141 +68,348 @@ function MailGlyph({ className }: { className?: string }) {
       strokeLinejoin="round"
       aria-hidden
     >
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 7l9 6 9-6" />
+      <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
     </svg>
   )
 }
 
-function LockGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="5" y="11" width="14" height="10" rx="2" />
-      <path d="M8 11V8a4 4 0 018 0v3" />
-    </svg>
-  )
-}
-
-function CheckGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M8.5 12.5l2.5 2.5 4.5-5" />
-    </svg>
-  )
-}
-
-function ArrowGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
-  )
-}
-
-function RingGauge({
-  percent,
-  label,
-  sublabel,
-}: {
-  percent: number
-  label: string
-  sublabel: string
-}) {
-  const radius = 24
+function RingGauge({ percent, glowId }: { percent: number; glowId: string }) {
+  const radius = 28
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (percent / 100) * circumference
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className="relative flex h-16 w-16 items-center justify-center">
-        <svg className="h-16 w-16 -rotate-90" viewBox="0 0 60 60">
-          <circle
-            cx="30"
-            cy="30"
-            r={radius}
-            stroke="rgba(255,255,255,0.12)"
-            strokeWidth="5"
-            fill="none"
-          />
-          <circle
-            cx="30"
-            cy="30"
-            r={radius}
-            stroke="#34d399"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            fill="none"
-          />
-        </svg>
-        <span className="absolute text-xs font-bold text-white tabular-nums">
-          {percent}%
-        </span>
-      </div>
-      <span className="text-[11px] font-semibold text-emerald-200">{label}</span>
-      <span className="text-[10px] text-slate-300/75">{sublabel}</span>
+    <div className="login-gauge">
+      <svg className="login-gauge-svg" viewBox="0 0 72 72" aria-hidden>
+        <defs>
+          <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="1.4" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <circle
+          cx="36"
+          cy="36"
+          r={radius}
+          stroke="rgba(255,255,255,0.12)"
+          strokeWidth="5"
+          fill="none"
+        />
+        <circle
+          cx="36"
+          cy="36"
+          r={radius}
+          stroke="#3dff9a"
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          fill="none"
+          filter={`url(#${glowId})`}
+        />
+      </svg>
+      <span className="login-gauge-value tabular-nums">{percent}%</span>
     </div>
   )
 }
 
-function MiniSparkline() {
+/** Irregular neon topographic wireframe — lower stage. */
+function NeonMesh() {
+  const rows = [160, 195, 230, 265, 300, 340, 385, 435, 490]
+  const cols = [40, 140, 240, 340, 440, 540, 650, 760, 870, 980, 1090, 1200, 1310, 1420]
+
+  function rowY(base: number, x: number) {
+    const valley = Math.pow((x - 720) / 520, 2) * 55
+    const wave = Math.sin(x / 95) * 10 + Math.cos(x / 140) * 7
+    return base + valley + wave
+  }
+
+  const rowPaths = rows.map((base) => {
+    const pts = cols.map((x) => `${x} ${rowY(base, x).toFixed(1)}`)
+    return `M ${pts.join(' L ')}`
+  })
+
+  const colPaths = cols.map((x, i) => {
+    const pts = rows.map((base) => `${x + (i % 2 === 0 ? 0 : 6)} ${rowY(base, x).toFixed(1)}`)
+    return `M ${pts.join(' L ')}`
+  })
+
+  const nodes: Array<[number, number]> = []
+  rows.forEach((base, ri) => {
+    cols.forEach((x, ci) => {
+      if ((ri + ci) % 2 === 0) nodes.push([x, rowY(base, x)])
+    })
+  })
+
   return (
-    <svg viewBox="0 0 220 72" className="h-16 w-full overflow-visible">
+    <svg
+      className="login-neon-mesh"
+      viewBox="0 0 1440 560"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
       <defs>
-        <linearGradient id="lumenSparkFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#34d399" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#34d399" stopOpacity="0.0" />
+        <linearGradient id="meshFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#69e3b0" stopOpacity="0" />
+          <stop offset="18%" stopColor="#69e3b0" stopOpacity="0.28" />
+          <stop offset="55%" stopColor="#4af2a1" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#69e3b0" stopOpacity="0.12" />
         </linearGradient>
+        <filter id="meshGlow" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="1.1" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
-      <path
-        d="M 0 54 L 36 42 L 72 48 L 108 26 L 146 33 L 184 14 L 220 22 L 220 72 L 0 72 Z"
-        fill="url(#lumenSparkFill)"
-      />
-      <path
-        d="M 0 54 L 36 42 L 72 48 L 108 26 L 146 33 L 184 14 L 220 22"
+      <g
         fill="none"
-        stroke="#6ee7b7"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="184" cy="14" r="4" fill="#a7f3d0" />
+        stroke="url(#meshFade)"
+        strokeWidth="1.25"
+        filter="url(#meshGlow)"
+      >
+        {rowPaths.map((d, i) => (
+          <path key={`r-${i}`} d={d} />
+        ))}
+        {colPaths.map((d, i) => (
+          <path key={`c-${i}`} d={d} />
+        ))}
+        <path d="M60 250 L200 290 L340 255 L500 320 L660 270 L820 330 L980 275 L1140 315 L1300 260 L1440 290" />
+        <path d="M80 320 L230 370 L390 335 L560 410 L730 360 L900 430 L1070 375 L1240 420 L1400 380" />
+        <path d="M100 390 L260 450 L430 410 L600 490 L780 440 L960 515 L1130 460 L1310 500" />
+      </g>
+      <g fill="#9fffd4">
+        {nodes.map(([cx, cy], i) => (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={i % 5 === 0 ? 2.4 : 1.35}
+            opacity={0.35 + (i % 4) * 0.12}
+          />
+        ))}
+      </g>
     </svg>
+  )
+}
+
+function LumenOrb() {
+  const particles = [
+    { t: '8%', r: '12%', s: 6, o: 0.85 },
+    { t: '18%', r: '28%', s: 3, o: 0.7 },
+    { t: '2%', r: '38%', s: 4, o: 0.55 },
+    { t: '28%', r: '8%', s: 5, o: 0.75 },
+    { t: '35%', r: '42%', s: 2.5, o: 0.6 },
+    { t: '42%', r: '18%', s: 7, o: 0.45 },
+    { t: '52%', r: '32%', s: 3.5, o: 0.7 },
+    { t: '12%', r: '55%', s: 4.5, o: 0.5 },
+    { t: '60%', r: '5%', s: 3, o: 0.65 },
+    { t: '68%', r: '48%', s: 5, o: 0.4 },
+    { t: '22%', r: '-5%', s: 2.5, o: 0.8 },
+    { t: '-4%', r: '22%', s: 3, o: 0.55 },
+    { t: '48%', r: '-8%', s: 4, o: 0.5 },
+  ]
+
+  return (
+    <div className="login-lumen" aria-hidden>
+      <div className="login-lumen-glow" />
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="login-lumen-particle"
+          style={{
+            top: p.t,
+            right: p.r,
+            width: p.s,
+            height: p.s,
+            opacity: p.o,
+            animationDelay: `${i * 0.35}s`,
+          }}
+        />
+      ))}
+      <div className="login-lumen-orb">
+        <div className="login-lumen-face">
+          <span className="login-lumen-eye" />
+          <span className="login-lumen-eye" />
+          <span className="login-lumen-smile" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ScheduleWidget() {
+  const bars = [
+    { h: 28, float: false },
+    { h: 42, float: false },
+    { h: 38, float: true, top: 18 },
+    { h: 48, float: true, top: 36 },
+    { h: 55, float: false },
+    { h: 32, float: false },
+    { h: 22, float: false },
+  ]
+
+  return (
+    <div className="login-glass login-w-schedule">
+      <div className="login-glass-title">
+        <CalendarGlyph />
+        <span>Schedule</span>
+      </div>
+      <div className="login-schedule-bars">
+        {bars.map((b, i) => (
+          <div key={i} className="login-schedule-col">
+            <div className="login-schedule-track">
+              <span
+                className="login-schedule-fill"
+                style={
+                  b.float
+                    ? { height: `${b.h}%`, top: `${b.top}%`, bottom: 'auto' }
+                    : { height: `${b.h}%` }
+                }
+              />
+            </div>
+            <span className="login-day-label">{DAYS[i]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RitmoWidget() {
+  return (
+    <div className="login-glass login-w-ritmo">
+      <div className="login-glass-title row">
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarGlyph className="text-emerald-300" />
+          Ritmo de Escala
+        </span>
+        <span className="login-pill">6x1 - 5x2</span>
+      </div>
+      <div className="login-ritmo-days">
+        {DAYS.map((d, i) => (
+          <span
+            key={`${d}-${i}`}
+            className={`login-ritmo-day${i === 3 ? ' is-active' : ''}`}
+          >
+            {d}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SimulacaoWidget() {
+  return (
+    <div className="login-glass login-w-simulacao">
+      <div className="flex items-start gap-2.5">
+        <span className="login-simulacao-icon">
+          <SparkGlyph />
+        </span>
+        <div>
+          <p className="text-[12px] font-semibold text-white">Simulação viva</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-white/65">
+            Turnos, folgas e impacto em um só olhar.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ShiftCoverageWidget() {
+  return (
+    <div className="login-glass login-w-shift">
+      <p className="login-glass-title">Shift coverage</p>
+      <div className="login-shift-gauges">
+        <div className="login-shift-gauge-card">
+          <RingGauge percent={95} glowId="loginGaugeGlow95" />
+          <span className="login-shift-gauge-label">Scheduled coverage</span>
+        </div>
+        <div className="login-shift-gauge-card">
+          <RingGauge percent={50} glowId="loginGaugeGlow50" />
+          <span className="login-shift-gauge-label">Coverage</span>
+        </div>
+      </div>
+      <div className="login-shift-stats">
+        <span>
+          Shift Coverage <strong className="tabular-nums">0</strong>
+        </span>
+        <span>
+          Shift Cost <strong className="tabular-nums">1.250</strong>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function LightDataWidget({
+  variant,
+}: {
+  variant: 'right' | 'depth'
+}) {
+  return (
+    <div
+      className={`login-glass login-w-light${variant === 'depth' ? ' is-depth' : ''}`}
+    >
+      <p className="login-glass-title">Light data</p>
+      <svg viewBox="0 0 180 88" className="login-light-svg" aria-hidden>
+        <defs>
+          <linearGradient id={`lightFill-${variant}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3dff9a" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#3dff9a" stopOpacity="0" />
+          </linearGradient>
+          <filter
+            id={`lightGlow-${variant}`}
+            x="-20%"
+            y="-20%"
+            width="140%"
+            height="140%"
+          >
+            <feGaussianBlur stdDeviation="1.2" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {[20, 40, 60, 80].map((y) => (
+          <line
+            key={y}
+            x1="18"
+            x2="172"
+            y1={y}
+            y2={y}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="1"
+          />
+        ))}
+        <path
+          d="M18 70 C40 62 55 48 72 52 C90 56 102 28 120 34 C138 40 152 22 172 28"
+          fill="none"
+          stroke="#5eead4"
+          strokeWidth="1.4"
+          opacity="0.55"
+        />
+        <path
+          d="M18 58 C38 50 52 66 70 44 C88 22 104 38 122 30 C140 22 156 40 172 18 L172 88 L18 88 Z"
+          fill={`url(#lightFill-${variant})`}
+        />
+        <path
+          d="M18 58 C38 50 52 66 70 44 C88 22 104 38 122 30 C140 22 156 40 172 18"
+          fill="none"
+          stroke="#3dff9a"
+          strokeWidth="2"
+          strokeLinecap="round"
+          filter={`url(#lightGlow-${variant})`}
+        />
+      </svg>
+    </div>
   )
 }
 
@@ -214,7 +422,6 @@ export function LoginScreen({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -225,58 +432,41 @@ export function LoginScreen({
       return
     }
 
-    setIsSubmitting(true)
-    window.setTimeout(() => {
-      setIsSubmitting(false)
-      if (onLoginSuccess) {
-        onLoginSuccess(email.trim())
-      } else if (enterDemo) {
-        enterDemo()
-      } else {
-        setStatusMessage(
-          'Ambiente preparado. Conecte seu provedor de autenticação para validar o acesso.',
-        )
-      }
-    }, 350)
+    if (onLoginSuccess) {
+      onLoginSuccess(email.trim())
+    } else if (enterDemo) {
+      enterDemo()
+    } else {
+      setStatusMessage(
+        'Ambiente preparado. Conecte seu provedor de autenticação para validar o acesso.',
+      )
+    }
   }
 
   return (
-    <div
-      className="login-immersive relative flex min-h-screen w-full flex-col justify-between overflow-hidden text-white"
-      style={{
-        background:
-          'radial-gradient(circle at 15% 22%, rgba(16, 185, 129, 0.24), transparent 38%), radial-gradient(circle at 82% 76%, rgba(5, 150, 105, 0.22), transparent 45%), linear-gradient(145deg, #051122 0%, #0B2545 50%, #07332a 100%)',
-      }}
-    >
-      <div
-        aria-hidden
-        className="login-perspective-mesh pointer-events-none absolute inset-x-0 bottom-0 h-72 opacity-25"
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, rgba(110, 231, 183, 0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(110, 231, 183, 0.14) 1px, transparent 1px)',
-          backgroundSize: '48px 36px',
-          transform: 'perspective(650px) rotateX(58deg)',
-          transformOrigin: 'bottom',
-        }}
-      />
+    <div className="login-exact">
+      <div className="login-exact-atmosphere" aria-hidden />
+      <NeonMesh />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-6 pt-6 sm:px-10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300/30 bg-emerald-400/15 text-emerald-300 shadow-lg">
-            <BrandMark />
+      {/* Floating glass stage */}
+      <div className="login-stage" aria-hidden>
+        <ScheduleWidget />
+        <RitmoWidget />
+        <SimulacaoWidget />
+        <ShiftCoverageWidget />
+        <LightDataWidget variant="right" />
+        <LightDataWidget variant="depth" />
+        <LumenOrb />
+      </div>
+
+      <header className="login-exact-header">
+        <div className="login-exact-brand">
+          <div className="login-mark">
+            <BrandMark size={18} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="login-brand text-base font-bold tracking-tight text-white">
-                Turnocheck
-              </span>
-              <span className="rounded-full border border-emerald-300/25 bg-emerald-400/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-200">
-                AHR Brasil
-              </span>
-            </div>
-            <p className="text-xs text-slate-300/80">
-              Simulador de escalas, turnos e impacto operacional
-            </p>
+            <p className="login-exact-brand-name">Turnocheck</p>
+            <p className="login-exact-brand-by">by AHR Brasil</p>
           </div>
         </div>
 
@@ -284,214 +474,81 @@ export function LoginScreen({
           <button
             type="button"
             onClick={enterDemo}
-            className="cursor-pointer rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-emerald-200 backdrop-blur-md transition hover:bg-white/15"
+            className="login-ghost-btn"
             data-testid="login-explorar-simulador"
           >
-            Explorar Simulador
+            Entrar sem login
           </button>
         ) : null}
       </header>
 
-      <main className="relative z-10 mx-auto my-auto grid w-full max-w-7xl grid-cols-1 items-center gap-8 px-6 py-8 sm:px-10 lg:grid-cols-12">
-        {/* Left glass widgets */}
-        <div className="hidden flex-col gap-4 lg:col-span-4 lg:flex">
-          <div className="space-y-3 rounded-2xl border border-emerald-300/20 bg-[#091d36]/75 p-4 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-emerald-200">
-                <CalendarGlyph className="text-emerald-300" />
-                Ritmo · Ciclos
-              </span>
-              <span className="rounded-full bg-emerald-400/20 px-2.5 py-0.5 font-semibold text-emerald-200">
-                6×1 → 5×2
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {[
-                { label: 'Seg–Sex', bars: [75, 85, 65, 90, 70, 35, 30] },
-                { label: 'Turnos', bars: [60, 70, 80, 65, 75, 50, 45] },
-              ].map((row, rIdx) => (
-                <div
-                  key={row.label}
-                  className="grid h-12 grid-cols-7 items-end gap-1.5"
-                >
-                  {row.bars.map((h, idx) => (
-                    <div
-                      key={`${rIdx}-${idx}`}
-                      className="flex h-full w-full items-end overflow-hidden rounded-md bg-white/10 p-0.5"
-                    >
-                      <div
-                        className={`w-full rounded-xs ${
-                          idx >= 5 ? 'bg-teal-300/75' : 'bg-emerald-400'
-                        }`}
-                        style={{ height: `${h}%` }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <div className="grid grid-cols-7 gap-1.5 pt-0.5 text-center text-[10px] font-semibold text-slate-300/80">
-                {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => (
-                  <span key={`${d}-${i}`}>{d}</span>
-                ))}
+      <main className="login-exact-main">
+        <div className="login-card-chrome">
+          <div className="login-card-inner">
+            <div className="login-card-brand">
+              <div className="login-mark login-mark-lg">
+                <BrandMark size={22} />
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-2xl border border-white/12 bg-[#091d36]/75 p-4 shadow-xl backdrop-blur-xl">
-            <div>
-              <p className="text-xs font-semibold text-white">Simulação viva</p>
-              <p className="mt-0.5 text-[11px] text-slate-300/80">
-                Turnos, folgas e impacto em um só olhar.
-              </p>
-            </div>
-            <span className="rounded-lg border border-emerald-300/20 bg-emerald-400/15 px-2.5 py-1 text-xs font-bold text-emerald-300 tabular-nums">
-              12×36 · 5×2
-            </span>
-          </div>
-        </div>
-
-        {/* Central white card */}
-        <div className="flex justify-center lg:col-span-4">
-          <div className="login-card w-full max-w-md space-y-5 rounded-3xl border border-white/80 bg-white p-7 text-slate-900 shadow-[0_28px_80px_rgba(0,0,0,0.55)] sm:p-8">
-            <div className="space-y-1 text-center">
-              <div className="mb-1 inline-flex items-center gap-2 rounded-lg bg-[#0B2545] px-3 py-1 text-xs font-bold tracking-wide text-white">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                TURNOCHECK
-                <span className="font-normal text-emerald-300">by AHR Brasil</span>
-              </div>
-              <h1 className="login-brand text-2xl font-bold tracking-tight text-[#0B2545]">
-                Bem-vindo ao Turnocheck
-              </h1>
-              <p className="text-xs text-slate-500 sm:text-sm">
-                Planeje escalas e veja o impacto com mais clareza.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label
-                  htmlFor="login-email"
-                  className="mb-1.5 block text-xs font-semibold text-slate-700"
-                >
+                <p className="login-card-wordmark">TURNOCHECK</p>
+                <p className="login-card-byline">by AHR Brasil</p>
+              </div>
+            </div>
+
+            <h1 className="login-card-title">Bem-vindo ao Turnocheck</h1>
+            <p className="login-card-sub">
+              Planeje escalas e veja o impacto com mais clareza.
+            </p>
+
+            <form onSubmit={handleSubmit} className="login-card-form">
+              <div>
+                <label htmlFor="login-email" className="login-field-label">
                   E-mail
                 </label>
-                <div className="relative">
-                  <MailGlyph className="absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    id="login-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="voce@empresa.com.br"
-                    autoComplete="username"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-2.5 pr-3.5 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
-                  />
-                </div>
+                <input
+                  id="login-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="voce@empresa.com.br"
+                  autoComplete="username"
+                  className="login-field"
+                />
               </div>
 
               <div>
-                <label
-                  htmlFor="login-password"
-                  className="mb-1.5 block text-xs font-semibold text-slate-700"
-                >
+                <label htmlFor="login-password" className="login-field-label">
                   Senha
                 </label>
-                <div className="relative">
-                  <LockGlyph className="absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    id="login-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-2.5 pr-3.5 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
-                  />
-                </div>
+                <input
+                  id="login-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  className="login-field"
+                />
               </div>
 
               {statusMessage ? (
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                  <CheckGlyph className="mt-0.5 shrink-0 text-emerald-600" />
-                  <span>{statusMessage}</span>
-                </div>
+                <p className="login-status">{statusMessage}</p>
               ) : null}
 
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0B2545] px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-800 disabled:opacity-60"
+                className="login-submit"
                 data-testid="login-acesso-consultivo"
               >
-                <span>
-                  {isSubmitting ? 'Entrando...' : 'Acesso Consultivo'}
-                </span>
-                <ArrowGlyph />
+                Acessar →
               </button>
             </form>
-
-            {enterDemo ? (
-              <div className="pt-0.5 text-center">
-                <button
-                  type="button"
-                  onClick={enterDemo}
-                  className="cursor-pointer text-xs font-semibold text-emerald-700 underline underline-offset-4 hover:text-emerald-800"
-                >
-                  Explorar Simulador sem login
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Right glass widgets + Lumen */}
-        <div className="hidden flex-col gap-4 lg:col-span-4 lg:flex">
-          <div className="space-y-3 rounded-2xl border border-emerald-300/20 bg-[#091d36]/75 p-4 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-white">Cobertura de turno</span>
-              <span className="font-semibold text-emerald-300 tabular-nums">
-                Custo: R$ 1.250/mês
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <RingGauge label="Cobertura" percent={95} sublabel="Meta turno" />
-              <RingGauge label="Transição" percent={50} sublabel="Fase piloto" />
-            </div>
-          </div>
-
-          <div className="space-y-1 rounded-2xl border border-white/12 bg-[#091d36]/75 p-4 shadow-xl backdrop-blur-xl">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-200">Projeção de carga</span>
-              <span className="font-semibold text-emerald-300 tabular-nums">
-                +18% eficiência
-              </span>
-            </div>
-            <MiniSparkline />
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-1">
-            <div className="text-right text-xs">
-              <p className="font-bold text-emerald-200">Lumen</p>
-              <p className="text-[11px] text-slate-300/80">
-                Assistente de escala AHR
-              </p>
-            </div>
-            <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-300 via-emerald-500 to-teal-700 shadow-[0_0_35px_rgba(52,211,153,0.55)]">
-              <div className="flex h-9 w-9 flex-col items-center justify-center gap-1 rounded-full border border-emerald-200/30 bg-[#06182e]">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                </div>
-                <span className="h-1 w-3 rounded-full bg-emerald-300/90" />
-              </div>
-            </div>
           </div>
         </div>
       </main>
 
-      <footer className="relative z-10 mx-auto w-full max-w-7xl px-6 pb-5 text-center text-xs text-slate-300/75 sm:px-10">
-        AHR Brasil · Simulador de escalas e turnos · Proteção LGPD
+      <footer className="login-exact-footer">
+        AHR Brasil - Simulador de escalas e turnos
       </footer>
     </div>
   )
