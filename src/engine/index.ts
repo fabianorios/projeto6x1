@@ -26,6 +26,24 @@ export {
   resolveSectorPreset,
 } from './sectors'
 export type { SectorPreset, SectorPresetId } from './sectors'
+export {
+  OPERATIONAL_GROUPS,
+  OPERATIONAL_GROUP_DEFAULT_BUFFER_PCT,
+  isPersonalizadoGroup,
+  operationalGroupFromSector,
+  resolveOperationalGroup,
+} from './operational-groups'
+export type {
+  OperationalGroup,
+  OperationalGroupId,
+} from './operational-groups'
+export {
+  CNAE_CATALOG,
+  cnaeNearestOrCustom,
+  formatCnaeLabel,
+  searchCnaeCatalog,
+} from './cnae-catalog'
+export type { CnaeEntry } from './cnae-catalog'
 export { parseScale } from './scale'
 /**
  * `simulate` is intentionally NOT re-exported here so the SPA eager graph can
