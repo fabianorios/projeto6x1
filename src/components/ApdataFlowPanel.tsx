@@ -57,20 +57,12 @@ import {
   type RamoAtividade,
 } from '../apdata/ramos'
 import {
-  clearScenarioBasket,
-  CUSTOM_SECTOR_ID,
   DEFAULT_ESTRATEGIA_ABSORCAO,
   DEFAULT_OPERATING_HOURS,
   DEFAULT_REGIME_FUNCIONAMENTO,
   DEFAULT_TAX_REGIME,
   REGIME_FUNCIONAMENTO_LABELS,
-  RULE_VERSIONS,
-  resolveSectorPreset,
-  simulate,
-  upsertSimulationInBasket,
-  loadScenarioBasket,
-  prepareOHScopeRulesForInput,
-  syncOhScopeRulesWithGlobalHours,
+  buildApdataHierarchy,
   type EstrategiaAbsorcao,
   type OHScopeRule,
   type OperatingHours,
@@ -79,10 +71,21 @@ import {
   type RegimeFuncionamento,
   type ScenarioBasket,
   type ScenarioId,
-  type SectorId,
   type SimulationResult,
   type TaxRegime,
-} from '../engine'
+} from '../engine/display'
+import type { SectorId } from '../engine/types'
+import {
+  prepareOHScopeRulesForInput,
+  syncOhScopeRulesWithGlobalHours,
+} from '../engine/operating-hours'
+import { CUSTOM_SECTOR_ID, resolveSectorPreset } from '../engine/sectors'
+import { RULE_VERSIONS } from '../engine/rules'
+import {
+  clearScenarioBasket,
+  loadScenarioBasket,
+  upsertSimulationInBasket,
+} from '../engine/scenario-basket'
 import { PILOT_TEMPLATES } from '../templates'
 import {
   defaultBenefitParams,
@@ -860,7 +863,10 @@ export function ApdataFlowPanel({
         defaultTaxRegime,
         defaultRegimeFuncionamento: defaultRegime,
         payrollRows: payrollRowsForApi(payrollRows),
-        prefs: { includeScheduleSuggestions: true },
+        prefs: {
+          includeScheduleSuggestions: true,
+          includeApdataHierarchySeed: true,
+        },
       })
       logPerf(perfLabel, performance.now() - t0, {
         rowCount: payrollRows.length,
@@ -871,16 +877,34 @@ export function ApdataFlowPanel({
       setSimulateNotice(null)
       setSimulateProgress(SIMULATE_PROGRESS.assemble)
       await yieldForPaint()
-      return remote.result
+      const seeded =
+        remote.apdataHierarchy && typeof remote.apdataHierarchy === 'object'
+          ? {
+              ...remote.result,
+              apdataHierarchy:
+                remote.apdataHierarchy as NonNullable<
+                  SimulationResult['apdataHierarchy']
+                >,
+            }
+          : remote.result
+      return seeded
     } catch (err) {
       if (!isSimulateNetworkFailure(err)) {
         throw err
       }
       setSimulateProgress(SIMULATE_PROGRESS.calcLocal)
       await yieldForPaint()
+      // Lazy chunk: simulate heuristics stay out of the eager SPA graph.
+      const { simulate } = await import('../engine/simulate')
       const next = measurePerf(
         perfLabel,
-        () => simulate(input),
+        () => {
+          const raw = simulate(input)
+          return {
+            ...raw,
+            apdataHierarchy: buildApdataHierarchy(raw),
+          }
+        },
         { rowCount: payrollRows.length, centerHint, via: 'local-fallback' },
       )
       setSimulateNotice(

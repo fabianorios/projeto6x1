@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:check-heuristics": "node scripts/assert-dist-no-eager-heuristics.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "tsx --test src/**/*.test.ts src/engine/**/*.test.ts src/apdata/**/*.test.ts src/utils/**/*.test.ts"

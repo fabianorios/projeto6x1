@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { simulate } from '../engine'
+import { simulate } from '../engine/simulate'
 import { DEFAULT_OPERATING_HOURS } from '../engine/operating-hours'
 import { parsePayrollCsv } from '../engine/payroll'
 import type { SimulationInput } from '../engine/types'

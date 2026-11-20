@@ -9,7 +9,7 @@ import {
   type ResultLineItem,
   type ScenarioBasket,
   type SimulationResult,
-} from '../engine'
+} from '../engine/display'
 import { getTemplate } from '../templates'
 import { buildHcIncreaseSummary } from '../utils/hcIncreaseSummary'
 import { HcIncreaseSummary } from './HcIncreaseSummary'

@@ -10,6 +10,7 @@ import type { ExclusionHit } from './schedule-policy'
 import type { ScheduleSuggestion } from './schedule-suggest'
 import type { ChargeBreakdown } from './charges'
 import type { AbsorptionPlan, HeCascadeResult } from './absorption'
+import type { ApdataHierarchyTree } from './apdata-hierarchy'
 import type { CoberturaPorDia } from './coverage-days'
 import type { TurmaDistribution } from './crew-distribution'
 import type {
@@ -319,4 +320,10 @@ export interface SimulationResult {
   heCascade: HeCascadeResult
   /** Crew distribution for default / aggregate regime. */
   distribuicaoTurmas: TurmaDistribution
+  /**
+   * Optional Apdata cadastral tree (Jornada→Horário→Ciclo→Grade).
+   * Prefer server seed (`prefs.includeApdataHierarchySeed`) so the SPA does
+   * not re-run hierarchy builders for export / Fiel da Balança defaults.
+   */
+  apdataHierarchy?: ApdataHierarchyTree
 }

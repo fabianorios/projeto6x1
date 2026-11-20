@@ -2,12 +2,15 @@
  * Passo 5 — Guided Apdata structure: Jornadas+Steps, then selectable Horários.
  * Does not “send” to ERP; rotina 1215 txt (29752 Jornadas + 29762 Itens) + optional JSON.
  * LGPD: CC codes, schedule codes, turmas — no names/CPF.
+ *
+ * Candidates (`deriveApdataCandidates` / `buildApdataHierarchy`) run eagerly on
+ * mount via useMemo — independent of the parent cadastral accordion being open.
+ * JSON handoff / rotina 1215 also build from SimulationResult, not from DOM.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import {
   REGIME_FUNCIONAMENTO_LABELS,
-  buildApdataHierarchy,
   defaultApdataDataInicio,
   deriveApdataCandidates,
   formatHourClock,
@@ -15,9 +18,10 @@ import {
   type ApdataHorarioCandidate,
   type ApdataJornadaCandidate,
   type SimulationResult,
-} from '../engine'
+} from '../engine/display'
 import { downloadAhrHandoff } from '../utils/exportHandoff'
 import { downloadRotina1215Jornadas } from '../utils/exportRotina1215Jornadas'
+import { resolveApdataHierarchy } from '../utils/resolveApdataHierarchy'
 import { cnpjDigits } from '../apdata/cnpj'
 import {
   OPERACIONAL_SEM_CNPJ_KEY,
@@ -507,7 +511,7 @@ export function ApdataHierarchyView({
 
   const tree = useMemo(() => {
     if (!generated) return null
-    return buildApdataHierarchy(result, {
+    return resolveApdataHierarchy(result, {
       dataInicio,
       includeLunchJornada: includeLunch,
       selectedHorarioIds: selectedIds,
