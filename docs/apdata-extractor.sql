@@ -1,8 +1,15 @@
 /* ============================================================================
-   TURNOCHECK — EXTRATOR CANÔNICO APDATA (SEM PII / LGPD-SAFE)
+   TURNOCHECK — EXTRATOR CANÔNICO APDATA
    Compatível com Aptools (Exportação CSV) e Conexão Direta Read-Only.
+
+   GRAINS:
+   - Aptools (Copiar SQL) DEFAULT = nominal: 1 linha/colaborador com
+     CON_DssNome AS nome (sem omissão LGPD automática). UI pode optar por
+     grain=aggregate.
+   - Conexão Direta / grain=aggregate = LGPD-safe: cargo×CC×escala, sem
+     nome/CPF/PIS/matrícula (bloco SQL abaixo = aggregate).
    ============================================================================
-   REGRAS APLICADAS:
+   REGRAS APLICADAS (aggregate / Conexão Direta):
    1. Zero PII: Nenhum nome, CPF, PIS ou matrícula individual é extraído.
    2. Situação: CON_CdiSituacao NOT IN (0, 2, 3, 99) por padrão; Premissas pode
       excluir afastados (SIT_OplAfastamento=1) via toggle.

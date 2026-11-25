@@ -1,12 +1,31 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  DEFAULT_APTOOLS_GRAIN,
   getAptoolsExtractorScript,
   getExtractorSelectBody,
 } from './extractorSql'
 import { mapExtractorAggregatesToPayroll } from './mapExtractorRows'
 
 describe('extractor SQL (SPA)', () => {
+  it('Aptools default grain is nominal (not LGPD aggregate omit)', () => {
+    assert.equal(DEFAULT_APTOOLS_GRAIN, 'nominal')
+    const mssql = getAptoolsExtractorScript('mssql')
+    const oracle = getAptoolsExtractorScript('oracle')
+    for (const sql of [mssql, oracle]) {
+      assert.match(sql, /CON_DssNome/i)
+      assert.match(sql, /AS nome\b/i)
+      assert.match(sql, /CAST\(1 AS/i)
+      assert.ok(
+        !/COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i.test(sql),
+        'nominal must not COUNT-aggregate colaboradores',
+      )
+    }
+    const agg = getAptoolsExtractorScript('mssql', { grain: 'aggregate' })
+    assert.ok(!/CON_DssNome/i.test(agg))
+    assert.match(agg, /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i)
+  })
+
   it('exposes MSSQL and Oracle Aptools scripts', () => {
     const mssql = getAptoolsExtractorScript('mssql')
     const oracle = getAptoolsExtractorScript('oracle')
@@ -249,10 +268,35 @@ describe('mapExtractorAggregatesToPayroll', () => {
       assert.match(sql, /AS nome_sindicato/)
       assert.match(sql, /AS cnpj_sindicato/)
       assert.match(sql, /AS cod_sindicato/)
-      assert.ok(!/CON_DssNome/i.test(sql))
+      assert.match(sql, /CON_DssNome/i)
     }
+    const agg = getAptoolsExtractorScript('mssql', { grain: 'aggregate' })
+    assert.ok(!/CON_DssNome/i.test(agg))
   })
 
+  it('maps nominal nome through to PayrollRow', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        nome: 'Ana Costa',
+        qtd_colaboradores: 1,
+        massa_salarial_base: 2200,
+        carga_semanal_atual: 44,
+      },
+    ])
+    assert.equal(rows[0]!.nome, 'Ana Costa')
+    assert.equal(rows[0]!.quantidade, 1)
+    const omitted = mapExtractorAggregatesToPayroll([
+      {
+        cod_cc: 'CC-01',
+        desc_cargo: 'Operador',
+        qtd_colaboradores: 3,
+        massa_salarial_base: 6600,
+      },
+    ])
+    assert.equal(omitted[0]!.nome, null)
+  })
 
   it('maps optional horario_trabalho_atual and keeps it optional', () => {
     const withWin = mapExtractorAggregatesToPayroll([

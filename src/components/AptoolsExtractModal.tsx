@@ -5,8 +5,10 @@ import {
   type FolhaAptoolsProgressStage,
 } from '../api/folhaAptools'
 import {
+  DEFAULT_APTOOLS_GRAIN,
   getAptoolsExtractorScript,
   type ExtractorDialect,
+  type ExtractorGrain,
 } from '../apdata/extractorSql'
 import type { PayrollParseIssue, PayrollRow } from '../engine'
 import { readCsvFileText } from '../utils/csvEncoding'
@@ -53,6 +55,11 @@ export function AptoolsExtractModal({
   const fileId = useId()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dialect, setDialect] = useState<ExtractorDialect>('mssql')
+  /**
+   * Aptools default = nominal (1 row/colaborador with nome).
+   * Optional aggregate = LGPD omit (cargo×CC×escala) — off unless user opts in.
+   */
+  const [grain, setGrain] = useState<ExtractorGrain>(DEFAULT_APTOOLS_GRAIN)
   const [copied, setCopied] = useState(false)
   /** Manual “pronto / já usei” — auto-checks after a successful Copiar SQL. */
   const [itemReady, setItemReady] = useState(false)
@@ -64,24 +71,31 @@ export function AptoolsExtractModal({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [sql, setSql] = useState(() => getAptoolsExtractorScript(dialect))
+  const [sql, setSql] = useState(() =>
+    getAptoolsExtractorScript(dialect, { grain: DEFAULT_APTOOLS_GRAIN }),
+  )
 
   useEffect(() => {
     let cancelled = false
-    // Sync dialect immediately so Copiar never ships the previous engine's SQL
+    // Sync dialect/grain immediately so Copiar never ships the previous SQL
     // while the API refresh is in flight (Oracle tab + MSSQL body → Aptools errors).
-    setSql(getAptoolsExtractorScript(dialect))
+    setSql(getAptoolsExtractorScript(dialect, { grain }))
     async function load() {
       try {
         const res = await fetch(
-          `${API_BASE}/api/query/extractor-sql?engine=${dialect}`,
+          `${API_BASE}/api/query/extractor-sql?engine=${dialect}&grain=${grain}`,
         )
         if (!res.ok) throw new Error('api')
-        const body = (await res.json()) as { sql?: string; engine?: string }
+        const body = (await res.json()) as {
+          sql?: string
+          engine?: string
+          grain?: string
+        }
         if (
           !cancelled &&
           body.sql &&
-          (body.engine === undefined || body.engine === dialect)
+          (body.engine === undefined || body.engine === dialect) &&
+          (body.grain === undefined || body.grain === grain)
         ) {
           const next =
             dialect === 'oracle' ? body.sql.replace(/;\s*$/, '') : body.sql
@@ -95,7 +109,7 @@ export function AptoolsExtractModal({
     return () => {
       cancelled = true
     }
-  }, [dialect])
+  }, [dialect, grain])
 
   async function copySql() {
     setCopyError(null)
@@ -215,8 +229,8 @@ export function AptoolsExtractModal({
               Extrair via Aptools (Copiar Query)
             </h2>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Query oficial LGPD-safe (agregado cargo × CC × escala — sem nome,
-              CPF ou matrícula). Siga os 3 passos abaixo.
+              Query oficial por colaborador (nome + 1 linha cada). Omissão LGPD
+              agregada é opcional — não liga sozinha. Siga os 3 passos abaixo.
             </p>
           </div>
           <button
@@ -254,7 +268,7 @@ export function AptoolsExtractModal({
                     aria-selected={selected}
                     onClick={() => {
                       setDialect(id)
-                      setSql(getAptoolsExtractorScript(id))
+                      setSql(getAptoolsExtractorScript(id, { grain }))
                       setCopied(false)
                       setItemReady(false)
                       setCopyError(null)
@@ -293,7 +307,9 @@ export function AptoolsExtractModal({
                   <span className="min-w-0 font-medium leading-snug">
                     Extrator Folha
                     <span className="mt-0.5 block text-xs font-normal text-[var(--color-muted)] sm:mt-0 sm:ml-1.5 sm:inline">
-                      (agregado LGPD — sem nome/CPF/matrícula)
+                      {grain === 'nominal'
+                        ? '(nominal — 1 linha/colaborador com nome)'
+                        : '(agregado LGPD — sem nome/CPF/matrícula)'}
                     </span>
                   </span>
                 </label>
@@ -314,6 +330,36 @@ export function AptoolsExtractModal({
                     {sqlOpen ? 'Ocultar SQL' : 'Ver SQL'}
                   </button>
                 </div>
+              </li>
+              <li className="border-t border-[var(--color-line)] px-3 py-2">
+                <label className="flex items-start gap-2 text-sm text-[var(--color-ink)]">
+                  <input
+                    type="checkbox"
+                    checked={grain === 'aggregate'}
+                    onChange={(e) => {
+                      setGrain(e.target.checked ? 'aggregate' : 'nominal')
+                      setCopied(false)
+                      setItemReady(false)
+                      setCopyError(null)
+                    }}
+                    className="mt-0.5 shrink-0"
+                    data-testid="aptools-lgpd-omit-toggle"
+                    aria-describedby="aptools-lgpd-omit-hint"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      Omitir nomes (agregado LGPD)
+                    </span>
+                    <span
+                      id="aptools-lgpd-omit-hint"
+                      className="mt-0.5 block text-xs font-normal text-[var(--color-muted)]"
+                    >
+                      Desligado por padrão. Ligado: cargo × CC × escala sem
+                      nome/CPF/matrícula. A máscara LGPD da UI nos resultados
+                      continua independente.
+                    </span>
+                  </span>
+                </label>
               </li>
             </ul>
             {copyError ? (
@@ -340,8 +386,11 @@ export function AptoolsExtractModal({
             </p>
             <p className="mt-1 text-sm text-[var(--color-muted)]">
               Exporte o resultado no Aptools em formato TXT (separado por TAB) ou
-              CSV e arraste o arquivo aqui (sem PII — só agregados). O parse
-              roda no servidor em bases grandes.
+              CSV e arraste o arquivo aqui
+              {grain === 'nominal'
+                ? ' (nominal — coluna nome por colaborador)'
+                : ' (agregado LGPD — sem PII)'}
+              . O parse roda no servidor em bases grandes.
             </p>
           </li>
 

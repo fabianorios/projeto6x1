@@ -1,5 +1,6 @@
 /**
- * Map official extractor aggregates → PayrollRow[] (no PII).
+ * Map official extractor rows → PayrollRow[].
+ * Aggregate grain omits nome; Aptools nominal grain carries CON_DssNome.
  */
 
 import {
@@ -25,6 +26,8 @@ export type ExtractorAggregate = {
   desc_cc?: string
   cod_cargo?: string
   desc_cargo?: string
+  /** Aptools nominal grain — CON_DssNome (absent on LGPD aggregate). */
+  nome?: string | null
   cod_vinculo?: string
   cod_horario_atual?: string
   /** Outer work window HH:MM-HH:MM (optional). */
@@ -70,7 +73,7 @@ export type MapExtractorOptions = {
   slotAmounts?: BenefitSlotAmounts | null
 }
 
-/** Convert LGPD-safe extractor rows into engine PayrollRow[]. */
+/** Convert extractor rows into engine PayrollRow[] (nome when present). */
 export function mapExtractorAggregatesToPayroll(
   rows: ExtractorAggregate[],
   sessionOverridesOrOpts: BenefitSessionOverrides | MapExtractorOptions = {},
@@ -162,8 +165,8 @@ export function mapExtractorAggregatesToPayroll(
       vrDiasMesAtual: dias > 0 ? dias : null,
       vtValorDia: vt > 0 ? vt : null,
       vtDiasMesAtual: dias > 0 ? dias : null,
-      /** Aggregated Folha never carries person names (LGPD). */
-      nome: null,
+      /** Nominal Aptools: CON_DssNome; aggregate LGPD grain: null. */
+      nome: (r.nome ?? '').trim() || null,
       quantidade: qty || 1,
       escalaAtual: r.escala_atual || null,
       sourceLine: i + 2,

@@ -2,12 +2,30 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assertSelectOnly } from "@projeto-6x1/mcp";
 import {
+  DEFAULT_APTOOLS_GRAIN,
   buildExtractorQuery,
   getAptoolsExtractorScript,
 } from "./extractor-sql.js";
 import { assertNoPiiColumns, mapExtractorRows } from "./extractor-map.js";
 
 describe("extractor SQL", () => {
+  it("Aptools default grain is nominal (CON_DssNome, no auto LGPD omit)", () => {
+    assert.equal(DEFAULT_APTOOLS_GRAIN, "nominal");
+    const mssql = getAptoolsExtractorScript("mssql");
+    const oracle = getAptoolsExtractorScript("oracle");
+    for (const sql of [mssql, oracle]) {
+      assert.match(sql, /CON_DssNome/i);
+      assert.match(sql, /AS nome\b/i);
+      assert.ok(!/COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i.test(sql));
+    }
+    const agg = getAptoolsExtractorScript("mssql", { grain: "aggregate" });
+    assert.ok(!/CON_DssNome/i.test(agg));
+    assert.match(agg, /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i);
+    // Conexão Direta buildExtractorQuery stays aggregate by default.
+    const direct = buildExtractorQuery("mssql").sql;
+    assert.ok(!/CON_DssNome/i.test(direct));
+  });
+
   it("MSSQL body passes SELECT-only guard", () => {
     const { sql } = buildExtractorQuery("mssql");
     const r = assertSelectOnly(sql);
@@ -188,7 +206,17 @@ describe("extractor SQL", () => {
       assert.match(sql, /AS nome_sindicato/);
       assert.match(sql, /AS cnpj_sindicato/);
       assert.match(sql, /AS cod_sindicato/);
-      assert.ok(!/CON_DssNome/i.test(sql));
+      assert.match(sql, /CON_DssNome/i);
+    }
+    const agg = getAptoolsExtractorScript("mssql", { grain: "aggregate" });
+    assert.ok(!/CON_DssNome/i.test(agg));
+  });
+
+  it("nominal Aptools SQL passes SELECT-only guard", () => {
+    for (const dialect of ["mssql", "oracle"] as const) {
+      const sql = getAptoolsExtractorScript(dialect).replace(/;\s*$/, "");
+      const r = assertSelectOnly(sql);
+      assert.equal(r.ok, true, r.ok ? "" : r.reason);
     }
   });
 
