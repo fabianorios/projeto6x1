@@ -163,10 +163,22 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
   app.get("/extractor-sql", (c) => {
     const engine = (c.req.query("engine") ?? "mssql").toLowerCase();
     const dialect = engine === "oracle" ? "oracle" : "mssql";
+    const grainRaw = (c.req.query("grain") ?? "").toLowerCase();
+    const grain =
+      grainRaw === "aggregate" || grainRaw === "nominal"
+        ? grainRaw
+        : undefined;
+    const sql = getAptoolsExtractorScript(dialect, grain ? { grain } : {});
+    const resolvedGrain =
+      grain ?? ("nominal" as const);
     return c.json({
       engine: dialect,
-      sql: getAptoolsExtractorScript(dialect),
-      note: "Official Apdata extractor (LGPD-safe aggregates). TIP_* escalas (work×off); ConBeneficios→TBE_* → beneficios_agg (codigo|descricao|valor;…); classify in wizard step 4.",
+      grain: resolvedGrain,
+      sql,
+      note:
+        resolvedGrain === "nominal"
+          ? "Aptools Folha default: nominal (CON_DssNome + 1 row/colaborador). Pass grain=aggregate for LGPD-safe cargo×CC×escala omit. TIP_* escalas; beneficios_agg; classify in wizard step 4."
+          : "Aptools Folha aggregate (LGPD-safe — no nome/CPF/matrícula). TIP_* escalas; ConBeneficios→TBE_* → beneficios_agg; classify in wizard step 4.",
     });
   });
 

@@ -172,10 +172,23 @@ describe("API routes", () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.engine, "mssql");
+    assert.equal(body.grain, "nominal");
     assert.match(String(body.sql), /Contratados/i);
     assert.match(String(body.sql), /LOC_CdiLocal/);
+    assert.match(String(body.sql), /CON_DssNome/i);
     assert.ok(!/SET\s+TRANSACTION/i.test(String(body.sql)));
     assert.ok(!JSON.stringify(body).toLowerCase().includes("password"));
+  });
+
+  it("GET extractor-sql?grain=aggregate omits CON_DssNome", async () => {
+    const res = await app.request(
+      "/api/query/extractor-sql?engine=mssql&grain=aggregate",
+    );
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.grain, "aggregate");
+    assert.ok(!/CON_DssNome/i.test(String(body.sql)));
+    assert.match(String(body.sql), /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i);
   });
 
   it("GET extractor-sql?engine=oracle returns LISTAGG/NVL Folha (not MSSQL)", async () => {
@@ -183,10 +196,12 @@ describe("API routes", () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.engine, "oracle");
+    assert.equal(body.grain, "nominal");
     const sql = String(body.sql);
     assert.match(sql, /LISTAGG\s*\(/);
     assert.match(sql, /\bNVL\s*\(/);
     assert.match(sql, /beneficios_agg/);
+    assert.match(sql, /CON_DssNome/i);
     assert.ok(!/\bISNULL\s*\(/i.test(sql));
     assert.ok(!/\bSTRING_AGG\s*\(/i.test(sql));
     assert.ok(!/\bCHAR\s*\(/i.test(sql));
