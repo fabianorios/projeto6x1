@@ -71,6 +71,8 @@ describe('buildEscalasTurmasSpreadsheetXml', () => {
           sourceLine: 2,
           codEmpresa: null,
           codFilial: null,
+          razaoSocial: null,
+          nomeFilial: null,
           cnpjCompleto: null,
           codCc: null,
           descCc: null,

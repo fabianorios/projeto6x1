@@ -469,6 +469,8 @@ export async function exportPayrollFromApdata(
       cnpjCompleto: string
       codEmpresa: string | null
       codFilial: string | null
+      razaoSocial: string | null
+      nomeFilial: string | null
       codHorarioAtual: string | null
       codSindicato: string | null
       nomeSindicato: string | null
@@ -634,6 +636,8 @@ export async function exportPayrollFromApdata(
       const codEmpresa =
         est?.empresaId != null ? String(est.empresaId) : null
       const codFilial = est?.localId != null ? String(est.localId) : null
+      const razaoSocial = (est?.razaoSocial ?? '').trim() || null
+      const nomeFilial = (est?.nomeFilial ?? '').trim() || null
       const codHorarioAtual =
         horarioId != null && horarioId > 0 ? String(horarioId) : null
       // Filial → CC → horário: keep schedule slices distinct for Seção B / Quadro.
@@ -658,6 +662,8 @@ export async function exportPayrollFromApdata(
           cnpjCompleto: estKey,
           codEmpresa,
           codFilial,
+          razaoSocial,
+          nomeFilial,
           codHorarioAtual,
           codSindicato,
           nomeSindicato,
@@ -732,6 +738,8 @@ export async function exportPayrollFromApdata(
         ...emptyPayrollExtras(),
         codEmpresa: agg.codEmpresa,
         codFilial: agg.codFilial,
+        razaoSocial: agg.razaoSocial,
+        nomeFilial: agg.nomeFilial,
         cnpjCompleto: agg.cnpjCompleto,
         codCc: agg.centroCusto,
         descCargo: agg.cargo,

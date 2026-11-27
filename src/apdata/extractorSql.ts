@@ -15,6 +15,8 @@
  * Flag includeBenefits (default true): when false, omit VT CTE/joins/cols and
  * ConBeneficios→beneficios_agg (Folha/HC/escala remain). Import tolerates missing cols.
  * Locais: LOC_* (TEMP/dicionário). Situação/vínculo: Premissas extract filters.
+ * Empresa/filial labels: EMP_DssEmpresa AS razao_social; LOC_D1sLocal AS
+ * nome_filial (Apdata D1s — not DssLocal). Org labels, not person PII.
  * Sindicato: Sindicatos SIN_* via CON_CdiSindicato.
  * Horas Base: QuantidadesHorasMes HMV_* via CON_CdiQuantidadeHoraMes.
  */
@@ -266,6 +268,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    ${SANITIZE_MSSQL('e.EMP_DssEmpresa', '')} AS razao_social,
+    ${SANITIZE_MSSQL('l.LOC_D1sLocal', '')} AS nome_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
     ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')} AS desc_cc,
@@ -327,6 +331,8 @@ WHERE __SITUACAO_PREDICATE__
 AND __VINCULO_PREDICATE__
 GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    ${SANITIZE_MSSQL('e.EMP_DssEmpresa', '')},
+    ${SANITIZE_MSSQL('l.LOC_D1sLocal', '')},
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')},
     ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')},
@@ -520,6 +526,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    ${SANITIZE_ORACLE('e.EMP_DssEmpresa', '')} AS razao_social,
+    ${SANITIZE_ORACLE('l.LOC_D1sLocal', '')} AS nome_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
     ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')} AS desc_cc,
@@ -581,6 +589,8 @@ WHERE __SITUACAO_PREDICATE__
 AND __VINCULO_PREDICATE__
 GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    ${SANITIZE_ORACLE('e.EMP_DssEmpresa', '')},
+    ${SANITIZE_ORACLE('l.LOC_D1sLocal', '')},
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')},
     ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')},
@@ -722,6 +732,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    ${SANITIZE_MSSQL('e.EMP_DssEmpresa', '')} AS razao_social,
+    ${SANITIZE_MSSQL('l.LOC_D1sLocal', '')} AS nome_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_MSSQL('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
     ${SANITIZE_MSSQL('cc.CCU_D1sCentroCusto', '')} AS desc_cc,
@@ -898,6 +910,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    ${SANITIZE_ORACLE('e.EMP_DssEmpresa', '')} AS razao_social,
+    ${SANITIZE_ORACLE('l.LOC_D1sLocal', '')} AS nome_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     ${SANITIZE_ORACLE('cc.CCU_CosEstrutura', 'SEM_CC')} AS cod_cc,
     ${SANITIZE_ORACLE('cc.CCU_D1sCentroCusto', '')} AS desc_cc,

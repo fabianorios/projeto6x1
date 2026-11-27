@@ -40,6 +40,9 @@
       Estabelecimento: CON_CdiFolha → Folhas → Locais(LOC) → Empresas(EMP).
    8. Centro de custo: cod_cc = CCU_CosEstrutura (SEM_CC); desc_cc =
       CCU_D1sCentroCusto (estrutura org.; OK LGPD — sem nome de pessoa).
+   8a. Empresa/filial labels: EMP_DssEmpresa AS razao_social;
+      LOC_D1sLocal AS nome_filial (grafia Apdata D1s — não DssLocal).
+      Rótulos org. (não PII pessoa); UI Filial → CC → horário prefere nome.
    8b. Sindicato: LEFT JOIN Sindicatos (SIN_*) via CON_CdiSindicato —
       cod_sindicato / nome_sindicato / cnpj_sindicato (entidade coletiva).
    8c. Horas Base: LEFT JOIN QuantidadesHorasMes (HMV_*) via
@@ -260,6 +263,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     CAST(e.EMP_CdiEmpresa AS VARCHAR(20)) AS cod_empresa,
     CAST(l.LOC_CdiLocal AS VARCHAR(20)) AS cod_filial,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_DssEmpresa, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS razao_social,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(l.LOC_D1sLocal, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS nome_filial,
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS cod_cc,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_D1sCentroCusto, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' ') AS desc_cc,
@@ -322,6 +327,8 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(e.EMP_DssEmpresa, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(l.LOC_D1sLocal, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     ISNULL(e.EMP_NusCNPJPrefixo, '') + ISNULL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_CosEstrutura, 'SEM_CC'), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(cc.CCU_D1sCentroCusto, ''), CHAR(59), ' '), CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' '), '|', ' '),
@@ -534,6 +541,8 @@ CTE_BENEFICIOS_AGG AS (
 SELECT
     TO_CHAR(e.EMP_CdiEmpresa) AS cod_empresa,
     TO_CHAR(l.LOC_CdiLocal) AS cod_filial,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(e.EMP_DssEmpresa, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS razao_social,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(l.LOC_D1sLocal, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS nome_filial,
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, '') AS cnpj_completo,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS cod_cc,
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_D1sCentroCusto, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' ') AS desc_cc,
@@ -596,6 +605,8 @@ WHERE c.CON_CdiSituacao NOT IN (0, 2, 3, 99)
 AND v.VIN_CdiTipoRegimeTrabalhista IN (1)
 GROUP BY
     e.EMP_CdiEmpresa, l.LOC_CdiLocal,
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(e.EMP_DssEmpresa, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(l.LOC_D1sLocal, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     NVL(e.EMP_NusCNPJPrefixo, '') || NVL(l.LOC_NusCNPJSufixo, ''),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_CosEstrutura, 'SEM_CC'), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(NVL(cc.CCU_D1sCentroCusto, ''), CHR(59), ' '), CHR(9), ' '), CHR(10), ' '), CHR(13), ' '), '|', ' '),

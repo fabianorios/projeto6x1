@@ -26,6 +26,28 @@ describe("extractor SQL", () => {
     assert.ok(!/CON_DssNome/i.test(direct));
   });
 
+  it("emits EMP_DssEmpresa / LOC_D1sLocal as razao_social / nome_filial", () => {
+    for (const grain of ["nominal", "aggregate"] as const) {
+      for (const dialect of ["mssql", "oracle"] as const) {
+        const sql = getAptoolsExtractorScript(dialect, { grain });
+        assert.match(sql, /EMP_DssEmpresa/);
+        assert.match(sql, /LOC_D1sLocal/);
+        assert.match(sql, /AS razao_social/);
+        assert.match(sql, /AS nome_filial/);
+        assert.ok(!/LOC_DssLocal/.test(sql));
+      }
+    }
+    const direct = buildExtractorQuery("mssql").sql;
+    assert.match(direct, /AS razao_social/);
+    assert.match(direct, /AS nome_filial/);
+    assert.match(direct, /LOC_D1sLocal/);
+    const off = buildExtractorQuery("mssql", {
+      includeBenefits: false,
+    }).sql;
+    assert.match(off, /AS razao_social/);
+    assert.match(off, /AS nome_filial/);
+  });
+
   it("MSSQL body passes SELECT-only guard", () => {
     const { sql } = buildExtractorQuery("mssql");
     const r = assertSelectOnly(sql);
@@ -258,11 +280,13 @@ describe("extractor SQL", () => {
     }
   });
 
-  it("mapExtractorRows keeps sindicato + HMV fields", () => {
+  it("mapExtractorRows keeps empresa/filial labels + sindicato + HMV", () => {
     const mapped = mapExtractorRows([
       {
         cod_empresa: "1",
         cod_filial: "2",
+        razao_social: "Empresa Demo Ltda",
+        nome_filial: "Filial Centro",
         cnpj_completo: "12345678000190",
         cod_cc: "CC-01",
         desc_cc: "Loja",
@@ -285,6 +309,8 @@ describe("extractor SQL", () => {
     ]);
     assert.equal(mapped[0]!.carga_horaria_mensal, 220);
     assert.equal(mapped[0]!.carga_semanal_atual, 40);
+    assert.equal(mapped[0]!.razao_social, "Empresa Demo Ltda");
+    assert.equal(mapped[0]!.nome_filial, "Filial Centro");
     assert.equal(mapped[0]!.cod_sindicato, "12");
     assert.equal(mapped[0]!.nome_sindicato, "Sindicato Demo");
     assert.equal(mapped[0]!.cnpj_sindicato, "11222333000144");

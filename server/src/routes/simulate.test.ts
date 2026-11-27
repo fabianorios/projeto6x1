@@ -149,6 +149,8 @@ describe("POST /api/simulate", () => {
         sourceLine: 2,
         codEmpresa: null,
         codFilial: null,
+        razaoSocial: null,
+        nomeFilial: null,
         cnpjCompleto: r.cnpjCompleto,
         codCc: r.centroCusto,
         descCc: r.descCc,

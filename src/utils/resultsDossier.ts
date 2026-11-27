@@ -2,7 +2,11 @@
  * Passo 5 — helpers for the Results “dossiê” (accordion + cadastral filters).
  */
 
-import { cnpjDigits, formatCnpjDisplay } from '../apdata/cnpj'
+import {
+  cnpjDigits,
+  formatCnpjDisplay,
+  formatEstablishmentLabel,
+} from '../apdata/cnpj'
 import {
   formatCentroCustoCodeDesc,
   type PayrollRow,
@@ -78,11 +82,16 @@ export function dossierEstablishmentOptions(
     if (!dig || dig.length < 8) continue
     const prefixo = dig.slice(0, 8)
     const sufixo = dig.length >= 14 ? dig.slice(8, 14) : dig.slice(8)
-    const labelParts: string[] = []
-    const filial = (r.codFilial ?? '').trim()
-    if (filial) labelParts.push(`Filial ${filial}`)
-    labelParts.push(formatCnpjDisplay(prefixo, sufixo))
-    const label = labelParts.join(' · ')
+    const label = formatEstablishmentLabel({
+      razaoSocial: r.razaoSocial,
+      nomeFilial:
+        (r.nomeFilial ?? '').trim() ||
+        ((r.codFilial ?? '').trim()
+          ? `Filial ${(r.codFilial ?? '').trim()}`
+          : null),
+      prefixo,
+      sufixo,
+    })
     let entry = map.get(dig)
     if (!entry) {
       entry = { key: dig, label, ccs: new Set() }

@@ -57,6 +57,31 @@ describe('extractor SQL (SPA)', () => {
     assert.match(bodyOff, /massa_salarial_base/)
   })
 
+  it('emits EMP_DssEmpresa / LOC_D1sLocal as razao_social / nome_filial (both grains)', () => {
+    for (const grain of ['nominal', 'aggregate'] as const) {
+      for (const dialect of ['mssql', 'oracle'] as const) {
+        const sql = getAptoolsExtractorScript(dialect, { grain })
+        assert.match(sql, /EMP_DssEmpresa/, `${dialect}/${grain}`)
+        assert.match(sql, /LOC_D1sLocal/, `${dialect}/${grain}`)
+        assert.match(sql, /AS razao_social/, `${dialect}/${grain}`)
+        assert.match(sql, /AS nome_filial/, `${dialect}/${grain}`)
+        assert.ok(!/LOC_DssLocal/.test(sql), `${dialect}/${grain} must use LOC_D1sLocal`)
+        if (grain === 'aggregate') {
+          // GROUP BY must include sanitized labels with COUNT aggregates.
+          assert.match(sql, /GROUP BY[\s\S]*EMP_DssEmpresa[\s\S]*LOC_D1sLocal/i)
+        }
+      }
+    }
+    // Still present when includeBenefits=false (Folha labels independent of VT).
+    const off = getAptoolsExtractorScript('mssql', {
+      grain: 'aggregate',
+      includeBenefits: false,
+    })
+    assert.match(off, /AS razao_social/)
+    assert.match(off, /AS nome_filial/)
+    assert.match(off, /LOC_D1sLocal/)
+  })
+
   it('exposes MSSQL and Oracle Aptools scripts', () => {
     const mssql = getAptoolsExtractorScript('mssql')
     const oracle = getAptoolsExtractorScript('oracle')
@@ -199,6 +224,8 @@ describe('mapExtractorAggregatesToPayroll', () => {
       {
         cod_empresa: '1',
         cod_filial: '1',
+        razao_social: 'Empresa Demo Ltda',
+        nome_filial: 'Filial Centro',
         cnpj_completo: '12345678000190',
         cod_cc: 'CC-01',
         desc_cc: 'Operacoes Loja',
@@ -218,6 +245,10 @@ describe('mapExtractorAggregatesToPayroll', () => {
     assert.equal(rows[0].quantidade, 2)
     assert.equal(rows[0].nome, null)
     assert.equal(rows[0].cnpjCompleto, '12345678000190')
+    assert.equal(rows[0].razaoSocial, 'Empresa Demo Ltda')
+    assert.equal(rows[0].nomeFilial, 'Filial Centro')
+    assert.equal(rows[0].codEmpresa, '1')
+    assert.equal(rows[0].codFilial, '1')
     assert.equal(rows[0].vrValorDia, 32)
     assert.equal(rows[0].codCc, 'CC-01')
     assert.equal(rows[0].descCc, 'Operacoes Loja')

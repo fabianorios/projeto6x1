@@ -331,6 +331,8 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
       const columns = [
         "cod_empresa",
         "cod_filial",
+        "razao_social",
+        "nome_filial",
         "cnpj_completo",
         "cod_cc",
         "desc_cc",

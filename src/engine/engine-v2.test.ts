@@ -236,8 +236,8 @@ describe('payroll CSV backward-compat + extractor columns', () => {
 
   it('parses native extractor columns (BR numbers)', () => {
     const csv = [
-      'cod_empresa;cod_filial;cnpj_completo;cod_cc;desc_cc;cod_cargo;desc_cargo;cod_vinculo;cod_horario_atual;escala_atual;carga_semanal_atual;qtd_colaboradores;massa_salarial_base;vr_dia_medio;vt_dia_medio;dias_trabalho_mes_atual',
-      '1;1;12345678000190;CC-01;Operacoes Loja;10;Operador;1;5;6x1;44;2;4.400,00;32,00;15,00;26',
+      'cod_empresa;cod_filial;razao_social;nome_filial;cnpj_completo;cod_cc;desc_cc;cod_cargo;desc_cargo;cod_vinculo;cod_horario_atual;escala_atual;carga_semanal_atual;qtd_colaboradores;massa_salarial_base;vr_dia_medio;vt_dia_medio;dias_trabalho_mes_atual',
+      '1;1;Empresa Demo Ltda;Filial Centro;12345678000190;CC-01;Operacoes Loja;10;Operador;1;5;6x1;44;2;4.400,00;32,00;15,00;26',
     ].join('\n')
     const { rows, issues } = parsePayrollCsv(csv)
     assert.equal(issues.length, 0, JSON.stringify(issues))
@@ -252,6 +252,8 @@ describe('payroll CSV backward-compat + extractor columns', () => {
     assert.equal(rows[0].vtValorDia, 15)
     assert.equal(rows[0].vrDiasMesAtual, 26)
     assert.equal(rows[0].cnpjCompleto, '12345678000190')
+    assert.equal(rows[0].razaoSocial, 'Empresa Demo Ltda')
+    assert.equal(rows[0].nomeFilial, 'Filial Centro')
   })
 
   it('parses native extractor without desc_cc (backward compatible)', () => {

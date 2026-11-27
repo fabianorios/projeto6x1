@@ -170,6 +170,8 @@ export function normalizePayrollRow(
     ...extras,
     codEmpresa: asNullableString(raw.codEmpresa) ?? extras.codEmpresa,
     codFilial: asNullableString(raw.codFilial) ?? extras.codFilial,
+    razaoSocial: asNullableString(raw.razaoSocial) ?? extras.razaoSocial,
+    nomeFilial: asNullableString(raw.nomeFilial) ?? extras.nomeFilial,
     cnpjCompleto: asNullableString(raw.cnpjCompleto) ?? extras.cnpjCompleto,
     codCc: asNullableString(raw.codCc) ?? extras.codCc,
     descCc: asNullableString(raw.descCc) ?? extras.descCc,
