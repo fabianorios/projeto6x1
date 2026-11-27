@@ -21,6 +21,10 @@ import {
 export type ExtractorAggregate = {
   cod_empresa?: string
   cod_filial?: string
+  /** Empresas.EMP_DssEmpresa */
+  razao_social?: string
+  /** Locais.LOC_D1sLocal */
+  nome_filial?: string
   cnpj_completo?: string
   cod_cc?: string
   desc_cc?: string
@@ -173,6 +177,8 @@ export function mapExtractorAggregatesToPayroll(
       ...emptyPayrollExtras(),
       codEmpresa: r.cod_empresa || null,
       codFilial: r.cod_filial || null,
+      razaoSocial: r.razao_social?.trim() || null,
+      nomeFilial: r.nome_filial?.trim() || null,
       cnpjCompleto: r.cnpj_completo || null,
       codCc: r.cod_cc || null,
       descCc: r.desc_cc?.trim() || null,

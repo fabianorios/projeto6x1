@@ -26,6 +26,8 @@ export const PAYROLL_CSV_HEADERS = [
   // Native Apdata extractor columns (SPEC-V2 / apdata-extractor.sql)
   'cod_empresa',
   'cod_filial',
+  'razao_social',
+  'nome_filial',
   'cnpj_completo',
   'cod_cc',
   'desc_cc',
@@ -90,6 +92,10 @@ export interface PayrollRow {
   // --- SPEC-V2 / extractor fields (safe defaults when absent) ---
   codEmpresa: string | null
   codFilial: string | null
+  /** Empresas.EMP_DssEmpresa — org label (not person PII). */
+  razaoSocial: string | null
+  /** Locais.LOC_D1sLocal — filial name; prefer over code in UI labels. */
+  nomeFilial: string | null
   cnpjCompleto: string | null
   codCc: string | null
   /** CentrosCustos.CCU_D1sCentroCusto — optional; display when present. */
@@ -144,6 +150,8 @@ export function emptyPayrollExtras(): Pick<
   PayrollRow,
   | 'codEmpresa'
   | 'codFilial'
+  | 'razaoSocial'
+  | 'nomeFilial'
   | 'cnpjCompleto'
   | 'codCc'
   | 'descCc'
@@ -172,6 +180,8 @@ export function emptyPayrollExtras(): Pick<
   return {
     codEmpresa: null,
     codFilial: null,
+    razaoSocial: null,
+    nomeFilial: null,
     cnpjCompleto: null,
     codCc: null,
     descCc: null,
@@ -612,6 +622,8 @@ export function parsePayrollCsv(text: string): PayrollParseResult {
       sourceLine: lineNo,
       codEmpresa: cell(cols, 'cod_empresa') || null,
       codFilial: cell(cols, 'cod_filial') || null,
+      razaoSocial: cell(cols, 'razao_social') || null,
+      nomeFilial: cell(cols, 'nome_filial') || null,
       cnpjCompleto: cell(cols, 'cnpj_completo') || null,
       codCc: cell(cols, 'cod_cc') || null,
       descCc: cell(cols, 'desc_cc') || null,

@@ -78,12 +78,16 @@ describe('resultsDossier helpers', () => {
       row({
         cnpjCompleto: '12345678000190',
         codFilial: '01',
+        nomeFilial: 'Filial Centro',
+        razaoSocial: 'Empresa Demo Ltda',
         centroCusto: 'CC-A',
         codCc: 'CC-A',
       }),
       row({
         cnpjCompleto: '12345678000190',
         codFilial: '01',
+        nomeFilial: 'Filial Centro',
+        razaoSocial: 'Empresa Demo Ltda',
         centroCusto: 'CC-B',
         codCc: 'CC-B',
       }),
@@ -96,7 +100,10 @@ describe('resultsDossier helpers', () => {
     ]
     const est = dossierEstablishmentOptions(rows)
     assert.equal(est.length, 2)
-    assert.match(est[0]!.label, /12\.345\.678\/0001-90|Filial 01/)
+    assert.match(est[0]!.label, /Filial Centro/)
+    assert.match(est[0]!.label, /Empresa Demo Ltda/)
+    assert.match(est[0]!.label, /12\.345\.678\/0001-90/)
+    assert.match(est[1]!.label, /Filial 02/)
     const ccOpts = dossierCentroCustoOptions(
       [
         {

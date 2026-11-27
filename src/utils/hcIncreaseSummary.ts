@@ -6,7 +6,11 @@
  * no re-run of absorption / scale heuristics in the SPA.
  */
 
-import { cnpjDigits, formatCnpjDisplay } from '../apdata/cnpj'
+import {
+  cnpjDigits,
+  formatCnpjDisplay,
+  formatEstablishmentLabel,
+} from '../apdata/cnpj'
 import type { PayrollRow } from '../engine/payroll'
 import type { CostCenterResult, SimulationResult } from '../engine/types'
 
@@ -51,17 +55,25 @@ function triple(atual: number, proposto: number): HcCountTriple {
 
 function filialLabelFromRows(dig: string, rows: PayrollRow[]): string {
   const sample = rows.find((r) => cnpjDigits(r.cnpjCompleto) === dig)
-  const parts: string[] = []
-  const filial = (sample?.codFilial ?? '').trim()
-  if (filial) parts.push(`Filial ${filial}`)
   if (dig.length >= 8) {
     const prefixo = dig.slice(0, 8)
     const sufixo = dig.length >= 14 ? dig.slice(8, 14) : dig.slice(8)
-    parts.push(formatCnpjDisplay(prefixo, sufixo))
-  } else if (dig) {
-    parts.push(dig)
+    return formatEstablishmentLabel({
+      razaoSocial: sample?.razaoSocial,
+      nomeFilial:
+        (sample?.nomeFilial ?? '').trim() ||
+        ((sample?.codFilial ?? '').trim()
+          ? `Filial ${(sample?.codFilial ?? '').trim()}`
+          : null),
+      prefixo,
+      sufixo,
+    })
   }
-  return parts.join(' · ') || 'Filial'
+  const nome = (sample?.nomeFilial ?? '').trim()
+  if (nome) return nome
+  const filial = (sample?.codFilial ?? '').trim()
+  if (filial) return `Filial ${filial}`
+  return dig || 'Filial'
 }
 
 function centerKey(c: CostCenterResult): string {

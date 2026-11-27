@@ -5,6 +5,10 @@
 export type ExtractorAggregateRow = {
   cod_empresa: string;
   cod_filial: string;
+  /** Empresas.EMP_DssEmpresa */
+  razao_social: string;
+  /** Locais.LOC_D1sLocal */
+  nome_filial: string;
   cnpj_completo: string;
   cod_cc: string;
   desc_cc: string;
@@ -70,6 +74,8 @@ export function mapExtractorRows(
     return {
       cod_empresa: str(pick(row, "cod_empresa")),
       cod_filial: str(pick(row, "cod_filial")),
+      razao_social: str(pick(row, "razao_social")),
+      nome_filial: str(pick(row, "nome_filial")),
       cnpj_completo: str(pick(row, "cnpj_completo")),
       cod_cc: str(pick(row, "cod_cc"), "SEM_CC"),
       desc_cc: str(pick(row, "desc_cc")),

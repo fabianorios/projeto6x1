@@ -76,6 +76,8 @@ Separador `;` · UTF-8 · cabeçalho exato ([import-layout.md](import-layout.md)
 | `vt_dias_mes_atual` | `HorariosTiposDiasAT` ∩ dias de `HorariosJornadas` com `TIP_OplTrabalho=1` | Tipo `88` cobre 2ª–6ª. ≈ `30 × at_work / cycle_len`. Sem AT → vazio (motor estima). **Não** usar `CCA_QtiTotalDias`. |
 | `quantidade` | `COUNT(*)` grupo cargo×CC×horário (ou HMV/escala) | Default export agregado (sem PII). Alternativa: 1 linha/contratado **sem** `nome`. |
 | `nome` | *(omitir)* | Opcional no CSV; **não** preencher a partir de `CON_DssNome` no default LGPD. |
+| `razao_social` | `Empresas.EMP_DssEmpresa` | Label org. (não PII pessoa). Extrator Aptools/Direto emite em grains nominal e aggregate. |
+| `nome_filial` | `Locais.LOC_D1sLocal` | Nome da filial (grafia Apdata `D1s`, não `DssLocal`). UI Filial→CC→horário prefere este rótulo quando presente; preserva `cnpj_completo`/`cod_filial` para Seção B. |
 
 ### Domínios auxiliares
 
