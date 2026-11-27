@@ -8,6 +8,12 @@
      grain=aggregate.
    - Conexão Direta / grain=aggregate = LGPD-safe: cargo×CC×escala, sem
      nome/CPF/PIS/matrícula (bloco SQL abaixo = aggregate).
+
+   INCLUDE BENEFITS (flag includeBenefits, default ON):
+   - ON: VT (ConATransportes) + ConBeneficios→beneficios_agg (bloco abaixo).
+   - OFF: SQL sem CTEs/joins/colunas de benefícios (vr/vt/beneficios_agg);
+     Folha/HC/escala/horário permanecem. Import tolera colunas ausentes (0/omit).
+     Gerado em getAptoolsExtractorScript / buildExtractorQuery (não neste .sql).
    ============================================================================
    REGRAS APLICADAS (aggregate / Conexão Direta):
    1. Zero PII: Nenhum nome, CPF, PIS ou matrícula individual é extraído.
@@ -20,8 +26,10 @@
       TiposBeneficios (TBE_*). Ativo: CBN_DtdFim IS NULL (sem CBN_OplDesativado).
       Agregados em beneficios_agg (codigo|descricao|valor;…) sem duplicar
       headcount/salário. Classificação no parser por keywords em TBE_D1sTipoBeneficio.
+      Omitidos quando includeBenefits=false.
    4. VT: Soma ativa (CAS_DtdFim IS NULL) em ConATransportes x MeiosTransportesItens.
           (Ignora ConCalculoATransportes conforme regra canônica).
+          Omitido quando includeBenefits=false.
    5. Escalas: TiposDiasPonto = TIP_* (não TDP_*). escala_atual = work_days + 'x' +
       off_days (concat). Ativos: HRI_OplDesativado=0 e HOR_OplDesativado=0.
    6. Sanitização: Remove ';', TAB, '|', quebras de linha de textos

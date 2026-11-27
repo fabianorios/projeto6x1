@@ -191,6 +191,27 @@ describe("API routes", () => {
     assert.match(String(body.sql), /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i);
   });
 
+  it("GET extractor-sql includeBenefits default on; =0 omits benefits", async () => {
+    const on = await app.request("/api/query/extractor-sql?engine=mssql");
+    assert.equal(on.status, 200);
+    const onBody = await on.json();
+    assert.equal(onBody.includeBenefits, true);
+    assert.match(String(onBody.sql), /beneficios_agg/);
+    assert.match(String(onBody.sql), /CTE_VT_DIARIO/);
+
+    const off = await app.request(
+      "/api/query/extractor-sql?engine=mssql&includeBenefits=0",
+    );
+    assert.equal(off.status, 200);
+    const offBody = await off.json();
+    assert.equal(offBody.includeBenefits, false);
+    assert.ok(!/beneficios_agg/.test(String(offBody.sql)));
+    assert.ok(!/CTE_VT_DIARIO/.test(String(offBody.sql)));
+    assert.ok(!/ConBeneficios/.test(String(offBody.sql)));
+    assert.match(String(offBody.sql), /massa_salarial_base/);
+    assert.match(String(offBody.sql), /CON_DssNome/i);
+  });
+
   it("GET extractor-sql?engine=oracle returns LISTAGG/NVL Folha (not MSSQL)", async () => {
     const res = await app.request("/api/query/extractor-sql?engine=oracle");
     assert.equal(res.status, 200);

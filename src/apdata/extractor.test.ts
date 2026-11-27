@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   DEFAULT_APTOOLS_GRAIN,
+  DEFAULT_INCLUDE_BENEFITS,
   getAptoolsExtractorScript,
   getExtractorSelectBody,
 } from './extractorSql'
@@ -24,6 +25,36 @@ describe('extractor SQL (SPA)', () => {
     const agg = getAptoolsExtractorScript('mssql', { grain: 'aggregate' })
     assert.ok(!/CON_DssNome/i.test(agg))
     assert.match(agg, /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i)
+  })
+
+  it('includeBenefits default ON; false omits VT/beneficios', () => {
+    assert.equal(DEFAULT_INCLUDE_BENEFITS, true)
+    const on = getAptoolsExtractorScript('mssql')
+    assert.match(on, /beneficios_agg/)
+    assert.match(on, /CTE_VT_DIARIO/)
+    assert.match(on, /ConBeneficios/)
+    assert.match(on, /vt_dia_medio/)
+
+    for (const dialect of ['mssql', 'oracle'] as const) {
+      for (const grain of ['nominal', 'aggregate'] as const) {
+        const off = getAptoolsExtractorScript(dialect, {
+          grain,
+          includeBenefits: false,
+        })
+        assert.ok(!/CTE_VT_DIARIO/.test(off), `${dialect}/${grain}`)
+        assert.ok(!/ConBeneficios/.test(off), `${dialect}/${grain}`)
+        assert.ok(!/beneficios_agg/.test(off), `${dialect}/${grain}`)
+        assert.ok(!/vt_dia_medio/.test(off), `${dialect}/${grain}`)
+        assert.ok(!/ConATransportes/.test(off), `${dialect}/${grain}`)
+        assert.match(off, /massa_salarial_base/)
+        assert.match(off, /escala_atual/)
+        assert.match(off, /CTE_CICLO_HORARIO/)
+      }
+    }
+
+    const bodyOff = getExtractorSelectBody('mssql', { includeBenefits: false })
+    assert.ok(!/beneficios_agg/.test(bodyOff))
+    assert.match(bodyOff, /massa_salarial_base/)
   })
 
   it('exposes MSSQL and Oracle Aptools scripts', () => {
@@ -352,6 +383,27 @@ describe('mapExtractorAggregatesToPayroll', () => {
     ])
     assert.equal(rows[0].codCc, 'CC-99')
     assert.equal(rows[0].descCc, null)
+  })
+
+  it('maps rows without benefit fields to null/empty (includeBenefits=false)', () => {
+    const rows = mapExtractorAggregatesToPayroll([
+      {
+        desc_cargo: 'Operador',
+        cod_cc: 'CC-01',
+        qtd_colaboradores: 2,
+        massa_salarial_base: 4000,
+        carga_semanal_atual: 44,
+        escala_atual: '6x1',
+        dias_trabalho_mes_atual: 26,
+      },
+    ])
+    assert.equal(rows[0].vrValorDia, null)
+    assert.equal(rows[0].vtValorDia, null)
+    assert.equal(rows[0].vaValorMes, null)
+    assert.equal(rows[0].assistMedicaMes, null)
+    assert.equal(rows[0].benefits.length, 0)
+    assert.equal(rows[0].quantidade, 2)
+    assert.equal(rows[0].salario, 2000)
   })
 
   it('auto-classifies beneficios_agg into VR/VA/médica', () => {

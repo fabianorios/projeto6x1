@@ -76,6 +76,44 @@ describe("extractor SQL", () => {
     assert.ok(oracle.includes("beneficios_agg"));
   });
 
+  it("includeBenefits default ON; false omits VT/beneficios CTEs and cols", () => {
+    const on = getAptoolsExtractorScript("mssql");
+    assert.match(on, /beneficios_agg/);
+    assert.match(on, /CTE_VT_DIARIO/);
+    assert.match(on, /ConBeneficios/);
+    assert.match(on, /vt_dia_medio/);
+    assert.match(on, /vr_dia_medio/);
+    assert.match(on, /massa_salarial_base/);
+    assert.match(on, /escala_atual/);
+
+    for (const dialect of ["mssql", "oracle"] as const) {
+      for (const grain of ["nominal", "aggregate"] as const) {
+        const off = getAptoolsExtractorScript(dialect, {
+          grain,
+          includeBenefits: false,
+        });
+        assert.ok(!/CTE_VT_DIARIO/.test(off), `${dialect}/${grain} VT CTE`);
+        assert.ok(!/ConBeneficios/.test(off), `${dialect}/${grain} ConBeneficios`);
+        assert.ok(!/beneficios_agg/.test(off), `${dialect}/${grain} agg col`);
+        assert.ok(!/vt_dia_medio/.test(off), `${dialect}/${grain} vt col`);
+        assert.ok(!/vr_dia_medio/.test(off), `${dialect}/${grain} vr col`);
+        assert.ok(!/ConATransportes/.test(off), `${dialect}/${grain} VT table`);
+        assert.match(off, /massa_salarial_base/);
+        assert.match(off, /escala_atual/);
+        assert.match(off, /CTE_CICLO_HORARIO/);
+        assert.match(off, /dias_trabalho_mes_atual/);
+        const guard = assertSelectOnly(off.replace(/;\s*$/, ""));
+        assert.equal(guard.ok, true, `${dialect}/${grain}: ${guard.ok ? "" : guard.reason}`);
+      }
+    }
+
+    const directOff = buildExtractorQuery("mssql", {
+      includeBenefits: false,
+    }).sql;
+    assert.ok(!/beneficios_agg/.test(directOff));
+    assert.match(directOff, /COUNT\s*\(\s*c\.CON_CdiContratado\s*\)/i);
+  });
+
   it("Oracle Folha has LISTAGG/NVL and rejects MSSQL-only tokens", () => {
     const oracle = getAptoolsExtractorScript("oracle");
     const mssql = getAptoolsExtractorScript("mssql");
@@ -326,5 +364,28 @@ describe("extractor map", () => {
     assert.doesNotThrow(() =>
       assertNoPiiColumns(["cod_cc", "desc_cc", "desc_cargo"]),
     );
+  });
+
+  it("tolerates rows without benefit columns (includeBenefits=false export)", () => {
+    const rows = mapExtractorRows([
+      {
+        cod_empresa: "1",
+        cod_filial: "1",
+        cnpj_completo: "12345678000190",
+        cod_cc: "CC-01",
+        desc_cargo: "Operador",
+        qtd_colaboradores: 2,
+        massa_salarial_base: 4400,
+        dias_trabalho_mes_atual: 26,
+        carga_semanal_atual: 44,
+        escala_atual: "6x1",
+      },
+    ]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.vr_dia_medio, 0);
+    assert.equal(rows[0]!.vt_dia_medio, 0);
+    assert.equal(rows[0]!.beneficios_agg, "");
+    assert.equal(rows[0]!.qtd_colaboradores, 2);
+    assert.equal(rows[0]!.massa_salarial_base, 4400);
   });
 });
