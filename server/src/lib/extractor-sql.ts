@@ -12,6 +12,8 @@
  * (MAX PBV_DtdInicio) → TiposBeneficiosEntsBens → TiposBeneficios (TBE_*);
  * active CBN_DtdFim IS NULL → beneficios_agg (codigo|descricao|valor;…).
  * Classification happens in the SPA (classifyBenefit / BenefitMappingTable).
+ * Flag includeBenefits (default true): when false, omit VT CTE/joins/cols and
+ * ConBeneficios→beneficios_agg (Folha/HC/escala remain). Import tolerates missing cols.
  * CNPJ filter: optional bound params (@cnpjN / :cnpjN), max 32.
  * Situação / vínculo: Premissas filters (default exclude 0,2,3,99; CLT + empregatícios).
  * Locais prefix: LOC_* (TEMP/dicionário — not LPC_*).
@@ -33,6 +35,9 @@ export type ExtractorGrain = "nominal" | "aggregate";
 /** Aptools paste default: one row per colaborador with nome (no auto LGPD omit). */
 export const DEFAULT_APTOOLS_GRAIN: ExtractorGrain = "nominal";
 
+/** Default ON — current VT + beneficios_agg behavior. */
+export const DEFAULT_INCLUDE_BENEFITS = true;
+
 export type ExtractorFilters = {
   /** Full CNPJ strings (digits or formatted). Empty = no CNPJ filter. */
   cnpjs?: string[];
@@ -48,6 +53,11 @@ export type ExtractorFilters = {
   somenteEmpregaticios?: boolean;
   /** Aptools: nominal (default) | aggregate (LGPD omit). Ignored by Direct unless set. */
   grain?: ExtractorGrain;
+  /**
+   * Include VT + ConBeneficios→beneficios_agg (default true).
+   * false: omit benefit CTEs/joins/columns; Folha/HC/escala remain.
+   */
+  includeBenefits?: boolean;
 };
 
 const SANITIZE_MSSQL = (expr: string, fallback: string) =>
@@ -956,6 +966,50 @@ export function cnpjDigits(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
+/** Default ON unless explicitly false. */
+export function resolveIncludeBenefits(
+  includeBenefits: boolean | undefined,
+): boolean {
+  return includeBenefits !== false;
+}
+
+/**
+ * When includeBenefits=false, omit VT + ConBeneficios CTEs/joins/columns.
+ * Folha / HC / escala / horário remain. Import maps missing cols → 0 / "".
+ */
+export function applyIncludeBenefits(
+  sql: string,
+  includeBenefits: boolean,
+): string {
+  if (includeBenefits) return sql;
+  let out = sql;
+  out = out.replace(
+    /CTE_VT_DIARIO AS \([\s\S]*?\n\),\n(?=CTE_CICLO_HORARIO)/,
+    "",
+  );
+  out = out.replace(
+    /,\nCTE_BEN_CONTRATO AS \([\s\S]*?\nCTE_BENEFICIOS_AGG AS \([\s\S]*?\n\)\n(?=SELECT)/,
+    "\n",
+  );
+  out = out.replace(
+    /\n[ \t]*CAST\(0 AS (?:DECIMAL|NUMBER)\(18,2\)\) AS vr_dia_medio,/g,
+    "",
+  );
+  out = out.replace(
+    /\n[ \t]*CAST\([^\n]*vt\.vt_valor_dia[^\n]* AS vt_dia_medio,/g,
+    "",
+  );
+  out = out.replace(
+    /,\n\s*(?:MAX\(ben\.beneficios_agg\)|ben\.beneficios_agg) AS beneficios_agg/g,
+    "",
+  );
+  out = out.replace(
+    /\nLEFT JOIN CTE_VT_DIARIO vt ON vt\.CAS_CdiContratado = c\.CON_CdiContratado\nLEFT JOIN CTE_BENEFICIOS_AGG ben[\s\S]*?(?=\nWHERE)/g,
+    "\n",
+  );
+  return out;
+}
+
 function applyExtractFilterPlaceholders(
   template: string,
   dialect: ExtractorDialect,
@@ -1003,10 +1057,14 @@ export function buildExtractorQuery(
   filters: ExtractorFilters = {},
   grain: ExtractorGrain = "aggregate",
 ): { sql: string; params: Record<string, string | number> } {
-  const template = applyExtractFilterPlaceholders(
-    selectTemplate(dialect, grain),
-    dialect,
-    filters,
+  const includeBenefits = resolveIncludeBenefits(filters.includeBenefits);
+  const template = applyIncludeBenefits(
+    applyExtractFilterPlaceholders(
+      selectTemplate(dialect, grain),
+      dialect,
+      filters,
+    ),
+    includeBenefits,
   );
   const params: Record<string, string | number> = {};
 

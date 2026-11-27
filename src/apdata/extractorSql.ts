@@ -12,6 +12,8 @@
  * Benefits: ConBeneficios → PlanosBeneficios → PlanosBeneficiosValores
  * (MAX PBV_DtdInicio) → TiposBeneficiosEntsBens → TiposBeneficios (TBE_*);
  * active CBN_DtdFim IS NULL → beneficios_agg (codigo|descricao|valor;…).
+ * Flag includeBenefits (default true): when false, omit VT CTE/joins/cols and
+ * ConBeneficios→beneficios_agg (Folha/HC/escala remain). Import tolerates missing cols.
  * Locais: LOC_* (TEMP/dicionário). Situação/vínculo: Premissas extract filters.
  * Sindicato: Sindicatos SIN_* via CON_CdiSindicato.
  * Horas Base: QuantidadesHorasMes HMV_* via CON_CdiQuantidadeHoraMes.
@@ -34,9 +36,17 @@ export type ExtractorGrain = 'nominal' | 'aggregate'
 /** Aptools paste default: one row per colaborador with nome (no auto LGPD omit). */
 export const DEFAULT_APTOOLS_GRAIN: ExtractorGrain = 'nominal'
 
+/** Default ON — current VT + beneficios_agg behavior. */
+export const DEFAULT_INCLUDE_BENEFITS = true
+
 export type AptoolsExtractorOptions = ExtractorSqlFilters & {
   /** `nominal` (default Aptools) | `aggregate` (LGPD omit / cargo×CC×escala). */
   grain?: ExtractorGrain
+  /**
+   * Include VT + ConBeneficios→beneficios_agg (default true).
+   * false: omit benefit CTEs/joins/columns; Folha/HC/escala remain.
+   */
+  includeBenefits?: boolean
 }
 
 const SANITIZE_MSSQL = (expr: string, fallback: string) =>
@@ -955,6 +965,50 @@ function applyExtractFilterPlaceholders(
     )
 }
 
+/** Default ON unless explicitly false. */
+export function resolveIncludeBenefits(
+  includeBenefits: boolean | undefined,
+): boolean {
+  return includeBenefits !== false
+}
+
+/**
+ * When includeBenefits=false, omit VT + ConBeneficios CTEs/joins/columns.
+ * Folha / HC / escala / horário remain. Import maps missing cols → 0 / "".
+ */
+export function applyIncludeBenefits(
+  sql: string,
+  includeBenefits: boolean,
+): string {
+  if (includeBenefits) return sql
+  let out = sql
+  out = out.replace(
+    /CTE_VT_DIARIO AS \([\s\S]*?\n\),\n(?=CTE_CICLO_HORARIO)/,
+    '',
+  )
+  out = out.replace(
+    /,\nCTE_BEN_CONTRATO AS \([\s\S]*?\nCTE_BENEFICIOS_AGG AS \([\s\S]*?\n\)\n(?=SELECT)/,
+    '\n',
+  )
+  out = out.replace(
+    /\n[ \t]*CAST\(0 AS (?:DECIMAL|NUMBER)\(18,2\)\) AS vr_dia_medio,/g,
+    '',
+  )
+  out = out.replace(
+    /\n[ \t]*CAST\([^\n]*vt\.vt_valor_dia[^\n]* AS vt_dia_medio,/g,
+    '',
+  )
+  out = out.replace(
+    /,\n\s*(?:MAX\(ben\.beneficios_agg\)|ben\.beneficios_agg) AS beneficios_agg/g,
+    '',
+  )
+  out = out.replace(
+    /\nLEFT JOIN CTE_VT_DIARIO vt ON vt\.CAS_CdiContratado = c\.CON_CdiContratado\nLEFT JOIN CTE_BENEFICIOS_AGG ben[\s\S]*?(?=\nWHERE)/g,
+    '\n',
+  )
+  return out
+}
+
 function resolveGrain(
   grain: ExtractorGrain | undefined,
   defaultGrain: ExtractorGrain,
@@ -972,13 +1026,18 @@ function bodyForGrain(dialect: ExtractorDialect, grain: ExtractorGrain): string 
 /** SELECT body only (for assertSelectOnly / API). Default grain = aggregate (Conexão Direta). */
 export function getExtractorSelectBody(
   dialect: ExtractorDialect,
-  filters: ExtractorSqlFilters = {},
+  filters: ExtractorSqlFilters & { includeBenefits?: boolean } = {},
   grain: ExtractorGrain = 'aggregate',
 ): string {
-  return applyExtractFilterPlaceholders(
-    bodyForGrain(dialect, grain),
-    dialect,
-    filters,
+  const { includeBenefits: includeRaw, ...extractFilters } = filters
+  const includeBenefits = resolveIncludeBenefits(includeRaw)
+  return applyIncludeBenefits(
+    applyExtractFilterPlaceholders(
+      bodyForGrain(dialect, grain),
+      dialect,
+      extractFilters,
+    ),
+    includeBenefits,
   )
 }
 
@@ -986,6 +1045,7 @@ export function getExtractorSelectBody(
  * Full Aptools script — SELECT only (no SET TRANSACTION).
  * Default grain = nominal (1 row/colaborador with nome). Pass grain:'aggregate'
  * for LGPD-safe cargo×CC×escala omit.
+ * includeBenefits default true; false omits VT/beneficios_agg.
  * Oracle: no trailing `;` — Aptools / thin clients raise ORA-00933 with it.
  * MSSQL: keep trailing `;` (historical Aptools paste).
  */

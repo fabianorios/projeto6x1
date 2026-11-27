@@ -53,6 +53,8 @@ const ephemeralSchema = z
         tipoRegimeTrabalhistaIds: z.array(z.number().int()).max(64).optional(),
         categTrabeSocIds: z.array(z.number().int()).max(64).optional(),
         somenteEmpregaticios: z.boolean().optional(),
+        /** Default true — omit VT/beneficios_agg when false. */
+        includeBenefits: z.boolean().optional(),
       })
       .optional(),
     /**
@@ -168,17 +170,32 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
       grainRaw === "aggregate" || grainRaw === "nominal"
         ? grainRaw
         : undefined;
-    const sql = getAptoolsExtractorScript(dialect, grain ? { grain } : {});
-    const resolvedGrain =
-      grain ?? ("nominal" as const);
+    const benRaw = (c.req.query("includeBenefits") ?? "").toLowerCase();
+    const includeBenefits =
+      benRaw === "0" || benRaw === "false" || benRaw === "off"
+        ? false
+        : benRaw === "1" || benRaw === "true" || benRaw === "on"
+          ? true
+          : undefined;
+    const sql = getAptoolsExtractorScript(dialect, {
+      ...(grain ? { grain } : {}),
+      ...(includeBenefits === undefined ? {} : { includeBenefits }),
+    });
+    const resolvedGrain = grain ?? ("nominal" as const);
+    const resolvedBenefits = includeBenefits !== false;
+    const grainNote =
+      resolvedGrain === "nominal"
+        ? "Aptools Folha default: nominal (CON_DssNome + 1 row/colaborador). Pass grain=aggregate for LGPD-safe cargo×CC×escala omit."
+        : "Aptools Folha aggregate (LGPD-safe — no nome/CPF/matrícula).";
+    const benNote = resolvedBenefits
+      ? " includeBenefits default on (VT + beneficios_agg); pass includeBenefits=0 to omit."
+      : " includeBenefits=0 — VT/ConBeneficios/beneficios_agg omitted; Folha/HC/escala remain.";
     return c.json({
       engine: dialect,
       grain: resolvedGrain,
+      includeBenefits: resolvedBenefits,
       sql,
-      note:
-        resolvedGrain === "nominal"
-          ? "Aptools Folha default: nominal (CON_DssNome + 1 row/colaborador). Pass grain=aggregate for LGPD-safe cargo×CC×escala omit. TIP_* escalas; beneficios_agg; classify in wizard step 4."
-          : "Aptools Folha aggregate (LGPD-safe — no nome/CPF/matrícula). TIP_* escalas; ConBeneficios→TBE_* → beneficios_agg; classify in wizard step 4.",
+      note: `${grainNote} TIP_* escalas.${benNote} Classify beneficios_agg in wizard step 4 when present.`,
     });
   });
 
@@ -283,6 +300,7 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         });
       }
 
+      const includeBenefits = data.filters?.includeBenefits !== false;
       const { sql, params } = buildExtractorQuery(data.engine, {
         ...(data.filters ?? {}),
       });
@@ -310,6 +328,28 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
       assertNoPiiColumns(result.columns);
       const rows = mapExtractorRows(result.rows);
 
+      const columns = [
+        "cod_empresa",
+        "cod_filial",
+        "cnpj_completo",
+        "cod_cc",
+        "desc_cc",
+        "cod_cargo",
+        "desc_cargo",
+        "cod_vinculo",
+        "cod_horario_atual",
+        "horario_trabalho_atual",
+        "escala_atual",
+        "carga_semanal_atual",
+        "qtd_colaboradores",
+        "massa_salarial_base",
+        ...(includeBenefits
+          ? (["vr_dia_medio", "vt_dia_medio"] as const)
+          : []),
+        "dias_trabalho_mes_atual",
+        ...(includeBenefits ? (["beneficios_agg"] as const) : []),
+      ];
+
       return c.json({
         ok: true,
         mode: "extract",
@@ -317,28 +357,12 @@ export function createEphemeralRoutes(deps: EphemeralRoutesDeps = {}) {
         timeoutMs,
         latencyMs: Date.now() - started,
         rowCount: rows.length,
-        columns: [
-          "cod_empresa",
-          "cod_filial",
-          "cnpj_completo",
-          "cod_cc",
-          "desc_cc",
-          "cod_cargo",
-          "desc_cargo",
-          "cod_vinculo",
-          "cod_horario_atual",
-          "horario_trabalho_atual",
-          "escala_atual",
-          "carga_semanal_atual",
-          "qtd_colaboradores",
-          "massa_salarial_base",
-          "vr_dia_medio",
-          "vt_dia_medio",
-          "dias_trabalho_mes_atual",
-          "beneficios_agg",
-        ],
+        includeBenefits,
+        columns,
         rows,
-        note: "Ephemeral connection destroyed after response. Credentials were not persisted. Benefits via ConBeneficios→TBE_* → beneficios_agg (parity with Aptools).",
+        note: includeBenefits
+          ? "Ephemeral connection destroyed after response. Credentials were not persisted. Benefits via ConBeneficios→TBE_* → beneficios_agg (parity with Aptools)."
+          : "Ephemeral connection destroyed after response. Credentials were not persisted. includeBenefits=false — VT/beneficios_agg omitted; map zeros missing cols.",
       });
     } catch (err) {
       // Connection/login/network → 422 JSON (never Nginx/Cloudflare 502 HTML).
